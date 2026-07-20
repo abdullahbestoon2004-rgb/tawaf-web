@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUpRight,
   BadgeCheck,
   Banknote,
   BookOpenCheck,
@@ -10,6 +11,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   Clock3,
@@ -18,10 +20,12 @@ import {
   FileCheck2,
   FileText,
   Filter,
+  Heart,
   Hotel,
   Image as ImageIcon,
   LoaderCircle,
   MapPin,
+  Minus,
   Pencil,
   Plane,
   Plus,
@@ -29,14 +33,16 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Star,
   Trash2,
   Upload,
   UserRound,
   Users,
   WalletCards,
   X,
+  Zap,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 
 type Company = {
@@ -447,6 +453,12 @@ const wizardT = {
     cTitleDesc: "ناونیشان و پێناسە", cDates: "بەرواری بەڕێکەوتن و گەڕانەوەی داهاتوو", cCapPrice: "توانا و نرخی پاکێج", cHotels: "هۆتێلەکانی مەککە و مەدینە", cItinerary: "بەرنامەی ڕۆژانە", cServices: "خزمەتگوزارییە لەخۆگیراوەکان", cPolicy: "سیاسەتی هەڵوەشاندنەوە",
     errTitle: "پێش پاشەکەوتکردن ناونیشانی گەشت زیاد بکە.", errTitleImage: "پێش بارکردنی وێنە ناونیشانی گەشت زیاد بکە.", errImageType: "وێنەیەکی JPG، PNG یان WebP هەڵبژێرە کە لە ٦ MB کەمتر بێت.",
     toastDraftSaved: "ڕەشنووسی گەشت پاشەکەوت کرا.", toastProgressSaved: "پێشکەوتنی ڕەشنووس پاشەکەوت کرا.", toastSubmitted: "گەشتەکە نێردرا بۆ پێداچوونەوەی تەواف.", toastChangesSent: "گۆڕانکارییەکانی گەشت نێردران بۆ پەسەندکردنی بەڕێوەبەر.",
+    livePreviewTag: "پێشبینینی ڕاستەقینە", livePreviewHint: "ئەمە بەو شێوەیەیە کە زیارەتکاران گەشتەکەت پێی دەبینن. کرتە لەسەر هەر بەهایەک بکە بۆ دەستکاریکردنی.",
+    pilgrimReviews: "هەڵسەنگاندنی زیارەتکاران", viewAgency: "بینینی کۆمپانیا",
+    overviewTitle: "پوختە", accommodationTitle: "شوێنی مانەوە", transportationTitle: "گواستنەوە", includedTitle: "ئەوەی لەخۆگیراوە", trustTitle: "متمانە، سیاسەت و پارەدان",
+    packagePerPerson: "پاکێج (بۆ هەر کەسێک)", totalFrom: "کۆی گشتی دەستپێدەکات لە", bookThisTrip: "حیجزکردنی ئەم گەشتە",
+    hotelWord: "هۆتێل", seatsRemaining: "شوێن ماوە", onlyLeftWord: "تەنها ماوە", soldOutWord: "تەواو بوو", clickToEdit: "کرتە بکە بۆ دەستکاریکردن", groundTransfersIncluded: "هەموو گواستنەوەکانی زەوی لەخۆگیراون",
+    topRatedBadge: "باشترین هەڵسەنگاندن", premiumBadge: "هاوبەشی تایبەت", fastResponderBadge: "خێرا وەڵامدەرەوە", verifiedBadge: "پشتڕاستکراوە",
   },
   ar: {
     steps: [
@@ -503,6 +515,12 @@ const wizardT = {
     cTitleDesc: "العنوان والوصف", cDates: "تاريخا مغادرة وعودة مستقبليان", cCapPrice: "السعة وسعر الباقة", cHotels: "فندقا مكة والمدينة", cItinerary: "البرنامج اليومي", cServices: "الخدمات المشمولة", cPolicy: "سياسة الإلغاء",
     errTitle: "أضف عنوان الرحلة قبل حفظ المسودة.", errTitleImage: "أضف عنوان الرحلة قبل رفع الصورة.", errImageType: "اختر صورة JPG أو PNG أو WebP أصغر من ٦ MB.",
     toastDraftSaved: "تم حفظ مسودة الرحلة.", toastProgressSaved: "تم حفظ تقدم المسودة.", toastSubmitted: "تم إرسال الرحلة لمراجعة طواف.", toastChangesSent: "تم إرسال تغييرات الرحلة لموافقة المشرف.",
+    livePreviewTag: "معاينة حية", livePreviewHint: "هذا بالضبط كيف سيرى المعتمرون رحلتك. انقر على أي قيمة لتعديلها.",
+    pilgrimReviews: "تقييمات المعتمرين", viewAgency: "عرض الشركة",
+    overviewTitle: "نظرة عامة", accommodationTitle: "الإقامة", transportationTitle: "النقل", includedTitle: "ما يشمله السعر", trustTitle: "الثقة والسياسة والدفع",
+    packagePerPerson: "الباقة (للفرد)", totalFrom: "الإجمالي يبدأ من", bookThisTrip: "احجز هذه الرحلة",
+    hotelWord: "فندق", seatsRemaining: "مقعد متبقٍ", onlyLeftWord: "تبقى فقط", soldOutWord: "مكتملة", clickToEdit: "انقر للتعديل", groundTransfersIncluded: "جميع التنقلات البرية مشمولة",
+    topRatedBadge: "الأعلى تقييماً", premiumBadge: "شريك مميز", fastResponderBadge: "سريع الاستجابة", verifiedBadge: "موثّق",
   },
   en: {
     steps: [
@@ -559,6 +577,12 @@ const wizardT = {
     cTitleDesc: "Title and description", cDates: "Future departure and return dates", cCapPrice: "Capacity and package price", cHotels: "Makkah and Madinah hotels", cItinerary: "Daily itinerary", cServices: "Included services", cPolicy: "Cancellation policy",
     errTitle: "Add a trip title before saving this draft.", errTitleImage: "Add a trip title before uploading a main image.", errImageType: "Choose a JPG, PNG or WebP image smaller than 6 MB.",
     toastDraftSaved: "Trip draft saved.", toastProgressSaved: "Draft progress saved.", toastSubmitted: "Trip submitted to Tawaf for admin review.", toastChangesSent: "Trip changes sent to Tawaf for admin approval.",
+    livePreviewTag: "LIVE PREVIEW", livePreviewHint: "This is exactly how pilgrims will see your trip. Click any value to edit it.",
+    pilgrimReviews: "pilgrim reviews", viewAgency: "View agency",
+    overviewTitle: "Overview", accommodationTitle: "Accommodation", transportationTitle: "Transportation", includedTitle: "What's included", trustTitle: "Trust, policy & payment",
+    packagePerPerson: "Package (per person)", totalFrom: "Total from", bookThisTrip: "Book this trip",
+    hotelWord: "hotel", seatsRemaining: "seats remaining", onlyLeftWord: "Only left", soldOutWord: "Sold out", clickToEdit: "Click to edit", groundTransfersIncluded: "All ground transfers included",
+    topRatedBadge: "Top rated", premiumBadge: "Premium partner", fastResponderBadge: "Fast responder", verifiedBadge: "Verified",
   },
 } as const;
 
@@ -581,15 +605,6 @@ const inclusionOptions = [
   ["support", "Customer support"],
 ] as const;
 
-const wizardSteps = [
-  ["Basics", "Trip identity, dates and capacity"],
-  ["Journey", "Flights, buses and transfers"],
-  ["Hotels", "Makkah and Madinah stay"],
-  ["Price & inclusions", "Package price and included services"],
-  ["Program", "Daily itinerary and policies"],
-  ["Review", "Customer preview and submission"],
-] as const;
-
 function formatIqd(value: number | string | null | undefined) {
   return `${Math.round(Number(value ?? 0)).toLocaleString("en-US")} IQD`;
 }
@@ -597,6 +612,12 @@ function formatIqd(value: number | string | null | undefined) {
 function formatDate(value: string | null | undefined) {
   if (!value) return "Not scheduled";
   return new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+function addDays(value: string | null | undefined, days: number) {
+  const base = value ? new Date(`${value}T00:00:00`) : new Date();
+  base.setDate(base.getDate() + Math.max(1, days));
+  return base.toISOString().slice(0, 10);
 }
 
 function titleCase(value: string) {
@@ -922,10 +943,6 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
     return id as string | null;
   }
 
-  async function goNext() {
-    if (step < wizardSteps.length - 1) setStep((current) => current + 1);
-  }
-
   const completion = useMemo(() => {
     const hotelNights = wizard.hotels.reduce((sum, hotel) => sum + Number(hotel.nights || 0), 0);
     const W = wizardT[locale];
@@ -1057,8 +1074,6 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
       <TripWizard
         wizard={wizard}
         setWizard={setWizard}
-        step={step}
-        setStep={setStep}
         error={wizardError}
         savedAt={savedAt}
         busy={busy}
@@ -1067,11 +1082,11 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
         canSubmit={canSubmit}
         onBack={() => setView(wizard.id ? "manage" : "list")}
         onSave={() => saveDraft(false)}
-        onContinue={goNext}
         onSubmit={submitForReview}
         onUploadImage={uploadMainImage}
         updateHotel={updateHotel}
         approvalMode={changeRequestMode}
+        company={company}
         locale={locale}
       />
     );
@@ -1349,8 +1364,6 @@ function OperationEmpty({ icon: Icon, title, text }: { icon: typeof Users; title
 function TripWizard({
   wizard,
   setWizard,
-  step,
-  setStep,
   error,
   savedAt,
   busy,
@@ -1359,17 +1372,15 @@ function TripWizard({
   canSubmit,
   onBack,
   onSave,
-  onContinue,
   onSubmit,
   onUploadImage,
   updateHotel,
   approvalMode,
+  company,
   locale,
 }: {
   wizard: WizardState;
   setWizard: React.Dispatch<React.SetStateAction<WizardState>>;
-  step: number;
-  setStep: React.Dispatch<React.SetStateAction<number>>;
   error: string;
   savedAt: string;
   busy: string;
@@ -1378,19 +1389,15 @@ function TripWizard({
   canSubmit: boolean;
   onBack: () => void;
   onSave: () => Promise<any>;
-  onContinue: () => Promise<void>;
   onSubmit: () => Promise<void>;
   onUploadImage: (file?: File) => Promise<void>;
   updateHotel: (city: "makkah" | "madinah", patch: Partial<WizardHotel>) => void;
   approvalMode: boolean;
+  company: Company;
   locale: "ku" | "ar" | "en";
 }) {
   const W = wizardT[locale];
-  const commissionRate = 0.05;
-  const displayPrice = Number(wizard.package_price_iqd || 0);
-  const today = new Date().toISOString().slice(0, 10);
   const BackIcon = locale === "en" ? ArrowLeft : ArrowRight;
-  const NextIcon = locale === "en" ? ArrowRight : ArrowLeft;
 
   function addDay() {
     setWizard((current) => ({ ...current, itinerary: [...current.itinerary, { day_no: current.itinerary.length + 1, title: "", summary: "" }] }));
@@ -1412,100 +1419,302 @@ function TripWizard({
         <div className="trip-wizard-save-state">{approvalMode ? <><ShieldCheck size={15} /> {W.originalUnchanged}</> : savedAt ? <><CheckCircle2 size={15} /> {W.savedLabel} {savedAt}</> : <><ShieldCheck size={15} /> {W.secureDraft}</>}</div>
       </div>
 
-      <div className="trip-wizard-layout">
-        <aside className="trip-wizard-steps">
-          <p>{approvalMode ? W.requestChangesTag : W.createTripTag}</p>
-          {W.steps.map(([title, description], index) => <button type="button" key={title} className={`${step === index ? "active" : ""} ${index < step ? "done" : ""}`} onClick={() => setStep(index)}><span>{index < step ? <Check size={14} /> : index + 1}</span><div><b>{title}</b><small>{description}</small></div></button>)}
-          <div className="trip-wizard-help"><ShieldCheck size={19} /><b>{W.adminProtected}</b><p>{approvalMode ? W.adminNoteApproval : W.adminNoteNormal}</p></div>
-        </aside>
+      <form className="portal-panel trip-wizard-form" onSubmit={(event: FormEvent) => event.preventDefault()}>
+        {error && <div className="trip-wizard-error"><X size={17} /> {error}</div>}
 
-        <form className="portal-panel trip-wizard-form" onSubmit={(event: FormEvent) => event.preventDefault()}>
-          <header><div><p>{W.stepWord} {step + 1} {W.ofWord} {W.steps.length}</p><h1>{W.steps[step][0]}</h1><span>{W.steps[step][1]}</span></div><span>{Math.round(((step + 1) / W.steps.length) * 100)}%</span></header>
-          {error && <div className="trip-wizard-error"><X size={17} /> {error}</div>}
+        <div className="trip-review-layout">
+          <TripLivePreview wizard={wizard} setWizard={setWizard} updateHotel={updateHotel} addDay={addDay} updateDay={updateDay} removeDay={removeDay} onUploadImage={onUploadImage} uploadingImage={uploadingImage} company={company} locale={locale} W={W} />
+          <aside className="trip-submit-checklist"><header><ShieldCheck size={20} /><div><b>{W.readyTitle}</b><small>{W.readySub}</small></div></header>{completion.map((item) => <div className={item.done ? "done" : ""} key={item.label}><span>{item.done ? <Check size={13} /> : "!"}</span>{item.label}</div>)}<p>{approvalMode ? W.adminNoteApproval : W.submitNote}</p></aside>
+        </div>
 
-          <div className="trip-wizard-content">
-            {step === 0 && <>
-              <WizardSection icon={Plane} title={W.tripIdentity} text={W.tripIdentityDesc}>
-                <div className="portal-form-grid trip-form-grid">
-                  <label className="full"><span>{W.tripTitle}</span><input value={wizard.title} onChange={(event) => setWizard((current) => ({ ...current, title: event.target.value }))} placeholder={W.tripTitlePh} /></label>
-                  <label dir="ltr"><span>{W.englishTitle}</span><input value={wizard.title_en} onChange={(event) => setWizard((current) => ({ ...current, title_en: event.target.value }))} /></label>
-                  <label dir="rtl"><span>{W.arabicTitle}</span><input value={wizard.title_ar} onChange={(event) => setWizard((current) => ({ ...current, title_ar: event.target.value }))} /></label>
-                  <label><span>{W.packageTier}</span><select value={wizard.package_tier} onChange={(event) => setWizard((current) => ({ ...current, package_tier: event.target.value as WizardState["package_tier"] }))}><option value="economy">{W.tierEconomy}</option><option value="standard">{W.tierStandard}</option><option value="vip">{W.tierVip}</option></select></label>
-                  <label><span>{W.tripType}</span><select value={wizard.group_type} onChange={(event) => setWizard((current) => ({ ...current, group_type: event.target.value as WizardState["group_type"] }))}><option value="group">{W.typeGroup}</option><option value="family">{W.typeFamily}</option><option value="individual">{W.typeIndividual}</option></select></label>
-                  <label><span>{W.season}</span><select value={wizard.season_tag} onChange={(event) => setWizard((current) => ({ ...current, season_tag: event.target.value as WizardState["season_tag"] }))}><option value="regular">{W.seasonRegular}</option><option value="ramadan">{W.seasonRamadan}</option><option value="shawwal">{W.seasonShawwal}</option><option value="other">{W.seasonOther}</option></select></label>
-                  <label><span>{W.totalSeats}</span><input type="number" min="1" max="500" value={wizard.capacity} onChange={(event) => setWizard((current) => ({ ...current, capacity: event.target.value }))} /></label>
-                </div>
-              </WizardSection>
-              <WizardSection icon={CalendarDays} title={W.schedule} text={W.scheduleDesc}>
-                <div className="portal-form-grid trip-form-grid">
-                  <label><span>{W.departureDate}</span><input type="date" min={today} value={wizard.departure_date} onChange={(event) => setWizard((current) => ({ ...current, departure_date: event.target.value }))} /></label>
-                  <label><span>{W.returnDate}</span><input type="date" min={wizard.departure_date || today} value={wizard.return_date} onChange={(event) => setWizard((current) => ({ ...current, return_date: event.target.value }))} /></label>
-                  <label className="full"><span>{W.primaryDescription}</span><textarea rows={5} value={wizard.overview} onChange={(event) => setWizard((current) => ({ ...current, overview: event.target.value }))} placeholder={W.primaryDescriptionPh} /></label>
-                  <label dir="ltr"><span>{W.englishDescription}</span><textarea rows={4} value={wizard.overview_en} onChange={(event) => setWizard((current) => ({ ...current, overview_en: event.target.value }))} /></label>
-                  <label dir="rtl"><span>{W.arabicDescription}</span><textarea rows={4} value={wizard.overview_ar} onChange={(event) => setWizard((current) => ({ ...current, overview_ar: event.target.value }))} /></label>
-                </div>
-              </WizardSection>
-              <WizardSection icon={ImageIcon} title={W.mainImage} text={W.mainImageDesc}>
-                <div className="trip-image-uploader" style={wizard.image_url ? { backgroundImage: `linear-gradient(rgba(5,44,35,.25), rgba(5,44,35,.4)), url("${wizard.image_url}")` } : undefined}><div><Upload size={22} /><b>{wizard.image_url ? W.imageReady : W.addCover}</b><small>{W.imageHint}</small></div><label>{uploadingImage ? <LoaderCircle className="spin" size={15} /> : <ImageIcon size={15} />}{wizard.image_url ? W.replaceImage : W.uploadImage}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={(event) => onUploadImage(event.target.files?.[0])} /></label></div>
-              </WizardSection>
-            </>}
-
-            {step === 1 && <>
-              <WizardSection icon={Plane} title={W.transportTitle} text={W.transportDesc}>
-                <div className="trip-choice-grid"><button type="button" className={wizard.transport === "plane" ? "active" : ""} onClick={() => setWizard((current) => ({ ...current, transport: "plane" }))}><Plane size={21} /><b>{W.byPlane}</b><small>{W.byPlaneSub}</small></button><button type="button" className={wizard.transport === "bus" ? "active" : ""} onClick={() => setWizard((current) => ({ ...current, transport: "bus" }))}><Building2 size={21} /><b>{W.byCoach}</b><small>{W.byCoachSub}</small></button></div>
-                <div className="portal-form-grid trip-form-grid">
-                  {wizard.transport === "plane" ? <><label><span>{W.departureAirport}</span><select value={wizard.departure_airport} onChange={(event) => setWizard((current) => ({ ...current, departure_airport: event.target.value as WizardState["departure_airport"] }))}><option value="EBL">Erbil (EBL)</option><option value="BGW">Baghdad (BGW)</option><option value="ISU">Sulaymaniyah (ISU)</option></select></label><label><span>{W.airline}</span><input value={wizard.airline_name} onChange={(event) => setWizard((current) => ({ ...current, airline_name: event.target.value }))} placeholder={W.airlinePh} /></label><label><span>{W.flightType}</span><select value={wizard.flight_type} onChange={(event) => setWizard((current) => ({ ...current, flight_type: event.target.value as WizardState["flight_type"] }))}><option value="direct">{W.flightDirect}</option><option value="connecting">{W.flightConnecting}</option></select></label></> : <><label><span>{W.busCompany}</span><input value={wizard.bus_company} onChange={(event) => setWizard((current) => ({ ...current, bus_company: event.target.value }))} placeholder={W.busCompanyPh} /></label><label><span>{W.pickupPoint}</span><input value={wizard.pickup_point} onChange={(event) => setWizard((current) => ({ ...current, pickup_point: event.target.value }))} placeholder={W.pickupPointPh} /></label></>}
-                  <label className="full"><span>{W.transportNotes}</span><textarea rows={4} value={wizard.transport_notes} onChange={(event) => setWizard((current) => ({ ...current, transport_notes: event.target.value }))} placeholder={W.transportNotesPh} /></label>
-                </div>
-                <div className="trip-toggle-row"><label><input type="checkbox" checked={wizard.bus_between_cities} onChange={(event) => setWizard((current) => ({ ...current, bus_between_cities: event.target.checked }))} /><span><b>{W.busBetween}</b><small>{W.busBetweenSub}</small></span></label>{wizard.transport === "plane" && <label><input type="checkbox" checked={wizard.airport_transfers} onChange={(event) => setWizard((current) => ({ ...current, airport_transfers: event.target.checked }))} /><span><b>{W.airportTransfers}</b><small>{W.airportTransfersSub}</small></span></label>}</div>
-              </WizardSection>
-            </>}
-
-            {step === 2 && <WizardSection icon={Hotel} title={W.hotelsTitle} text={W.hotelsDesc}>
-              <div className="trip-hotel-editor-grid">{wizard.hotels.map((hotel) => <article key={hotel.city}><header><span><Hotel size={18} /></span><div><b>{hotel.city === "makkah" ? W.makkahHotel : W.madinahHotel}</b><small>{hotel.city === "makkah" ? W.makkahSub : W.madinahSub}</small></div></header><div className="portal-form-grid trip-form-grid"><label className="full"><span>{W.hotelName}</span><input value={hotel.name} onChange={(event) => updateHotel(hotel.city, { name: event.target.value })} /></label><label><span>{W.starRating}</span><select value={hotel.star_rating} onChange={(event) => updateHotel(hotel.city, { star_rating: Number(event.target.value) })}>{[3,4,5].map((star) => <option value={star} key={star}>{star} {W.starsWord}</option>)}</select></label><label><span>{W.nights}</span><input type="number" min="1" value={hotel.nights} onChange={(event) => updateHotel(hotel.city, { nights: Number(event.target.value) })} /></label><label className="full"><span>{W.distanceHaram}</span><input type="number" min="0" value={hotel.distance_from_haram_m} onChange={(event) => updateHotel(hotel.city, { distance_from_haram_m: Number(event.target.value) })} /></label><label className="full"><span>{W.hotelDescription}</span><textarea rows={4} value={hotel.description} onChange={(event) => updateHotel(hotel.city, { description: event.target.value })} placeholder={W.hotelDescriptionPh} /></label></div></article>)}</div>
-            </WizardSection>}
-
-            {step === 3 && <>
-              <WizardSection icon={Banknote} title={W.priceTitle} text={W.priceDesc}>
-                <div className="portal-form-grid trip-form-grid"><label><span>{W.pricePerPilgrim}</span><input type="number" min="1" value={wizard.package_price_iqd} onChange={(event) => setWizard((current) => ({ ...current, package_price_iqd: event.target.value }))} placeholder="1500000" /></label><label><span>{W.depositAmount}</span><input type="number" min="0" value={wizard.deposit_iqd} onChange={(event) => setWizard((current) => ({ ...current, deposit_iqd: event.target.value }))} /></label><label><span>{W.mealsPerDay}</span><input type="number" min="0" max="5" value={wizard.meals_per_day} onChange={(event) => setWizard((current) => ({ ...current, meals_per_day: event.target.value }))} /></label><label><span>{W.depositTerms}</span><input value={wizard.deposit_terms} onChange={(event) => setWizard((current) => ({ ...current, deposit_terms: event.target.value }))} placeholder={W.depositTermsPh} /></label></div>
-              </WizardSection>
-              <WizardSection icon={CheckCircle2} title={W.servicesTitle} text={W.servicesDesc}>
-                <div className="trip-inclusion-grid">{inclusionOptions.map(([key]) => <label className={wizard.inclusions[key] ? "active" : ""} key={key}><input type="checkbox" checked={Boolean(wizard.inclusions[key])} onChange={(event) => setWizard((current) => ({ ...current, inclusions: { ...current.inclusions, [key]: event.target.checked } }))} /><span>{wizard.inclusions[key] ? <Check size={14} /> : <Plus size={14} />}</span>{W[inclusionKeyToLabel[key]] as string}</label>)}</div>
-              </WizardSection>
-              <div className="trip-commission-card"><div><CircleDollarSign size={20} /><span><b>{W.customerPrice}</b><small>{W.customerPriceSub}</small></span><strong>{formatIqd(displayPrice)}</strong></div><div><WalletCards size={20} /><span><b>{W.tawafCommission}</b><small>{W.tawafCommissionSub}</small></span><strong>{formatIqd(displayPrice * commissionRate)}</strong></div><div><Banknote size={20} /><span><b>{W.companyNet}</b><small>{W.companyNetSub}</small></span><strong>{formatIqd(displayPrice * (1 - commissionRate))}</strong></div></div>
-            </>}
-
-            {step === 4 && <>
-              <WizardSection icon={CalendarDays} title={W.itineraryTitle} text={W.itineraryDesc}>
-                <div className="trip-itinerary-editor">{wizard.itinerary.map((day, index) => <article key={index}><span>{W.dayWord} {index + 1}</span><div><input value={day.title} onChange={(event) => updateDay(index, { title: event.target.value })} placeholder={W.dayTitlePh} /><textarea rows={2} value={day.summary} onChange={(event) => updateDay(index, { summary: event.target.value })} placeholder={W.daySummaryPh} /></div>{wizard.itinerary.length > 1 && <button type="button" onClick={() => removeDay(index)} aria-label={`Remove day ${index + 1}`}><Trash2 size={15} /></button>}</article>)}<button type="button" className="trip-add-day" onClick={addDay}><Plus size={15} /> {W.addDay}</button></div>
-              </WizardSection>
-              <WizardSection icon={FileText} title={W.policiesTitle} text={W.policiesDesc}>
-                <div className="portal-form-grid trip-form-grid"><label className="full"><span>{W.cancellationPolicy}</span><textarea rows={6} value={wizard.cancellation_policy} onChange={(event) => setWizard((current) => ({ ...current, cancellation_policy: event.target.value }))} placeholder={W.cancellationPolicyPh} /></label><label className="full"><span>{W.videoUrl}</span><input type="url" value={wizard.video_url} onChange={(event) => setWizard((current) => ({ ...current, video_url: event.target.value }))} placeholder="https://youtube.com/…" /></label><label className="full trip-checkbox-line"><input type="checkbox" checked={wizard.non_refundable_deposit} onChange={(event) => setWizard((current) => ({ ...current, non_refundable_deposit: event.target.checked }))} /><span><b>{W.nonRefundable}</b><small>{W.nonRefundableSub}</small></span></label></div>
-              </WizardSection>
-            </>}
-
-            {step === 5 && <div className="trip-review-layout">
-              <section className="trip-customer-preview">
-                <div className="trip-preview-image" style={wizard.image_url ? { backgroundImage: `linear-gradient(rgba(5,44,35,.1), rgba(5,44,35,.55)), url("${wizard.image_url}")` } : undefined}><span>{wizard.package_tier === "economy" ? W.tierEconomy : wizard.package_tier === "vip" ? W.tierVip : W.tierStandard}</span><div><small>{(wizard.transport === "plane" ? wizard.departure_airport : wizard.pickup_point || W.byCoach)} · {formatDate(wizard.departure_date)}</small><h2>{wizard.title || W.previewFallbackTitle}</h2></div></div>
-                <div className="trip-preview-body"><p>{wizard.overview || W.previewFallbackDesc}</p><div><span><CalendarDays size={16} /><b>{wizard.hotels.reduce((sum, hotel) => sum + hotel.nights, 0) + 1} {W.daysWord}</b></span><span><Plane size={16} /><b>{wizard.transport === "plane" ? W.byPlane : W.byCoach}</b></span><span><Users size={16} /><b>{wizard.capacity || 0} {W.seatsWord}</b></span></div><footer><div><small>{W.startingFrom}</small><strong>{formatIqd(displayPrice)}</strong></div><button type="button">{W.viewPackage} <NextIcon size={15} /></button></footer></div>
-              </section>
-              <aside className="trip-submit-checklist"><header><ShieldCheck size={20} /><div><b>{W.readyTitle}</b><small>{W.readySub}</small></div></header>{completion.map((item) => <div className={item.done ? "done" : ""} key={item.label}><span>{item.done ? <Check size={13} /> : "!"}</span>{item.label}</div>)}<p>{W.submitNote}</p></aside>
-            </div>}
+        <footer className="trip-wizard-footer">
+          <button type="button" className="portal-secondary-button" onClick={onBack}><BackIcon size={15} /> {W.cancel}</button>
+          <div>
+            {!approvalMode && <button type="button" className="trip-save-draft" onClick={onSave} disabled={busy === "trip-wizard-save"}>{busy === "trip-wizard-save" ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} {W.saveDraftBtn}</button>}
+            <button type="button" className="portal-primary-button" onClick={onSubmit} disabled={!canSubmit || busy.startsWith("trip-")}>{busy.startsWith("trip-") ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} {approvalMode ? W.requestApprovalBtn : W.submitBtn}</button>
           </div>
-
-          <footer className="trip-wizard-footer">
-            <button type="button" className="portal-secondary-button" onClick={() => step ? setStep((current) => current - 1) : onBack()}><BackIcon size={15} /> {step ? W.previous : W.cancel}</button>
-            <div>
-              {!approvalMode && <button type="button" className="trip-save-draft" onClick={onSave} disabled={busy === "trip-wizard-save"}>{busy === "trip-wizard-save" ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} {W.saveDraftBtn}</button>}
-              {step < W.steps.length - 1 ? <button type="button" className="portal-primary-button" onClick={onContinue}>{approvalMode ? W.continueBtn : W.nextBtn} <NextIcon size={15} /></button> : <button type="button" className="portal-primary-button" onClick={onSubmit} disabled={!canSubmit || busy.startsWith("trip-")}>{busy.startsWith("trip-") ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} {approvalMode ? W.requestApprovalBtn : W.submitBtn}</button>}
-            </div>
-          </footer>
-        </form>
-      </div>
+        </footer>
+      </form>
     </>
   );
 }
 
-function WizardSection({ icon: Icon, title, text, children }: { icon: typeof Plane; title: string; text: string; children: React.ReactNode }) {
-  return <section className="trip-wizard-section"><header><span><Icon size={19} /></span><div><h2>{title}</h2><p>{text}</p></div></header>{children}</section>;
+function LiveSelect({ icon: Icon, value, options, onChange, className }: {
+  icon?: typeof Plane;
+  value: string;
+  options: ReadonlyArray<readonly [string, string]>;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((option) => option[0] === value);
+  return (
+    <span
+      className={`trip-live-pill trip-live-select ${className ?? ""}`}
+      role="button"
+      tabIndex={0}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+      onClick={() => setOpen((current) => !current)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen((current) => !current); }
+        else if (event.key === "Escape") setOpen(false);
+      }}
+    >
+      {Icon && <Icon size={13} />}
+      <span className="trip-live-select-value">{current ? current[1] : ""}</span>
+      <ChevronDown size={12} className="trip-live-select-caret" />
+      {open && <>
+        <div className="trip-live-menu-backdrop" onClick={(event) => { event.stopPropagation(); setOpen(false); }} />
+        <div className="trip-live-pop-menu" role="listbox" onClick={(event) => event.stopPropagation()}>
+          {options.map(([optionValue, label]) => (
+            <button type="button" role="option" aria-selected={optionValue === value} key={optionValue} className={optionValue === value ? "active" : ""} onClick={() => { onChange(optionValue); setOpen(false); }}>{label}</button>
+          ))}
+        </div>
+      </>}
+    </span>
+  );
 }
+
+function TripLivePreview({
+  wizard,
+  setWizard,
+  updateHotel,
+  addDay,
+  updateDay,
+  removeDay,
+  onUploadImage,
+  uploadingImage,
+  company,
+  locale,
+  W,
+}: {
+  wizard: WizardState;
+  setWizard: React.Dispatch<React.SetStateAction<WizardState>>;
+  updateHotel: (city: "makkah" | "madinah", patch: Partial<WizardHotel>) => void;
+  addDay: () => void;
+  updateDay: (index: number, patch: Partial<WizardState["itinerary"][number]>) => void;
+  removeDay: (index: number) => void;
+  onUploadImage: (file?: File) => Promise<void>;
+  uploadingImage: boolean;
+  company: Company;
+  locale: "ku" | "ar" | "en";
+  W: typeof wizardT["en"];
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const totalNights = wizard.hotels.reduce((sum, hotel) => sum + hotel.nights, 0);
+  const totalDays = totalNights + 1;
+  const capacityNum = Number(wizard.capacity || 0);
+  const priceNum = Number(wizard.package_price_iqd || 0);
+  const depositNum = Number(wizard.deposit_iqd || 0);
+  const maxStar = Math.max(3, ...wizard.hotels.map((hotel) => hotel.star_rating || 3));
+  const [starOpen, setStarOpen] = useState(false);
+
+  // The trip length is driven by hotel nights, so keep the return date in sync
+  // with the departure date automatically instead of asking for it separately.
+  useEffect(() => {
+    if (!wizard.departure_date) return;
+    const wanted = addDays(wizard.departure_date, totalDays);
+    if (wizard.return_date !== wanted) setWizard((current) => ({ ...current, return_date: wanted }));
+  }, [wizard.departure_date, wizard.return_date, totalDays, setWizard]);
+
+  function handleStarChange(value: string) {
+    const stars = Number(value);
+    wizard.hotels.forEach((hotel) => updateHotel(hotel.city, { star_rating: stars }));
+  }
+
+  // Trip length is stored as hotel nights, so editing the days count spreads the
+  // resulting nights back across the hotels (keeping their existing proportions).
+  function setTotalDays(days: number) {
+    const targetNights = Math.max(0, Math.min(59, Math.round(days || 1) - 1));
+    if (targetNights === totalNights || !wizard.hotels.length) return;
+    let allocated = 0;
+    wizard.hotels.forEach((hotel, index) => {
+      const isLast = index === wizard.hotels.length - 1;
+      let nights: number;
+      if (isLast) {
+        nights = Math.max(0, targetNights - allocated);
+      } else if (totalNights > 0) {
+        nights = Math.max(0, Math.round((targetNights * hotel.nights) / totalNights));
+      } else {
+        nights = Math.floor(targetNights / wizard.hotels.length);
+      }
+      allocated += nights;
+      updateHotel(hotel.city, { nights });
+    });
+  }
+
+  return (
+    <section className="trip-live-preview">
+      <p className="trip-live-tag"><Eye size={13} /> {W.livePreviewTag}</p>
+      <p className="trip-live-hint">{W.livePreviewHint}</p>
+
+      <div className="trip-live-card">
+        <div className="trip-live-hero" style={wizard.image_url ? { backgroundImage: `url("${wizard.image_url}")` } : undefined}>
+          <div className="trip-live-hero-top">
+            <span className="trip-live-hero-btn"><ArrowLeft size={16} /></span>
+            <span className="trip-live-hero-btn"><Heart size={16} /></span>
+          </div>
+          <label className="trip-live-hero-upload">
+            {uploadingImage ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />}
+            <span>{wizard.image_url ? W.replaceImage : W.addCover}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={(event) => onUploadImage(event.target.files?.[0])} />
+          </label>
+          <div className="trip-live-hero-bottom">
+            <div className="trip-live-agency-row">
+              <span>{company.name}</span>
+              <i title={W.verifiedBadge}><BadgeCheck size={12} /></i>
+              <i title={W.topRatedBadge}><Star size={12} /></i>
+              <i title={W.fastResponderBadge}><Zap size={12} /></i>
+            </div>
+            <input className="trip-live-title-input" dir={locale === "en" ? "ltr" : "rtl"} value={wizard.title} onChange={(event) => setWizard((current) => ({ ...current, title: event.target.value }))} placeholder={W.tripTitlePh} />
+            <div className="trip-live-hero-date">
+              <span>{wizard.transport === "plane" ? wizard.departure_airport : (wizard.pickup_point || W.byCoach)}</span>
+              <span>·</span>
+              <input type="date" min={today} value={wizard.departure_date} onChange={(event) => setWizard((current) => ({ ...current, departure_date: event.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        <div className="trip-live-body">
+          <div className="trip-live-facts">
+            <div className="trip-live-fact">
+              <span className="ic"><CalendarDays size={18} /></span>
+              <b><input type="number" min={1} max={60} value={totalDays} onChange={(event) => setTotalDays(Number(event.target.value))} /> {W.daysWord}</b>
+              <small>{totalNights} {W.nights}</small>
+              <div className="trip-live-stepper-row">
+                <button type="button" onClick={() => setTotalDays(totalDays - 1)} disabled={totalDays <= 1} aria-label="−"><Minus size={13} /></button>
+                <button type="button" onClick={() => setTotalDays(totalDays + 1)} disabled={totalDays >= 60} aria-label="+"><Plus size={13} /></button>
+              </div>
+            </div>
+            <div className="trip-live-fact trip-live-fact-toggle" role="button" tabIndex={0} title={wizard.transport === "plane" ? W.byCoach : W.byPlane} onClick={() => setWizard((current) => ({ ...current, transport: current.transport === "plane" ? "bus" : "plane" }))} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setWizard((current) => ({ ...current, transport: current.transport === "plane" ? "bus" : "plane" })); } }}>
+              <span className="ic">{wizard.transport === "plane" ? <Plane size={18} /> : <Building2 size={18} />}</span>
+              <b>{wizard.transport === "plane" ? W.byPlane : W.byCoach}</b>
+              <input className="trip-live-fact-sub-input" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} value={wizard.transport === "plane" ? wizard.airline_name : wizard.bus_company} onChange={(event) => setWizard((current) => ({ ...current, [current.transport === "plane" ? "airline_name" : "bus_company"]: event.target.value } as Partial<WizardState>))} placeholder={wizard.transport === "plane" ? W.airlinePh : W.busCompanyPh} />
+            </div>
+            <div className="trip-live-fact gold trip-live-fact-toggle" role="button" tabIndex={0} aria-haspopup="listbox" aria-expanded={starOpen} onClick={() => setStarOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setStarOpen((open) => !open); } else if (event.key === "Escape") { setStarOpen(false); } }}>
+              <span className="ic"><Hotel size={18} /></span>
+              <b dir="ltr">{maxStar}-Star</b>
+              <small>{W.hotelWord}</small>
+              {starOpen && <>
+                <div className="trip-live-menu-backdrop" onClick={(event) => { event.stopPropagation(); setStarOpen(false); }} />
+                <div className="trip-live-pop-menu" role="listbox" onClick={(event) => event.stopPropagation()}>
+                  {[5, 4, 3].map((star) => <button type="button" role="option" aria-selected={maxStar === star} key={star} className={maxStar === star ? "active" : ""} onClick={() => { handleStarChange(String(star)); setStarOpen(false); }}>{star}-Star</button>)}
+                </div>
+              </>}
+            </div>
+          </div>
+
+          <div className="trip-live-pills">
+            <LiveSelect icon={BadgeCheck} value={wizard.package_tier} onChange={(value) => setWizard((current) => ({ ...current, package_tier: value as WizardState["package_tier"] }))} options={[["economy", W.tierEconomy], ["standard", W.tierStandard], ["vip", W.tierVip]]} />
+            <LiveSelect icon={Users} value={wizard.group_type} onChange={(value) => setWizard((current) => ({ ...current, group_type: value as WizardState["group_type"] }))} options={[["family", W.typeFamily], ["individual", W.typeIndividual], ["group", W.typeGroup]]} />
+            <LiveSelect icon={CalendarDays} value={wizard.season_tag} onChange={(value) => setWizard((current) => ({ ...current, season_tag: value as WizardState["season_tag"] }))} options={[["regular", W.seasonRegular], ["ramadan", W.seasonRamadan], ["shawwal", W.seasonShawwal], ["other", W.seasonOther]]} />
+            <span className={`trip-live-pill ${capacityNum <= 10 ? "warning" : ""}`}><Users size={13} /><input type="number" min={0} max={500} value={wizard.capacity} onChange={(event) => setWizard((current) => ({ ...current, capacity: event.target.value }))} />{capacityNum <= 0 ? W.soldOutWord : W.seatsRemaining}</span>
+          </div>
+
+          <div className="trip-live-rating">
+            <span><Star size={14} /> 5.0</span>
+            <span>· 2 {W.pilgrimReviews}</span>
+            <a><span>{W.viewAgency}</span><ArrowUpRight size={14} /></a>
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.overviewTitle}</h3>
+            <textarea rows={3} value={wizard.overview} onChange={(event) => setWizard((current) => ({ ...current, overview: event.target.value }))} placeholder={W.primaryDescriptionPh} />
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.accommodationTitle}</h3>
+            <div className="trip-live-accom-card">
+              {wizard.hotels.map((hotel) => <div className="trip-live-accom-row" key={hotel.city}>
+                <span className="ic"><Hotel size={18} /></span>
+                <div>
+                  <small>{hotel.city === "makkah" ? W.makkahHotel : W.madinahHotel}</small>
+                  <input className="trip-live-strong-input" value={hotel.name} onChange={(event) => updateHotel(hotel.city, { name: event.target.value })} placeholder={W.hotelName} />
+                  <div className="trip-live-accom-meta">
+                    <input value={hotel.description} onChange={(event) => updateHotel(hotel.city, { description: event.target.value })} placeholder={W.hotelDescriptionPh} />
+                    <span>· <input type="number" min={0} value={hotel.nights} onChange={(event) => updateHotel(hotel.city, { nights: Number(event.target.value) })} /> {W.nights}</span>
+                  </div>
+                  <div className="trip-live-accom-foot">
+                    <span className="stars">{"★".repeat(hotel.star_rating)}{"☆".repeat(Math.max(0, 5 - hotel.star_rating))}</span>
+                    <span>· <input type="number" min={0} value={hotel.distance_from_haram_m} onChange={(event) => updateHotel(hotel.city, { distance_from_haram_m: Number(event.target.value) })} />m {W.distanceHaram.split("(")[0]}</span>
+                  </div>
+                </div>
+              </div>)}
+            </div>
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.transportationTitle}</h3>
+            <div className="trip-live-transport-card">
+              <div className="trip-live-transport-main">
+                <span className="ic">{wizard.transport === "plane" ? <Plane size={18} /> : <Building2 size={18} />}</span>
+                <div>
+                  <b>{wizard.transport === "plane" ? `${W.byPlane} · ${wizard.flight_type === "direct" ? W.flightDirect : W.flightConnecting}` : W.byCoach}</b>
+                  <small>{(wizard.transport === "plane" ? wizard.airline_name : wizard.bus_company) || "—"} · {W.groundTransfersIncluded}</small>
+                </div>
+              </div>
+              <div className="trip-live-transport-pills">
+                {wizard.transport === "plane" ? <>
+                  <LiveSelect icon={Plane} value={wizard.departure_airport} onChange={(value) => setWizard((current) => ({ ...current, departure_airport: value as WizardState["departure_airport"] }))} options={[["EBL", "Erbil (EBL)"], ["BGW", "Baghdad (BGW)"], ["ISU", "Sulaymaniyah (ISU)"]]} className="bordered" />
+                  <button type="button" className={`trip-live-pill toggle ${wizard.flight_type === "direct" ? "active" : ""}`} onClick={() => setWizard((current) => ({ ...current, flight_type: current.flight_type === "direct" ? "connecting" : "direct" }))}>{wizard.flight_type === "direct" ? W.flightDirect : W.flightConnecting}</button>
+                </> : <input className="trip-live-pill" value={wizard.pickup_point} onChange={(event) => setWizard((current) => ({ ...current, pickup_point: event.target.value }))} placeholder={W.pickupPointPh} />}
+                <button type="button" className={`trip-live-pill toggle ${wizard.bus_between_cities ? "active" : ""}`} onClick={() => setWizard((current) => ({ ...current, bus_between_cities: !current.bus_between_cities }))}>{W.busBetween}</button>
+                {wizard.transport === "plane" && <button type="button" className={`trip-live-pill toggle ${wizard.airport_transfers ? "active" : ""}`} onClick={() => setWizard((current) => ({ ...current, airport_transfers: !current.airport_transfers }))}>{W.airportTransfers}</button>}
+              </div>
+            </div>
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.itineraryTitle}</h3>
+            <div className="trip-live-itinerary">
+              {wizard.itinerary.map((day, index) => <div className="trip-live-day" key={index}>
+                <span className="dot" />
+                <div>
+                  <div className="trip-live-day-head"><span>{W.dayWord} {index + 1}</span>{wizard.itinerary.length > 1 && <button type="button" onClick={() => removeDay(index)} aria-label={`Remove day ${index + 1}`}><Trash2 size={13} /></button>}</div>
+                  <input value={day.title} onChange={(event) => updateDay(index, { title: event.target.value })} placeholder={W.dayTitlePh} />
+                  <textarea rows={1} value={day.summary} onChange={(event) => updateDay(index, { summary: event.target.value })} placeholder={W.daySummaryPh} />
+                </div>
+              </div>)}
+            </div>
+            <button type="button" className="trip-live-add-day" onClick={addDay}><Plus size={14} /> {W.addDay}</button>
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.includedTitle}</h3>
+            <div className="trip-live-included">
+              {inclusionOptions.map(([key]) => <label className={wizard.inclusions[key] ? "active" : ""} key={key}>
+                <input type="checkbox" checked={Boolean(wizard.inclusions[key])} onChange={(event) => setWizard((current) => ({ ...current, inclusions: { ...current.inclusions, [key]: event.target.checked } }))} />
+                <span>{wizard.inclusions[key] ? <Check size={14} /> : <Plus size={14} />}</span>
+                {W[inclusionKeyToLabel[key]] as string}
+              </label>)}
+            </div>
+          </div>
+
+          <div className="trip-live-section">
+            <h3>{W.trustTitle}</h3>
+            <div className="trip-live-trust">
+              <b>{W.cancellationPolicy.replace(" *", "")}</b>
+              <textarea rows={2} value={wizard.cancellation_policy} onChange={(event) => setWizard((current) => ({ ...current, cancellation_policy: event.target.value }))} placeholder={W.cancellationPolicyPh} />
+              <div className="trip-live-trust-row"><Banknote size={14} /> {W.depositAmount.replace(" (IQD)", "")}: <input type="number" min={0} value={wizard.deposit_iqd} onChange={(event) => setWizard((current) => ({ ...current, deposit_iqd: event.target.value }))} /> IQD</div>
+              <label className="trip-live-trust-toggle"><input type="checkbox" checked={wizard.non_refundable_deposit} onChange={(event) => setWizard((current) => ({ ...current, non_refundable_deposit: event.target.checked }))} /> {W.nonRefundable}</label>
+            </div>
+          </div>
+
+          <div className="trip-live-price-card">
+            <div><span>{W.packagePerPerson}</span><span className="trip-live-price-input"><input type="number" min={1} value={wizard.package_price_iqd} onChange={(event) => setWizard((current) => ({ ...current, package_price_iqd: event.target.value }))} placeholder="1500000" /> IQD</span></div>
+            {depositNum > 0 && <div><span>{W.depositAmount}</span><span>{formatIqd(depositNum)}</span></div>}
+            <hr />
+            <div className="total"><span>{W.totalFrom}</span><strong>{formatIqd(priceNum)}</strong></div>
+          </div>
+
+          <div className="trip-live-footer">
+            <div><small>{W.startingFrom}</small><strong>{formatIqd(priceNum)}</strong></div>
+            <span className="trip-live-book-btn">{W.bookThisTrip}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+

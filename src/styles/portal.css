@@ -1218,12 +1218,14 @@
 .portal-next-trip-pattern {
   position: absolute;
   inset: 0;
-  opacity: .09;
-  background-image:
-    linear-gradient(30deg, transparent 46%, #e7cf91 47%, #e7cf91 49%, transparent 50%),
-    linear-gradient(-30deg, transparent 46%, #e7cf91 47%, #e7cf91 49%, transparent 50%);
-  background-size: 66px 66px;
-  mask-image: radial-gradient(circle at 100% 0, #000, transparent 68%);
+  pointer-events: none;
+  opacity: .07;
+  background-image: url('/uploads/pasted-1784469510903-0.png');
+  background-size: 480px auto;
+  background-repeat: repeat;
+  filter: invert(1);
+  mask-image: linear-gradient(180deg, #000, transparent 75%);
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 75%);
 }
 
 .portal-next-label {
