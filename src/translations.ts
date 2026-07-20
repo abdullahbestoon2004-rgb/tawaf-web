@@ -1,0 +1,605 @@
+export const translations = {
+  ku: {
+    // Navigation
+    packages: "پاکێجەکان",
+    marketplace: "بازاڕ",
+    howItWorks: "چۆن کاردەکات",
+    forAgencies: "بۆ ئاژانسەکان",
+    signIn: "چوونەژوورەوە",
+    
+    // Hero
+    availability: "بۆ زیارەتکاران لە عێراق و کوردستان دروستکراوە",
+    heroTitlePart1: "عومرەکەت.",
+    heroTitlePart2: "یەک شوێنی جێی متمانە.",
+    heroLede: "ئاژانسە پشتڕاستکراوەکان بدۆزەرەوە، پاکێجە تەواوەکانی عومرە بەراورد بکە، و گەشتەکەت بە ڕوونی حیجز بکە — لە یەکەم گەڕانەوە تا پشتڕاستکردنەوەی گەشتەکەت.",
+    exploreTawaf: "تەواف بپشکنە",
+    seeHowItWorks: "ببینە چۆن کاردەکات",
+    languagesCount: "٣ زمان",
+    marketplaceCount: "١ بازاڕی جێی متمانە",
+    tripAccessCount: "دەستگەیشتنی ٢٤/٧ بۆ گەشتەکان",
+    
+    // Orbit displays
+    journeyInYourLanguage: "گەشتەکەت بە زمانی خۆت",
+    marketplaceTrust: "متمانەی بازاڕ",
+    verifiedUmrahOperators: "کۆمپانیاکانی عومرەی پشتڕاستکراو",
+    nextPrayer: "نوێژی داهاتوو",
+    welcomePilgrim: "بەخێر بێیت، زیارەتکار",
+    topAgencies: "باشترین ئاژانسەکان",
+    viewAll: "بینینی هەمووی",
+    home: "سەرەکی",
+    bookings: "حیجزەکان",
+    offers: "پێشنیارەکان",
+    agencies: "ئاژانسەکان",
+    featured: "تایبەت",
+    packagesMatch: "١٢ پاکێجی گونجاو",
+    all: "هەمووی",
+    byAir: "بە فڕۆکە",
+    byCoach: "بە پاس",
+    fiveStar: "٥ ئەستێرە",
+    tenDays: "١٠ ڕۆژ",
+    fourStar: "٤ ئەستێرە",
+    fourteenDays: "١٤ ڕۆژ",
+    
+    // Trust strip
+    trust1Title: "کۆمپانیا پشتڕاستکراوەکان",
+    trust1Desc: "پڕۆفایلی ئاژانسەکان کە دەتوانیت بپشکنیت",
+    trust2Title: "زانیارییە ڕوونەکانی پاکێجەکە",
+    trust2Desc: "هۆتێلەکان، فڕینەکان، ژوورەکان و خزمەتگوزارییەکان",
+    trust3Title: "گەشتێکی پارێزراو",
+    trust3Desc: "پشکنینی ناسنامە و پارەدانە پارێزراوەکان",
+    trust4Title: "سێ زمانە لە بنەڕەتەوە",
+    trust4Desc: "ئینگلیزی، عەرەبی و کوردی",
+    
+    // Package Explorer
+    explorerEyebrow: "بازاڕەکە بپشکنە",
+    explorerTitle: "گەشتێک بدۆزەرەوە کە لەگەڵت بگونجێت.",
+    explorerDesc: "تەماشای هەمان زانیاری ڕوونی پاکێجەکان بکە کە زیارەتکاران دەتوانن لە ناو تەواف بەراوردی بکەن. ئەم پێشنیارە نموونەییانە ڕاستەوخۆ لە زانیارییەکانی بازاڕی ئەپەکەوە دێن.",
+    allPackagesFilter: "هەموو پاکێجەکان",
+    byAirFilter: "بە فڕۆکە",
+    byCoachFilter: "بە پاس",
+    fiveStarFilter: "٥ ئەستێرە",
+    packageCount: "پاکێج",
+    packagesCountPlural: "پاکێج",
+    verifiedOperator: "کۆمپانیای پشتڕاستکراو",
+    days: "ڕۆژ",
+    viewPackage: "بینینی پاکێجەکە",
+    fromPerson: "بۆ هەر کەسێک",
+    
+    // Feature Section
+    featureEyebrow: "بازاڕێکی تەواوی عومرە",
+    featureTitle: "گەڕانی کەمتر. دڵنیایی زیاتر.",
+    featureDesc: "تەواف بڕیارەکان، زانیارییەکان، و کەسانی پشت گەشتەکەت لە یەک ئەزموونی ئارامدا کۆدەکاتەوە.",
+    feature1Tag: "ئاژانسە پشتڕاستکراوەکان",
+    feature1Title: "بە متمانەوە بەراورد بکە",
+    feature1Desc: "پشکنین بکە بۆ پاکێجەکانی کۆمپانیاکانی عومرەی پشتڕاستکراو، هۆتێلەکان، گواستنەوە، ماوە، خزمەتگوزارییەکان و نرخە ڕوونەکانی بۆ هەر کەسێک بەراورد بکە.",
+    feature2Tag: "فلتەرە زیرەکەکان",
+    feature2Title: "گەشتێک بدۆزەرەوە کە بگونجێت",
+    feature2Desc: "بگەڕێ بەپێی ئاژانس، شار، یان هۆتێل، پاشان فلتەر بکە بەپێی بودجە، گواستنەوە، شوێنی مانەوە، ماوە، و هەڵسەنگاندنی ئاژانسەکە.",
+    feature3Tag: "حیجزکردنی ڕێنماییکراو",
+    feature3Title: "بەبێ گومان حیجز بکە",
+    feature3Desc: "گەشتیاران و ژمارەی ژوورەکان دیاری بکە، ناسنامەکەت پشتڕاست بکەرەوە، پێداچوونەوە بە هەر تێچوویەکدا بکە، و دۆخی حیجزەکەت لە یەک شوێندا بپارێزە.",
+    
+    // Orbit app preview UI strings
+    bookingSummary: "پوختەی حیجزەکە",
+    travellers2Double: "٢ گەشتیار · ژووری دوو کەسی",
+    total: "کۆی گشتی",
+    
+    // How it works
+    howItWorksEyebrow: "لە نییەتەوە تا پلان",
+    howItWorksTitle: "گەشتێکی حیجزکردنی ئاسان و ڕوون.",
+    howItWorksDesc: "هەر هەنگاوێک ئەوە ڕوون دەکاتەوە کە دواتر چی ڕوودەدات. زانیاری پاکێجەکە، نرخی ژوورەکان، زانیاری گەشتیارەکە، پشتڕاستکردنەوەی ناسنامە، پارەدان و دۆخی حیجزکردن بەستراوە دەمێننەوە.",
+    joinEarlyList: "بچۆرە ناو لیستی پێشوەختە",
+    
+    step1Title: "دۆزینەوە",
+    step1Desc: "پاکێجە دەستنیشانکراوەکان و ئاژانسە متمانەپێکراوەکان بپشکنە.",
+    step2Title: "بەراوردکردن",
+    step2Desc: "زانیارییە گرنگەکان تەنیشت بە تەنیشت ببینە.",
+    step3Title: "حیجزکردن",
+    step3Desc: "حیجزکردنی ڕوون هەنگاو بە هەنگاو تەواو بکە.",
+    step4Title: "گەشتکردن",
+    step4Desc: "چاودێری گەشتەکەت بکە و پشتگیری نزیک بهێڵەرەوە.",
+    
+    // Connected Platform
+    platformEyebrow: "یەک پلاتفۆرمی بەستراو",
+    platformTitle: "دروستکراوە بۆ هەموو لایەنەکانی گەشتەکە.",
+    
+    rolePilgrimLabel: "بۆ زیارەتکاران",
+    rolePilgrimTitle: "بە متمانەوە هەڵبژێرە.",
+    rolePilgrimDesc: "پاکێجەکان بدۆزەرەوە، دڵخوازەکانت پاشەکەوت بکە، حیجز بکە، پارە بدە، ئاگادارکردنەوەکان وەربگرە، و گەشتەکانت لە یەک شوێنی تایبەتدا بەڕێوەبەرە.",
+    rolePilgrimItem1: "پاکێجە دەستنیشانکراوەکان",
+    rolePilgrimItem2: "گەشتە پاشەکەوتکراوەکان و حیجزەکان",
+    rolePilgrimItem3: "کاتەکانی نوێژ",
+    
+    roleAgencyLabel: "بۆ کۆمپانیاکان",
+    roleAgencyTitle: "کاروباری عومرەکەت بەڕێوەبەرە.",
+    roleAgencyDesc: "گەشتەکان بڵاوبکەرەوە، داواکارییەکانی حیجزکردن بەڕێوەبەرە، نامە بۆ زیارەتکاران بنێرە، بەڵگەنامەکان بپشکنە، گەشتیاران ڕێکبخە، و داهاتەکان لە داشبۆردی کۆمپانیاکەوە چاودێری بکە.",
+    roleAgencyItem1: "گەشتەکان و بەڕێوەبردنی حیجزەکان",
+    roleAgencyItem2: "بەڵگەنامەکان، ژوورەکان و گواستنەوە",
+    roleAgencyItem3: "پارە، نامەکان و کارمەندان",
+    openCompanyPortal: "پۆرتاڵی کۆمپانیا بکەرەوە",
+    
+    roleAdminLabel: "بۆ بەڕێوەبەران",
+    roleAdminTitle: "بازاڕەکە بە جێی متمانە بهێڵەرەوە.",
+    roleAdminDesc: "پێداچوونەوە بە کۆمپانیاکان و گەشتەکاندا بکە، چاودێری حیجزەکان بکە، دارایی کۆنترۆڵ بکە، و پشتگیری بازاڕ لە یەک پانێڵی بەڕێوەبردنەوە بەڕێوەبەرە.",
+    roleAdminItem1: "پەسەندکردنی کۆمپانیاکان",
+    roleAdminItem2: "چاودێریکردنی گەشت و حیجزەکان",
+    roleAdminItem3: "دارایی، پشتیوانی و پاراستن",
+    openAdminControl: "پانێڵی بەڕێوەبردن بکەرەوە",
+    
+    // Language Section
+    langSectionEyebrow: "دروستکراوە بۆ ناوخۆ",
+    langSectionTitle: "زمانی تۆ. گەشتی تۆ.",
+    langSectionDesc: "تەواف بە زمانەکانی ئینگلیزی, عەرەبی و کوردی سۆرانی دیزاین کراوە — لەگەڵ دیزاینی ڕاست بۆ چەپ و وردەکارییە کولتوورییە ئاشناکانی سەرانسەری ئەزموونەکە.",
+    
+    // FAQs
+    faqEyebrow: "باشە بزانیت",
+    faqTitle: "پرسیارەکان، بە ڕوونی وەڵام دراونەتەوە.",
+    faqDesc: "هەموو ئەو شتانەی کە زیارەتکاران و ئاژانسەکان پێویستە بیزانن پێش ئەوەی بچنە پاڵ تەواف.",
+    
+    faq1Q: "تەواف چۆن ئاژانسەکانی عومرە پشتڕاست دەکاتەوە؟",
+    faq1A: "ئاژانسەکان پرۆفایلی کارەکەیان و بەڵگەنامە پاڵپشتەکانیان پێشکەش دەکەن بۆ پێداچوونەوە. تەنها ئەو کۆمپانیایانەی کە چالاکن و پەسەندکراون دەتوانن وەک پشتڕاستکراو لە بازاڕەکەدا دەربکەون.",
+    faq2Q: "ئایا دەتوانم پێش حیجزکردن پاکێجەکان بەراورد بکەم؟",
+    faq2A: "بەڵێ. تەواف ماوەی گەشت، جۆری گواستنەوە، هۆتێل، مەودای تا حەرەم، جۆری ژوور، ژەمەکان، تێچووەکان، هەڵسەنگاندنی ئاژانسەکە، و نرخی بۆ هەر کەسێک بە یەک شێوازی ڕوون و ڕێکخراو پێشکەش دەکات.",
+    faq3Q: "تەواف پشتگیری لە چ زمانانێک دەکات؟",
+    faq3A: "ئەزموونە تەواوەکە بۆ زمانەکانی ئینگلیزی، عەرەبی، و کوردی سۆرانی دیزاین کراوە، لەوانەش دیزاینی ڕاست بۆ چەپ بۆ ئەو زمانانەی بە پیتی عەرەبی دەنووسرێن.",
+    faq4Q: "ئایا ئاژانسەکان دەتوانن حیجزەکان لە تەوافدا بەڕێوەبەرن؟",
+    faq4A: "بەڵێ. ئاژانسە پەسەندکراوەکان شوێنی کاری تایبەت بە خۆیان وەردەگرن بۆ پێشنیارەکان، داواکارییەکانی حیجزکردن، نامەکانی زیارەتکاران، بەڵگەنامەکان، و چالاکییە داراییەکان.",
+    
+    // Final CTA
+    finalCtaEyebrow: "ڕێگایەکی باشتر بۆ دەستپێکردن",
+    finalCtaTitle: "گەشتی عومرەکەت لە تەوافەوە دەست پێدەکات.",
+    finalCtaDesc: "لە یەکەم کەسەکان بە کە بزانیت کەی تەواف بەردەست دەبێت.",
+    emailPlaceholder: "ناونیشانی ئیمەیڵەکەت بنووسە",
+    getEarlyAccess: "دەستگەیشتنی پێشوەختە",
+    noSpam: "هیچ نامەیەکی بێزارکەر نییە. تەنها زانیارییە گرنگەکانی تەواف.",
+    openingEmailApp: "کردنەوەی ئەپی ئیمەیڵەکەت...",
+    
+    // Footer
+    footerDesc: "متمانە بۆ هەر هەنگاوێکی گەشتەکە.",
+    footerCopyright: "© ٢٠٢٦ تەواف. هەموو مافەکان پارێزراون.",
+    contact: "پەیوەندی",
+    
+    // Modal
+    verifiedPackage: "پاکێجی پشتڕاستکراو",
+    modalSummary: "گەشتێکی {days} ڕۆژە بە مانەوەی لە هۆتێلی {stars} ئەستێرەیی {hotel}، {distance}.",
+    duration: "ماوەی گەشت",
+    transport: "گواستنەوە",
+    room: "ژوور",
+    meals: "ژەمەکان",
+    whatsIncluded: "چی لەخۆدەگرێت",
+    registerInterest: "تۆمارکردنی ئارەزوو",
+    daysNights: "{days} ڕۆژ / {nights} شەو",
+    
+    // Package items translated
+    packagesData: [
+      { id: 1, title: "عومرەی زێڕین", agency: "گەشتی نوور", city: "هەولێر", hotel: "سویس ئۆتێل مەککە", distance: "٢٥٠ مەتر تا حەرەم", room: "ژووری چوار کەسی", meals: "نانی بەیانی و ئێوارە", carrier: "هێڵە ئاسمانییەکانی عێراق", inclusions: ["ڤیزە", "گواستنەوەی فڕۆکەخانە", "مانەوەی ٥ ئەستێرە", "ڕێبەری گروپ"] },
+      { id: 2, title: "عومرەی ئاسوودە", agency: "کاروانەکانی سەلام", city: "سلێمانی", hotel: "دار الأیمان", distance: "٥٠٠ مەتر تا حەرەم", room: "ژووری سێ کەسی", meals: "نانی بەیانی", carrier: "پاسی شاهانە", inclusions: ["ڤیزە", "گواستنەوەی پاس", "مانەوەی ٤ ئەستێرە"] },
+      { id: 3, title: "عومرەی نایاب", agency: "گەشتەکانی سەما", city: "دهۆک", hotel: "فێرمۆنت تاوەری کاتژمێر", distance: "٥٠ مەتر تا حەرەم", room: "ژووری دوو کەسی", meals: "هەموو ژەمەکان", carrier: "هێڵە ئاسمانییەکانی سعوودیە", inclusions: ["ڤیزە", "گواستنەوەی VIP", "مانەوەی ٥ ئەستێرە", "ڕێبەری تایبەت", "ئینتەرنێت"] },
+    ],
+
+    // Sign In page translations
+    authTitle: "Tawaf — پۆرتاڵی کارەکان",
+    authKicker: "بۆ ئەو کەسانە دروستکراوە کە لە پشتی هەر گەشتێکن",
+    authHeader: "یەک شوێنی پارێزراو بۆ بەڕێوەبردنی هەر گەشتێکی عومرە.",
+    authDesc: "کۆمپانیاکان پێشنیارەکان، گەشتیاران، حیجزەکان، بەڵگەنامەکان، پارەدانەکان، و کارەکانی گەشتەکە بەڕێوەدەبەن. بەڕێوەبەرانی تەواف سەرپەرشتی تەواوی بازاڕەکە دەکەن.",
+    authCompanyWorkspace: "شوێنی کاری کۆمپانیا",
+    authCompanyWorkspaceDesc: "گەشتەکان، حیجزەکان، پارە، نامەکان و کارمەندان",
+    authAdminControl: "کۆنترۆڵی بەڕێوەبەر",
+    authAdminControlDesc: "کۆمپانیاکان، بازاڕ، دارایی و پشتگیری",
+    authDatabaseProtected: "ڕۆڵ و دەسەڵاتەکانت لەلایەن بنکەی زانیاری ڕاستەوخۆی تەوافەوە پارێزراون.",
+    authBackToTawaf: "گەڕانەوە بۆ تەواف",
+    authSecureWorkspace: "شوێنی کاری پارێزراو",
+    authWelcomeBack: "بەخێر بێیتەوە.",
+    authSignInSubtitle: "بە هەمان ئەو ئەکاونتە بچۆ ژوورەوە کە لە ئەپی تەوافدا بەکاری دەهێنیت.",
+    authEmailLabel: "ناونیشانی ئیمەیڵ",
+    authPasswordLabel: "وشەی تێپەڕ",
+    authPasswordPlaceholder: "وشەی تێپەڕەکەت بنووسە",
+    authSecuringWorkspace: "پاراستنی شوێنی کارەکەت",
+    authSignInButton: "چوونەژوورەوە بۆ تەواف",
+    authNeedAccess: "پێویستت بە دەستگەیشتنە بۆ کۆمپانیاکەت؟ ",
+    authRequestAccess: "داواکاری دەستگەیشتنی کۆمپانیا بکە",
+    authLegal: "بە بەردەوامبوونت، تۆ ڕەزامەندیت لەسەر سیاسەتەکانی پاراستنی کار و تایبەتمەندێتی تەواف."
+  },
+  ar: {
+    // Navigation
+    packages: "الباقات",
+    marketplace: "السوق",
+    howItWorks: "كيف يعمل",
+    forAgencies: "للوكالات",
+    signIn: "تسجيل الدخول",
+    
+    // Hero
+    availability: "بُني للمعتمرين في العراق وكردستان",
+    heroTitlePart1: "عمرتك.",
+    heroTitlePart2: "مكان واحد موثوق به.",
+    heroLede: "اكتشف الوكالات المعتمدة، وقارن بين باقات العمرة الكاملة، واحجز رحلتك بوضوح — من البحث الأول إلى تأكيد رحلتك.",
+    exploreTawaf: "استكشف طواف",
+    seeHowItWorks: "شاهد كيف يعمل",
+    languagesCount: "٣ لغات",
+    marketplaceCount: "١ سوق موثوق به",
+    tripAccessCount: "متابعة الرحلة ٢٤/٧",
+    
+    // Orbit displays
+    journeyInYourLanguage: "رحلتك بلغتك",
+    marketplaceTrust: "ثقة السوق",
+    verifiedUmrahOperators: "مشغلو عمرة معتمدون",
+    nextPrayer: "الصلاة القادمة",
+    welcomePilgrim: "مرحباً بك، يا معتمر",
+    topAgencies: "أفضل الوكالات",
+    viewAll: "عرض الكل",
+    home: "الرئيسية",
+    bookings: "الحجوزات",
+    offers: "العروض",
+    agencies: "الوكالات",
+    featured: "مميز",
+    packagesMatch: "١٢ باقة مطابقة",
+    all: "الكل",
+    byAir: "جواً",
+    byCoach: "براً",
+    fiveStar: "٥ نجوم",
+    tenDays: "١٠ أيام",
+    fourStar: "٤ نجوم",
+    fourteenDays: "١٤ يوماً",
+    
+    // Trust strip
+    trust1Title: "مشغلون معتمدون",
+    trust1Desc: "ملفات تعريف الوكالات التي يمكنك فحصها",
+    trust2Title: "تفاصيل باقات واضحة",
+    trust2Desc: "الفنادق والرحلات الجوية والغرف والمشمولات",
+    trust3Title: "رحلة آمنة",
+    trust3Desc: "عمليات التحقق من الهوية والمدفوعات المحمية",
+    trust4Title: "مصمم بثلاث لغات",
+    trust4Desc: "الإنجليزية والعربية والكردية",
+    
+    // Package Explorer
+    explorerEyebrow: "استكشف السوق",
+    explorerTitle: "ابحث عن رحلة تناسبك.",
+    explorerDesc: "عاين نفس تفاصيل الباقات الواضحة التي يمكن للمعتمرين مقارنتها داخل طواف. تأتي هذه العروض التجريبية مباشرة من بيانات سوق التطبيق.",
+    allPackagesFilter: "كل الباقات",
+    byAirFilter: "جواً",
+    byCoachFilter: "براً",
+    fiveStarFilter: "٥ نجوم",
+    packageCount: "باقة",
+    packagesCountPlural: "باقات",
+    verifiedOperator: "مشغل معتمد",
+    days: "يوم",
+    viewPackage: "عرض الباقة",
+    fromPerson: "لكل شخص",
+    
+    // Feature Section
+    featureEyebrow: "سوق عمرة متكامل",
+    featureTitle: "بحث أقل. يقين أكثر.",
+    featureDesc: "طواف يجمع القرارات والتفاصيل والأشخاص وراء رحلتك معاً في تجربة واحدة مريحة.",
+    feature1Tag: "وكالات معتمدة",
+    feature1Title: "قارن بثقة",
+    feature1Desc: "تصفح الباقات من مشغلي العمرة المعتمدين، وقارن بين الفنادق، ووسائل النقل، والمدة، والمشمولات، والتسعير الشفاف للشخص الواحد.",
+    feature2Tag: "فلاتر ذكية",
+    feature2Title: "اعثر على الرحلة المناسبة",
+    feature2Desc: "ابحث حسب الوكالة أو المدينة أو الفندق، ثم صنف حسب الميزانية ووسائل النقل والإقامة والمدة وتقييم الوكالة.",
+    feature3Tag: "حجز موجه",
+    feature3Title: "احجز بدون تخمين",
+    feature3Desc: "اختر المسافرين وإشغال الغرف، وتحقق من هويتك، وراجع كل تكلفة، واحتفظ بحالة حجزك في مكان واحد.",
+    
+    // Orbit app preview UI strings
+    bookingSummary: "ملخص الحجز",
+    travellers2Double: "مسافران · غرفة ثنائية",
+    total: "الإجمالي",
+    
+    // How it works
+    howItWorksEyebrow: "من النية إلى خطة الرحلة",
+    howItWorksTitle: "رحلة حجز واضحة دائماً.",
+    howItWorksDesc: "كل خطوة تشرح ما يحدث بعد ذلك. تفاصيل الباقة، وأسعار الغرف، ومعلومات المسافر، والتحقق من الهوية، والدفع، وحالة الحجز تظل متصلة.",
+    joinEarlyList: "انضم إلى القائمة المبكرة",
+    
+    step1Title: "اكتشف",
+    step1Desc: "استكشف الباقات المنسقة والوكالات الموثوقة.",
+    step2Title: "قارن",
+    step2Desc: "شاهد التفاصيل المهمة جنباً إلى جنب.",
+    step3Title: "احجز",
+    step3Desc: "أكمل حجزاً واضحاً خطوة بخطوة.",
+    step4Title: "سافر",
+    step4Desc: "تتبع رحلتك واحتفظ بالدعم قريباً منك.",
+    
+    // Connected Platform
+    platformEyebrow: "منصة واحدة متصلة",
+    platformTitle: "بُنيت لكل جانب من الرحلة.",
+    
+    rolePilgrimLabel: "للمعتمرين",
+    rolePilgrimTitle: "اختر بثقة.",
+    rolePilgrimDesc: "اكتشف الباقات، واحفظ المفضلة، واحجز، وادفع، وتلق الإشعارات، وأدر رحلاتك في مساحة شخصية واحدة.",
+    rolePilgrimItem1: "باقات منسقة",
+    rolePilgrimItem2: "الرحلات المحفوظة والحجوزات",
+    rolePilgrimItem3: "مواقيت الصلاة",
+    
+    roleAgencyLabel: "للشركات",
+    roleAgencyTitle: "أدر أعمال العمرة الخاصة بك.",
+    roleAgencyDesc: "انشر الرحلات, وأدر طلبات الحجز، وتراسل مع المعتمرين، وتتبع المستندات، ونظّم المسافرين، وتابع الأرباح من لوحة تحكم الشركة المخصصة.",
+    roleAgencyItem1: "عمليات الرحلات والحجوزات",
+    roleAgencyItem2: "المستندات والغرف والنقل",
+    roleAgencyItem3: "الأموال والرسائل والموظفين",
+    openCompanyPortal: "افتح بوابة الشركة",
+    
+    roleAdminLabel: "للمشرفين",
+    roleAdminTitle: "حافظ على موثوقية السوق.",
+    roleAdminDesc: "راجع الشركات والرحلات، وأشرف على الحجوزات، وراقب الشؤون المالية، وأدر دعم السوق من لوحة تحكم المشرف الموحدة.",
+    roleAdminItem1: "موافقات الشركات",
+    roleAdminItem2: "الإشراف على الرحلات والحجوزات",
+    roleAdminItem3: "المالية والدعم والأمن",
+    openAdminControl: "افتح تحكم المشرف",
+    
+    // Language Section
+    langSectionEyebrow: "صُنع محلياً",
+    langSectionTitle: "لغتك. رحلتك.",
+    langSectionDesc: "تم تصميم طواف باللغات الإنجليزية والعربية والكردية الصورانية — مع تخطيطات من اليمين إلى اليسار وتفاصيل مألوفة ثقافياً طوال التجربة.",
+    
+    // FAQs
+    faqEyebrow: "معلومات مفيدة",
+    faqTitle: "الأسئلة، تُجاب بوضوح.",
+    faqDesc: "كل ما يجب على المعتمرين والوكالات معرفته قبل الانضمام إلى طواف.",
+    
+    faq1Q: "كيف يتحقق طواف من وكالات العمرة؟",
+    faq1A: "تقدم الوكالات ملف تعريف أعمالها والمستندات الداعمة للمراجعة. يمكن فقط للمشغلين المعتمدين والنشطين الظهور كجهات معتمدة في السوق.",
+    faq2Q: "هل يمكنني المقارنة بين الباقات قبل الحجز؟",
+    faq2A: "نعم. يعرض طواف المدة، ووسائل النقل، والفندق، والمسافة إلى الحرم، ونوع الغرفة، والوجبات، والمشمولات، وتقييم الوكالة، والتسعير لكل شخص بتنسيق واحد متسق.",
+    faq3Q: "ما هي اللغات التي يدعمها طواف؟",
+    faq3A: "تم تصميم التجربة الكاملة للغات الإنجليزية والعربية والكردية الصورانية، بما في ذلك التخطيطات من اليمين إلى اليسار للغات ذات الخط العربي.",
+    faq4Q: "هل يمكن للوكالات إدارة الحجوزات في طواف؟",
+    faq4A: "نعم. تتلقى الوكالات المعتمدة مساحة عمل مخصصة للعروض، وطلبات الحجز، ورسائل المعتمرين، والمستندات، والنشاط المالي.",
+    
+    // Final CTA
+    finalCtaEyebrow: "طريقة أفضل للبدء",
+    finalCtaTitle: "رحلة عمرتك تبدأ مع طواف.",
+    finalCtaDesc: "كن من بين الأوائل الذين يعرفون متى يصبح طواف متاحاً.",
+    emailPlaceholder: "أدخل عنوان بريدك الإلكتروني",
+    getEarlyAccess: "احصل على وصول مبكر",
+    noSpam: "لا توجد رسائل مزعجة. فقط تحديثات طواف الهامة.",
+    openingEmailApp: "فتح تطبيق البريد الإلكتروني الخاص بك...",
+    
+    // Footer
+    footerDesc: "الثقة في كل خطوة من الرحلة.",
+    footerCopyright: "© ٢٠٢٦ طواف. جميع الحقوق محفوظة.",
+    contact: "تواصل معنا",
+    
+    // Modal
+    verifiedPackage: "باقة معتمدة",
+    modalSummary: "رحلة مدتها {days} يوماً مع إقامة {stars} نجوم في {hotel}، {distance}.",
+    duration: "المدة",
+    transport: "وسيلة النقل",
+    room: "الغرفة",
+    meals: "الوجبات",
+    whatsIncluded: "ماذا تشمل الرحلة",
+    registerInterest: "تسجيل الاهتمام",
+    daysNights: "{days} يوماً / {nights} ليلة",
+    
+    // Package items translated
+    packagesData: [
+      { id: 1, title: "العمرة الذهبية", agency: "نور للسياحة", city: "أربيل", hotel: "سويس أوتيل مكة", distance: "٢٥٠م من الحرم", room: "غرفة رباعية", meals: "إفطار وعشاء", carrier: "الخطوط الجوية العراقية", inclusions: ["تأشيرة", "تنقلات المطار", "إقامة ٥ نجوم", "مرشد مجموعة"] },
+      { id: 2, title: "العمرة المريحة", agency: "قوافل السلام", city: "السليمانية", hotel: "دار الإيمان", distance: "٥٠٠م من الحرم", room: "غرفة ثلاثية", meals: "إفطار", carrier: "حافلة فاخرة", inclusions: ["تأشيرة", "نقل بالحافلة", "إقامة ٤ نجوم"] },
+      { id: 3, title: "العمرة الممتازة", agency: "سما للسياحة", city: "دهوك", hotel: "فيرمونت برج الساعة", distance: "٥٠م من الحرم", room: "غرفة ثنائية", meals: "جميع الوجبات", carrier: "الخطوط السعودية", inclusions: ["تأشيرة", "تنقلات كبار الشخصيات", "إقامة ٥ نجوم", "مرشد خاص", "إنترنت"] },
+    ],
+
+    // Sign In page translations
+    authTitle: "Tawaf — بوابة العمليات",
+    authKicker: "بُنيت للأشخاص الذين يقفون وراء كل رحلة",
+    authHeader: "مكان واحد آمن لإدارة كل رحلة عمرة.",
+    authDesc: "تدير الشركات العروض والمسافرين والحجوزات والمستندات والمدفوعات وعمليات الرحلات. يشرف مديرو طواف على السوق بأكمله.",
+    authCompanyWorkspace: "مساحة عمل الشركة",
+    authCompanyWorkspaceDesc: "الرحلات، الحجوزات، الأموال، الرسائل والموظفين",
+    authAdminControl: "تحكم المشرف",
+    authAdminControlDesc: "الشركات، السوق، المالية والدعم",
+    authDatabaseProtected: "دورك وصلاحياتك محمية بواسطة قاعدة بيانات طواف المباشرة.",
+    authBackToTawaf: "العودة إلى طواف",
+    authSecureWorkspace: "مساحة عمل آمنة",
+    authWelcomeBack: "مرحباً بعودتك.",
+    authSignInSubtitle: "سجّل الدخول بنفس الحساب الذي تستخدمه في تطبيق طواف.",
+    authEmailLabel: "البريد الإلكتروني",
+    authPasswordLabel: "كلمة المرور",
+    authPasswordPlaceholder: "أدخل كلمة المرور",
+    authSecuringWorkspace: "تأمين مساحة عملك",
+    authSignInButton: "سجل الدخول إلى طواف",
+    authNeedAccess: "هل تحتاج إلى وصول لشركتك؟ ",
+    authRequestAccess: "اطلب صلاحية وصول للشركة",
+    authLegal: "من خلال الاستمرار، فإنك توافق على سياسات الخصوصية والأمان التشغيلي لطواف."
+  },
+  en: {
+    // Navigation
+    packages: "Packages",
+    marketplace: "Marketplace",
+    howItWorks: "How it works",
+    forAgencies: "For agencies",
+    signIn: "Sign in",
+    
+    // Hero
+    availability: "Built for pilgrims in Iraq & Kurdistan",
+    heroTitlePart1: "Your Umrah.",
+    heroTitlePart2: "One trusted place.",
+    heroLede: "Discover verified agencies, compare complete Umrah packages, and book your journey with clarity—from the first search to your confirmed trip.",
+    exploreTawaf: "Explore Tawaf",
+    seeHowItWorks: "See how it works",
+    languagesCount: "3 languages",
+    marketplaceCount: "1 trusted marketplace",
+    tripAccessCount: "24/7 trip access",
+    
+    // Orbit displays
+    journeyInYourLanguage: "Your journey, in your language",
+    marketplaceTrust: "Marketplace trust",
+    verifiedUmrahOperators: "Verified Umrah operators",
+    nextPrayer: "NEXT PRAYER",
+    welcomePilgrim: "Welcome, Pilgrim",
+    topAgencies: "Top Agencies",
+    viewAll: "View all",
+    home: "Home",
+    bookings: "Bookings",
+    offers: "Offers",
+    agencies: "Agencies",
+    featured: "FEATURED",
+    packagesMatch: "12 packages match",
+    all: "All",
+    byAir: "By Air",
+    byCoach: "By Coach",
+    fiveStar: "5 Star",
+    tenDays: "10 days",
+    fourStar: "4-Star",
+    fourteenDays: "14 days",
+    
+    // Trust strip
+    trust1Title: "Verified operators",
+    trust1Desc: "Agency profiles you can inspect",
+    trust2Title: "Clear package details",
+    trust2Desc: "Hotels, flights, rooms & inclusions",
+    trust3Title: "Secure journey",
+    trust3Desc: "Identity checks and protected payments",
+    trust4Title: "Trilingual by design",
+    trust4Desc: "English, Arabic and Kurdish",
+    
+    // Package Explorer
+    explorerEyebrow: "Explore the marketplace",
+    explorerTitle: "Find a journey that fits you.",
+    explorerDesc: "Preview the same clear package details pilgrims can compare inside Tawaf. These sample offers come directly from the app’s marketplace data.",
+    allPackagesFilter: "All packages",
+    byAirFilter: "By air",
+    byCoachFilter: "By coach",
+    fiveStarFilter: "5-star",
+    packageCount: "package",
+    packagesCountPlural: "packages",
+    verifiedOperator: "Verified operator",
+    days: "days",
+    viewPackage: "View package",
+    fromPerson: "from / person",
+    
+    // Feature Section
+    featureEyebrow: "A complete Umrah marketplace",
+    featureTitle: "Less searching. More certainty.",
+    featureDesc: "Tawaf brings the decisions, details, and people behind your journey together in one calm experience.",
+    feature1Tag: "Verified agencies",
+    feature1Title: "Compare with confidence",
+    feature1Desc: "Browse packages from verified Umrah operators, compare hotels, transport, duration, inclusions, and transparent per-person pricing.",
+    feature2Tag: "Smart filters",
+    feature2Title: "Find the trip that fits",
+    feature2Desc: "Search by agency, city, or hotel, then filter by budget, transport, accommodation, duration, and agency rating.",
+    feature3Tag: "Guided booking",
+    feature3Title: "Book without the guesswork",
+    feature3Desc: "Choose travellers and room occupancy, verify your identity, review every cost, and keep your booking status in one place.",
+    
+    // Orbit app preview UI strings
+    bookingSummary: "BOOKING SUMMARY",
+    travellers2Double: "2 travellers · Double room",
+    total: "Total",
+    
+    // How it works
+    howItWorksEyebrow: "From intention to itinerary",
+    howItWorksTitle: "A booking journey that stays clear.",
+    howItWorksDesc: "Every step explains what happens next. Package details, occupancy pricing, traveller information, identity verification, payment, and booking status stay connected.",
+    joinEarlyList: "Join the early list",
+    
+    step1Title: "Discover",
+    step1Desc: "Explore curated packages and trusted agencies.",
+    step2Title: "Compare",
+    step2Desc: "See the details that matter side by side.",
+    step3Title: "Book",
+    step3Desc: "Complete a clear, step-by-step reservation.",
+    step4Title: "Travel",
+    step4Desc: "Track your trip and keep support close.",
+    
+    // Connected Platform
+    platformEyebrow: "One connected platform",
+    platformTitle: "Built for every side of the journey.",
+    
+    rolePilgrimLabel: "FOR PILGRIMS",
+    rolePilgrimTitle: "Choose with confidence.",
+    rolePilgrimDesc: "Discover packages, save favourites, book, pay, receive notifications, and manage your trips in one personal space.",
+    rolePilgrimItem1: "Curated packages",
+    rolePilgrimItem2: "Saved trips & bookings",
+    rolePilgrimItem3: "Prayer times",
+    
+    roleAgencyLabel: "FOR COMPANIES",
+    roleAgencyTitle: "Run your Umrah business.",
+    roleAgencyDesc: "Publish trips, manage booking requests, message pilgrims, track documents, coordinate travellers, and follow earnings from a focused company dashboard.",
+    roleAgencyItem1: "Trips & booking operations",
+    roleAgencyItem2: "Documents, rooms & transport",
+    roleAgencyItem3: "Money, messages & staff",
+    openCompanyPortal: "Open company portal",
+    
+    roleAdminLabel: "FOR ADMINISTRATORS",
+    roleAdminTitle: "Keep the marketplace trusted.",
+    roleAdminDesc: "Review companies and trips, oversee bookings, monitor finance, and manage marketplace support from one admin control panel.",
+    roleAdminItem1: "Company approvals",
+    roleAdminItem2: "Trip & booking oversight",
+    roleAdminItem3: "Finance, support & security",
+    openAdminControl: "Open admin control",
+    
+    // Language Section
+    langSectionEyebrow: "Made for home",
+    langSectionTitle: "Your language. Your journey.",
+    langSectionDesc: "Tawaf is designed in English, Arabic, and Sorani Kurdish—with right-to-left layouts and culturally familiar details throughout the experience.",
+    
+    // FAQs
+    faqEyebrow: "Good to know",
+    faqTitle: "Questions, answered clearly.",
+    faqDesc: "Everything pilgrims and agencies should know before joining Tawaf.",
+    
+    faq1Q: "How does Tawaf verify Umrah agencies?",
+    faq1A: "Agencies submit their business profile and supporting documents for review. Only approved, active operators can appear as verified in the marketplace.",
+    faq2Q: "Can I compare packages before booking?",
+    faq2A: "Yes. Tawaf presents duration, transport, hotel, distance to Haram, room type, meals, inclusions, agency rating, and per-person pricing in one consistent format.",
+    faq3Q: "Which languages does Tawaf support?",
+    faq3A: "The complete experience is designed for English, Arabic, and Sorani Kurdish, including right-to-left layouts for Arabic-script languages.",
+    faq4Q: "Can agencies manage bookings in Tawaf?",
+    faq4A: "Yes. Approved agencies receive a dedicated workspace for offers, booking requests, traveller messages, documents, and financial activity.",
+    
+    // Final CTA
+    finalCtaEyebrow: "A better way to begin",
+    finalCtaTitle: "Your Umrah journey starts with Tawaf.",
+    finalCtaDesc: "Be among the first to know when Tawaf becomes available.",
+    emailPlaceholder: "Enter your email address",
+    getEarlyAccess: "Get early access",
+    noSpam: "No spam. Just important Tawaf updates.",
+    openingEmailApp: "Opening your email app…",
+    
+    // Footer
+    footerDesc: "Confidence for every step of the journey.",
+    footerCopyright: "© 2026 Tawaf. All rights reserved.",
+    contact: "Contact",
+    
+    // Modal
+    verifiedPackage: "VERIFIED PACKAGE",
+    modalSummary: "A {days}-day journey with a {stars}-star stay at {hotel}, {distance}.",
+    duration: "Duration",
+    transport: "Transport",
+    room: "Room",
+    meals: "Meals",
+    whatsIncluded: "WHAT’S INCLUDED",
+    registerInterest: "Register interest",
+    daysNights: "{days} days / {nights} nights",
+    
+    // Package items translated
+    packagesData: [
+      { id: 1, title: "Golden Umrah", agency: "Noor Travel", city: "Erbil", hotel: "Swissôtel Makkah", distance: "250m to Haram", room: "Quad room", meals: "Breakfast & dinner", carrier: "Iraqi Airways", inclusions: ["Visa", "Airport transfers", "5-star stay", "Group guide"] },
+      { id: 2, title: "Comfort Umrah", agency: "Salam Caravans", city: "Sulaimani", hotel: "Dar Al Eiman", distance: "500m to Haram", room: "Triple room", meals: "Breakfast", carrier: "Deluxe Coach", inclusions: ["Visa", "Coach transport", "4-star stay"] },
+      { id: 3, title: "Premium Umrah", agency: "Sama Trips", city: "Duhok", hotel: "Fairmont Clock Tower", distance: "50m to Haram", room: "Double room", meals: "All meals", carrier: "Saudia", inclusions: ["Visa", "VIP transfers", "5-star stay", "Private guide", "Internet"] },
+    ],
+
+    // Sign In page translations
+    authTitle: "Tawaf — Operations Portal",
+    authKicker: "Built for the people behind every journey",
+    authHeader: "One secure place to run every Umrah trip.",
+    authDesc: "Companies manage offers, travellers, bookings, documents, payments, and trip operations. Tawaf administrators oversee the entire marketplace.",
+    authCompanyWorkspace: "Company workspace",
+    authCompanyWorkspaceDesc: "Trips, bookings, money, messages and staff",
+    authAdminControl: "Admin control",
+    authAdminControlDesc: "Companies, marketplace, finance and support",
+    authDatabaseProtected: "Your role and permissions are protected by Tawaf's live database.",
+    authBackToTawaf: "Back to Tawaf",
+    authSecureWorkspace: "Secure workspace",
+    authWelcomeBack: "Welcome back.",
+    authSignInSubtitle: "Sign in with the same account you use in the Tawaf app.",
+    authEmailLabel: "Email address",
+    authPasswordLabel: "Password",
+    authPasswordPlaceholder: "Enter your password",
+    authSecuringWorkspace: "Securing your workspace",
+    authSignInButton: "Sign in to Tawaf",
+    authNeedAccess: "Need access for your company? ",
+    authRequestAccess: "Request company access",
+    authLegal: "By continuing, you agree to Tawaf's operational security and privacy policies."
+  }
+};
