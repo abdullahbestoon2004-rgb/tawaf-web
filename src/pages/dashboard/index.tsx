@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Activity,
   ArrowDownRight,
+  AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
@@ -29,7 +30,6 @@ import {
   Headphones,
   Languages,
   LayoutDashboard,
-  LoaderCircle,
   LogOut,
   Mail,
   MapPin,
@@ -48,13 +48,13 @@ import {
   TrendingUp,
   Upload,
   UserRound,
-  Users,
   WalletCards,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
 import { dashboardTranslations } from "./translations.ts";
 
@@ -69,7 +69,6 @@ type PageId =
   | "finance"
   | "support"
   | "messages"
-  | "team"
   | "more";
 
 type Profile = {
@@ -111,6 +110,8 @@ type Company = {
   verification_reason: string | null;
   is_verified: boolean;
   is_active: boolean;
+  is_promoted: boolean;
+  commission_rate: number | null;
   logo_url: string | null;
   created_at: string;
 };
@@ -124,6 +125,7 @@ type Trip = {
   nights: number;
   transport: string;
   acc_stars: number;
+  image_url: string | null;
   lifecycle_status: string;
   review_reason: string | null;
   departure_date: string | null;
@@ -207,14 +209,6 @@ type Inquiry = {
   }>;
 };
 
-type StaffMember = {
-  id: string;
-  role: string;
-  permissions: string[];
-  status: string;
-  profiles?: { full_name?: string; phone?: string } | null;
-};
-
 type LedgerRow = {
   id: string;
   entry_type: string;
@@ -240,7 +234,6 @@ type PortalData = {
   payments: Payment[];
   support: SupportMessage[];
   inquiries: Inquiry[];
-  staff: StaffMember[];
   ledger: LedgerRow[];
   payouts: Payout[];
 };
@@ -254,7 +247,6 @@ const emptyData: PortalData = {
   payments: [],
   support: [],
   inquiries: [],
-  staff: [],
   ledger: [],
   payouts: [],
 };
@@ -275,7 +267,6 @@ const companyNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> 
   { id: "bookings", label: "Bookings", icon: BookOpenCheck },
   { id: "messages", label: "Messages", icon: MessageSquareText },
   { id: "finance", label: "Money", icon: WalletCards },
-  { id: "team", label: "Team", icon: Users },
   { id: "more", label: "Company profile", icon: Settings },
 ];
 
@@ -382,8 +373,8 @@ function tripChangeValue(field: string, value: any) {
 
 function statusTone(status: string) {
   if (["active", "approved", "published", "confirmed", "completed", "succeeded", "collected", "ready"].includes(status)) return "positive";
-  if (["rejected", "cancelled", "failed", "suspended", "expired"].includes(status)) return "negative";
-  if (["pending", "pending_review", "requested", "awaiting_payment", "owed", "under_review"].includes(status)) return "warning";
+  if (["rejected", "cancelled", "failed", "suspended", "expired", "removed"].includes(status)) return "negative";
+  if (["pending", "pending_review", "requested", "awaiting_payment", "owed", "under_review", "needs_changes"].includes(status)) return "warning";
   return "neutral";
 }
 
@@ -446,7 +437,6 @@ export default function DashboardPage() {
         case "finance": return "دارایی / پارە";
         case "support": return "پشتگیری";
         case "messages": return "نامەکان";
-        case "team": return "کارمەندان";
         case "more": return role === "admin" ? "زیاتر" : "پڕۆفایلی کۆمپانیا";
         default: return id;
       }
@@ -460,7 +450,6 @@ export default function DashboardPage() {
         case "finance": return "المالية";
         case "support": return "الدعم";
         case "messages": return "الرسائل";
-        case "team": return "الموظفين";
         case "more": return role === "admin" ? "المزيد" : "ملف الشركة";
         default: return id;
       }
@@ -473,7 +462,6 @@ export default function DashboardPage() {
       case "finance": return role === "admin" ? "Finance" : "Money";
       case "support": return "Support";
       case "messages": return "Messages";
-      case "team": return "Team";
       case "more": return role === "admin" ? "More" : "Company profile";
       default: return id;
     }
@@ -594,7 +582,6 @@ export default function DashboardPage() {
             commissionsResult,
             paymentsResult,
             inquiriesResult,
-            staffResult,
             ledgerResult,
             payoutsResult,
           ] = await Promise.all([
@@ -604,7 +591,6 @@ export default function DashboardPage() {
             supabase.from("commissions").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payments").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("inquiries").select("*, inquiry_messages(*)").eq("agency_id", companyRow.id).order("updated_at", { ascending: false }),
-            supabase.from("agency_staff").select("*, profiles(full_name, phone)").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("agency_ledger").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payouts").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
           ]);
@@ -616,7 +602,6 @@ export default function DashboardPage() {
             commissionsResult,
             paymentsResult,
             inquiriesResult,
-            staffResult,
             ledgerResult,
             payoutsResult,
           ].find((result) => result.error)?.error;
@@ -631,7 +616,6 @@ export default function DashboardPage() {
             commissions: (commissionsResult.data ?? []) as Commission[],
             payments: (paymentsResult.data ?? []) as Payment[],
             inquiries: (inquiriesResult.data ?? []) as Inquiry[],
-            staff: (staffResult.data ?? []) as StaffMember[],
             ledger: (ledgerResult.data ?? []) as LedgerRow[],
             payouts: (payoutsResult.data ?? []) as Payout[],
           });
@@ -694,7 +678,7 @@ export default function DashboardPage() {
       trips: data.trips.filter((item) => item.lifecycle_status === "pending_review").length
         + data.tripChangeRequests.filter((item) => item.status === "pending").length,
       bookings: data.bookings.filter((item) => item.operational_stage === "requested").length,
-      support: data.support.length,
+      support: data.support.filter((item) => !item.status || item.status === "open").length,
     }
     : {
       bookings: data.bookings.filter((item) => item.operational_stage === "requested").length,
@@ -716,8 +700,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="portal-loading">
-        <img src="/brand/tawaf-logo.png" alt="Tawaf" width={74} height={74} />
-        <LoaderCircle className="spin" size={22} />
+        <TawafLoadingSpinner size={96} />
         <p>Preparing your Tawaf workspace</p>
       </main>
     );
@@ -1010,7 +993,6 @@ function CompanyPages({
   if (page === "bookings") return <BookingsPage role="agency" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "messages") return <MessagesPage data={data} profile={profile} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "finance") return <FinancePage role="agency" data={data} busy={busy} runAction={runAction} locale={locale} />;
-  if (page === "team") return <TeamPage data={data} company={company} locale={locale} />;
   if (page === "more") return <CompanyProfile company={company} profile={profile} busy={busy} runAction={runAction} locale={locale} changeLocale={changeLocale} />;
   return <CompanyOverview data={data} company={company} goTo={goTo} locale={locale} />;
 }
@@ -1074,17 +1056,25 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
   const owed = data.commissions.filter((item) => item.status === "owed").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
   const pendingCompanies = data.companies.filter((item) => ["pending", "needs_changes"].includes(item.verification_status));
   const pendingTrips = data.trips.filter((item) => item.lifecycle_status === "pending_review");
+  const pendingChanges = data.tripChangeRequests.filter((item) => item.status === "pending");
   const requestedBookings = data.bookings.filter((item) => item.operational_stage === "requested");
+  const openSupport = data.support.filter((item) => !item.status || item.status === "open");
   const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
   const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
   const recentBookings = data.bookings.slice(0, 5);
   const monthly = monthlyBookingCounts(data.bookings);
+  const hour = new Date().getHours();
+  const greeting = hour < 12
+    ? (locale === "ku" ? "بەیانیت باش، بەڕێوەبەر." : locale === "ar" ? "صباح الخير، يا مسؤول." : "Good morning, Admin.")
+    : hour < 17
+      ? (locale === "ku" ? "پاش نیوەڕۆت باش، بەڕێوەبەر." : locale === "ar" ? "طاب نهارك، يا مسؤول." : "Good afternoon, Admin.")
+      : (locale === "ku" ? "ئێوارەت باش، بەڕێوەبەر." : locale === "ar" ? "مساء الخير، يا مسؤول." : "Good evening, Admin.");
 
   return (
     <>
       <PageHeading
         eyebrow={locale === "ku" ? "لێدانی پلاتفۆرم" : locale === "ar" ? "نبض المنصة" : "Platform pulse"}
-        title={locale === "ku" ? "بەیانیت باش، بەڕێوەبەر." : locale === "ar" ? "صباح الخير، يا مسؤول." : "Good morning, Admin."}
+        title={greeting}
         description={locale === "ku" ? "لێرەدا ئەوە نیشان دراوە کە پێویستی بە گرنگیپێدانی تۆ هەیە لە بازاڕی تەوافدا ئەمڕۆ." : locale === "ar" ? "إليك ما يحتاج إلى اهتمامك عبر سوق طواف اليوم." : "Here is what needs your attention across the Tawaf marketplace today."}
       />
 
@@ -1119,8 +1109,9 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
           <PanelHeader title={t.needsAttention} subtitle={t.itemsWaitingAction} />
           <div className="portal-attention-list">
             <AttentionItem icon={Building2} tone="gold" count={pendingCompanies.length} title={t.companyApplications} text={t.reviewBusinessDetails} onClick={() => goTo("companies")} />
-            <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingTrips.length} title={t.tripsForReview} text={t.checkPricingHotels} onClick={() => goTo("trips")} />
-            <AttentionItem icon={Headphones} tone="green" count={data.support.length} title={t.supportMessages} text={t.unresolvedInInbox} onClick={() => goTo("support")} />
+            <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingTrips.length + pendingChanges.length} title={t.tripsForReview} text={locale === "ku" ? `${pendingTrips.length} گەشتی نوێ · ${pendingChanges.length} داواکاری گۆڕانکاری` : locale === "ar" ? `${pendingTrips.length} رحلات جديدة · ${pendingChanges.length} طلبات تغيير` : `${pendingTrips.length} new trips · ${pendingChanges.length} change requests`} onClick={() => goTo("trips")} />
+            <AttentionItem icon={BookOpenCheck} tone="sand" count={requestedBookings.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("bookings")} />
+            <AttentionItem icon={Headphones} tone="green" count={openSupport.length} title={t.supportMessages} text={t.unresolvedInInbox} onClick={() => goTo("support")} />
           </div>
         </article>
       </section>
@@ -1159,8 +1150,10 @@ function CompanyOverview({ data, company, goTo, locale }: { data: PortalData; co
   const confirmed = data.bookings.filter((item) => ["confirmed", "ready", "in_progress"].includes(item.operational_stage));
   const bookingValue = data.bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
   const received = data.payments.filter((item) => item.status === "succeeded").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const nextTrip = [...data.trips].filter((item) => item.departure_date && new Date(item.departure_date) >= new Date()).sort((a, b) => String(a.departure_date).localeCompare(String(b.departure_date)))[0];
+  const nextTrip = [...data.trips].filter((item) => item.departure_date && new Date(item.departure_date) >= new Date() && ["published", "pending_review", "paused"].includes(item.lifecycle_status)).sort((a, b) => String(a.departure_date).localeCompare(String(b.departure_date)))[0];
   const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
+  const tripsNeedingAction = data.trips.filter((item) => ["needs_changes", "rejected"].includes(item.lifecycle_status));
+  const pendingChangeRequests = data.tripChangeRequests.filter((item) => item.status === "pending");
 
   // Translate verification status
   const getVerificationStatusLabel = (status: string) => {
@@ -1241,6 +1234,8 @@ function CompanyOverview({ data, company, goTo, locale }: { data: PortalData; co
           <div className="portal-attention-list">
             <AttentionItem icon={Mail} tone="gold" count={pending.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("bookings")} />
             <AttentionItem icon={FileCheck2} tone="teal" count={data.bookings.filter((item) => item.operational_stage === "needs_information").length} title={t.informationNeeded} text={t.travellersIncomplete} onClick={() => goTo("bookings")} />
+            <AttentionItem icon={AlertTriangle} tone="sand" count={tripsNeedingAction.length} title={locale === "ku" ? "گەشتەکان پێویستیان بە چاککردنە" : locale === "ar" ? "رحلات تحتاج إلى تعديل" : "Trips needing fixes"} text={locale === "ku" ? "تەواف داوای گۆڕانکاری کردووە یان ڕەتی کردووەتەوە" : locale === "ar" ? "طلب طواف تعديلات أو رفض الرحلة" : "Tawaf requested changes or rejected the trip"} onClick={() => goTo("trips")} />
+            <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingChangeRequests.length} title={locale === "ku" ? "داواکاری لە چاوەڕوانیدا" : locale === "ar" ? "طلبات بانتظار طواف" : "Requests awaiting Tawaf"} text={locale === "ku" ? "گۆڕانکارییەکانت لە چاوەڕوانی پەسەندکردنی بەڕێوەبەردان" : locale === "ar" ? "تغييراتك بانتظار موافقة المشرف" : "Your submitted changes are waiting for admin approval"} onClick={() => goTo("trips")} />
             <AttentionItem icon={MessageSquareText} tone="green" count={data.inquiries.filter((item) => item.status !== "closed").length} title={t.openConversations} text={t.pilgrimInquiriesReply} onClick={() => goTo("messages")} />
           </div>
         </article>
@@ -1270,6 +1265,11 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
   const t = dashboardTranslations[locale];
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = data.companies.find((item) => item.id === selectedId) ?? null;
+  const pendingCount = data.companies.filter((item) => ["pending", "needs_changes"].includes(item.verification_status)).length;
+  const activeCount = data.companies.filter((item) => item.is_active && item.verification_status === "approved").length;
+  const suspendedCount = data.companies.filter((item) => item.verification_status === "suspended" || !item.is_active || item.status === "suspended").length;
   const companies = data.companies.filter((item) => {
     const matchesQuery = `${item.name} ${item.location ?? ""}`.toLowerCase().includes(query.toLowerCase());
     if (filter === "pending") return matchesQuery && ["pending", "needs_changes"].includes(item.verification_status);
@@ -1294,6 +1294,12 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
   return (
     <>
       <PageHeading eyebrow={locale === "ku" ? "ڕێکخستنی بازاڕ" : locale === "ar" ? "حوكمة السوق" : "Marketplace governance"} title={t.adminCompaniesTitle} description={t.adminCompaniesDesc} />
+      <section className="portal-mini-metrics">
+        <div><span className="neutral"><Building2 size={17} /></span><p><b>{data.companies.length}</b><small>{locale === "ku" ? "هەموو کۆمپانیاکان" : locale === "ar" ? "جميع الشركات" : "All companies"}</small></p></div>
+        <div><span className="warning"><Clock3 size={17} /></span><p><b>{pendingCount}</b><small>{locale === "ku" ? "چاوەڕێی بڕیارن" : locale === "ar" ? "بانتظار قرار" : "Awaiting decision"}</small></p></div>
+        <div><span className="positive"><BadgeCheck size={17} /></span><p><b>{activeCount}</b><small>{locale === "ku" ? "چالاک و پەسەندکراو" : locale === "ar" ? "نشطة ومعتمدة" : "Active & approved"}</small></p></div>
+        <div><span className="gold"><AlertTriangle size={17} /></span><p><b>{suspendedCount}</b><small>{locale === "ku" ? "ڕاگیراو یان ڕەتکراوە" : locale === "ar" ? "معلقة أو مرفوضة" : "Suspended or rejected"}</small></p></div>
+      </section>
       <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ کۆمپانیا یان شار..." : locale === "ar" ? "البحث عن شركة أو مدينة..." : "Search company or city…"} filters={[["all", t.allAll || "All"], ["pending", t.pendingFilter], ["active", t.activeLabel], ["suspended", t.suspendedLabel]]} activeFilter={filter} setFilter={setFilter} />
       <section className="portal-panel portal-table-panel">
         <PanelHeader title={`${companies.length} ${locale === "ku" ? "کۆمپانیا" : locale === "ar" ? "شركات" : "companies"}`} subtitle={locale === "ku" ? "دۆخی پشتڕاستکردنەوە و بازاڕی کۆمپانیا" : locale === "ar" ? "التحقق المباشر من الشركة وحالة السوق" : "Live company verification and marketplace status"} />
@@ -1303,26 +1309,26 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
               <thead><tr><th>{t.company}</th><th>{locale === "ku" ? "شوێن" : locale === "ar" ? "الموقع" : "Location"}</th><th>{locale === "ku" ? "هەڵسەنگاندن" : locale === "ar" ? "التقييم" : "Rating"}</th><th>{locale === "ku" ? "پشتڕاستکردنەوە" : locale === "ar" ? "التحقق" : "Verification"}</th><th>{locale === "ku" ? "تۆماربووە" : locale === "ar" ? "انضم في" : "Joined"}</th><th className="right">{locale === "ku" ? "کردارەکان" : locale === "ar" ? "الإجراءات" : "Actions"}</th></tr></thead>
               <tbody>
                 {companies.map((company) => (
-                  <tr key={company.id}>
+                  <tr key={company.id} className="clickable" onClick={() => setSelectedId(company.id)}>
                     <td><EntityName name={company.name} image={company.logo_url} fallback={Building2} detail={company.phone ?? "No phone added"} /></td>
                     <td>{company.location || (locale === "ku" ? "دابین نەکراوە" : locale === "ar" ? "غير متوفر" : "Not provided")}</td>
                     <td><span className="portal-rating"><Star size={13} fill="currentColor" /> {Number(company.rating ?? 0).toFixed(1)} <small>({company.reviews ?? 0})</small></span></td>
                     <td><StatusPill status={company.verification_status || company.status} /></td>
                     <td>{formatDate(company.created_at, true)}</td>
-                    <td className="right">
+                    <td className="right" onClick={(event) => event.stopPropagation()}>
                       {["pending", "needs_changes"].includes(company.verification_status) ? (
                         <div className="portal-row-actions">
-                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />} {t.accept}</button>
+                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {t.accept}</button>
                           <button type="button" onClick={() => review(company, "needs_changes")} disabled={busy.startsWith(`company-${company.id}`)}>{locale === "ku" ? "گۆڕانکاری" : locale === "ar" ? "تعديلات" : "Changes"}</button>
                           <button type="button" className="danger" onClick={() => review(company, "rejected")} disabled={busy.startsWith(`company-${company.id}`)}>{t.reject}</button>
                         </div>
                       ) : (company.verification_status === "suspended" || !company.is_active) ? (
                         <div className="portal-row-actions">
-                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />} {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
+                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
                         </div>
                       ) : (
                         <div className="portal-row-actions">
-                          <button type="button" className="danger" onClick={() => review(company, "suspended")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-suspended` ? <LoaderCircle className="spin" size={14} /> : <X size={14} />} {locale === "ku" ? "ڕاگرتنی کۆمپانیا" : locale === "ar" ? "تعليق الشركة" : "Suspend company"}</button>
+                          <button type="button" className="danger" onClick={() => review(company, "suspended")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-suspended` ? <TawafLoadingSpinner size={14} /> : <X size={14} />} {locale === "ku" ? "ڕاگرتنی کۆمپانیا" : locale === "ar" ? "تعليق الشركة" : "Suspend company"}</button>
                         </div>
                       )}
                     </td>
@@ -1333,7 +1339,133 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
           </div>
         ) : <EmptyState icon={Building2} title={t.noCompaniesFound} text={locale === "ku" ? "گەڕانێکی تر تاقی بکەرەوە یان فلتەرەکە بگۆڕە." : locale === "ar" ? "حاول البحث بكلمات أخرى أو تغيير الفلاتر." : "Try another search or filter."} compact />}
       </section>
+      {selected && (
+        <CompanyDetailDrawer
+          company={selected}
+          data={data}
+          busy={busy}
+          locale={locale}
+          onClose={() => setSelectedId(null)}
+          onReview={(decision) => review(selected, decision)}
+          onTogglePromoted={() => runAction(
+            `company-${selected.id}-promote`,
+            () => getSupabase().rpc("admin_set_company_promoted", { p_company_id: selected.id, p_value: !selected.is_promoted }),
+            selected.is_promoted
+              ? (locale === "ku" ? "پرۆمۆشنی کۆمپانیا لابرا." : locale === "ar" ? "تمت إزالة ترويج الشركة." : "Company promotion removed.")
+              : (locale === "ku" ? "کۆمپانیا پرۆمۆت کرا لە بازاڕدا." : locale === "ar" ? "تم ترويج الشركة في السوق." : "Company is now promoted in the marketplace."),
+          )}
+        />
+      )}
     </>
+  );
+}
+
+function CompanyDetailDrawer({
+  company,
+  data,
+  busy,
+  locale,
+  onClose,
+  onReview,
+  onTogglePromoted,
+}: {
+  company: Company;
+  data: PortalData;
+  busy: string;
+  locale: "ku" | "ar" | "en";
+  onClose: () => void;
+  onReview: (decision: "approved" | "rejected" | "needs_changes" | "suspended") => void;
+  onTogglePromoted: () => void;
+}) {
+  const t = dashboardTranslations[locale];
+  const trips = data.trips.filter((item) => item.company_id === company.id);
+  const bookings = data.bookings.filter((item) => item.company_id === company.id);
+  const bookingValue = bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
+  const commissionOwed = data.commissions.filter((item) => item.company_id === company.id && item.status === "owed").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
+  const isPending = ["pending", "needs_changes"].includes(company.verification_status);
+  const isSuspended = company.verification_status === "suspended" || !company.is_active;
+  const rowBusy = busy.startsWith(`company-${company.id}`);
+  const notProvided = locale === "ku" ? "دابین نەکراوە" : locale === "ar" ? "غير متوفر" : "Not provided";
+
+  return (
+    <div className="portal-drawer-scrim" onClick={onClose}>
+      <aside className="portal-drawer" onClick={(event) => event.stopPropagation()} aria-label={company.name}>
+        <header className="portal-drawer-head" style={company.banner_url ? { backgroundImage: `linear-gradient(rgba(5,45,36,.55), rgba(5,45,36,.75)), url("${company.banner_url}")` } : undefined}>
+          <button type="button" className="portal-drawer-close" onClick={onClose} aria-label="Close details"><X size={17} /></button>
+          <div className="portal-company-avatar large">
+            {company.logo_url ? <img src={company.logo_url} alt="" /> : company.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <h2>{company.name}</h2>
+            <p>{company.location || notProvided} · {locale === "ku" ? "بەشداربووە" : locale === "ar" ? "انضمت في" : "Joined"} {formatDate(company.created_at, true)}</p>
+          </div>
+          <div className="portal-drawer-badges">
+            <StatusPill status={company.verification_status || company.status} />
+            {company.is_promoted && <span className="portal-status positive"><i />{locale === "ku" ? "پرۆمۆتکراو" : locale === "ar" ? "مروَّجة" : "Promoted"}</span>}
+          </div>
+        </header>
+
+        <div className="portal-drawer-body">
+          {company.verification_reason && (
+            <p className="portal-drawer-reason"><AlertTriangle size={14} /> {company.verification_reason}</p>
+          )}
+
+          <div className="portal-drawer-stats">
+            <div><b>{trips.length}</b><small>{locale === "ku" ? "گەشتەکان" : locale === "ar" ? "الرحلات" : "Trips"}</small></div>
+            <div><b>{bookings.length}</b><small>{locale === "ku" ? "حیجزەکان" : locale === "ar" ? "الحجوزات" : "Bookings"}</small></div>
+            <div><b>{formatIqd(bookingValue, true)}</b><small>{t.bookingValue}</small></div>
+            <div><b>{formatIqd(commissionOwed, true)}</b><small>{locale === "ku" ? "کۆمسیۆنی ماوە" : locale === "ar" ? "عمولة مستحقة" : "Commission owed"}</small></div>
+          </div>
+
+          <section>
+            <h3>{locale === "ku" ? "زانیاری پەیوەندی" : locale === "ar" ? "معلومات الاتصال" : "Contact information"}</h3>
+            <ul className="portal-drawer-facts">
+              <li><PhoneCall size={14} /><span>{company.phone || notProvided}</span></li>
+              <li><MessageSquareText size={14} /><span>{company.whatsapp || notProvided} (WhatsApp)</span></li>
+              <li><MapPin size={14} /><span>{company.office_address || notProvided}</span></li>
+              <li><Clock3 size={14} /><span>{company.office_hours || notProvided}</span></li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>{locale === "ku" ? "زانیاری بازرگانی" : locale === "ar" ? "معلومات العمل" : "Business details"}</h3>
+            <ul className="portal-drawer-facts">
+              <li><FileCheck2 size={14} /><span>{locale === "ku" ? "ژمارەی مۆڵەت:" : locale === "ar" ? "رقم الترخيص:" : "License:"} {company.license_number || notProvided}</span></li>
+              <li><CalendarDays size={14} /><span>{locale === "ku" ? "دامەزراوە لە" : locale === "ar" ? "تأسست في" : "Established"} {company.since ?? notProvided}</span></li>
+              <li><Star size={14} /><span>{Number(company.rating ?? 0).toFixed(1)} · {company.reviews ?? 0} {locale === "ku" ? "هەڵسەنگاندن" : locale === "ar" ? "تقييمات" : "reviews"}</span></li>
+              <li><CreditCard size={14} /><span>{(company.accepted_payment_methods ?? []).map(titleCase).join(", ") || notProvided}</span></li>
+            </ul>
+            {(company.tags ?? []).length > 0 && (
+              <div className="portal-drawer-tags">{(company.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}</div>
+            )}
+          </section>
+
+          {company.about && (
+            <section>
+              <h3>{locale === "ku" ? "دەربارە" : locale === "ar" ? "نبذة" : "About"}</h3>
+              <p className="portal-drawer-about">{company.about}</p>
+            </section>
+          )}
+        </div>
+
+        <footer className="portal-drawer-actions">
+          {isPending ? (
+            <>
+              <button type="button" className="portal-primary-button" onClick={() => onReview("approved")} disabled={rowBusy}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {t.accept}</button>
+              <button type="button" className="portal-secondary-button" onClick={() => onReview("needs_changes")} disabled={rowBusy}>{locale === "ku" ? "داوای گۆڕانکاری" : locale === "ar" ? "طلب تعديلات" : "Request changes"}</button>
+              <button type="button" className="portal-secondary-button danger" onClick={() => onReview("rejected")} disabled={rowBusy}>{t.reject}</button>
+            </>
+          ) : isSuspended ? (
+            <button type="button" className="portal-primary-button" onClick={() => onReview("approved")} disabled={rowBusy}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
+          ) : (
+            <>
+              <button type="button" className="portal-secondary-button" onClick={onTogglePromoted} disabled={rowBusy}>{busy === `company-${company.id}-promote` ? <TawafLoadingSpinner size={14} /> : <Star size={14} />} {company.is_promoted ? (locale === "ku" ? "لابردنی پرۆمۆشن" : locale === "ar" ? "إزالة الترويج" : "Remove promotion") : (locale === "ku" ? "پرۆمۆتکردنی کۆمپانیا" : locale === "ar" ? "ترويج الشركة" : "Promote company")}</button>
+              <button type="button" className="portal-secondary-button danger" onClick={() => onReview("suspended")} disabled={rowBusy}>{busy === `company-${company.id}-suspended` ? <TawafLoadingSpinner size={14} /> : <X size={14} />} {locale === "ku" ? "ڕاگرتنی کۆمپانیا" : locale === "ar" ? "تعليق الشركة" : "Suspend company"}</button>
+            </>
+          )}
+        </footer>
+      </aside>
+    </div>
   );
 }
 
@@ -1347,6 +1479,7 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
     return matches && (filter === "all" || item.lifecycle_status === filter);
   });
   const pendingChanges = data.tripChangeRequests.filter((item) => item.status === "pending");
+  const countByStatus = (status: string) => data.trips.filter((item) => item.lifecycle_status === status).length;
 
   async function reviewTrip(trip: Trip, decision: "published" | "rejected") {
     const reason = decision === "rejected" ? await askReason(locale === "ku" ? "بۆچی ئەم گەشتە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذه الرحلة؟" : "Why is this trip being rejected?") : null;
@@ -1358,12 +1491,68 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
     );
   }
 
+  async function toggleFeatured(trip: Trip) {
+    await runAction(
+      `trip-feature-${trip.id}`,
+      () => getSupabase().rpc("admin_set_package_featured", { p_package_id: trip.id, p_value: !trip.is_featured }),
+      trip.is_featured
+        ? (locale === "ku" ? `${trip.title} لە تایبەتکراوەکان لابرا.` : locale === "ar" ? `تمت إزالة ${trip.title} من الرحلات المميزة.` : `${trip.title} is no longer featured.`)
+        : (locale === "ku" ? `${trip.title} تایبەتکرا لە بازاڕدا.` : locale === "ar" ? `أصبحت ${trip.title} رحلة مميزة في السوق.` : `${trip.title} is now featured in the marketplace.`),
+    );
+  }
+
+  async function takeDownTrip(trip: Trip) {
+    const reason = await askReason(locale === "ku" ? "بۆچی ئەم گەشتە لە بازاڕ لادەبرێت؟" : locale === "ar" ? "لماذا يتم إنزال هذه الرحلة من السوق؟" : "Why is this trip being taken down from the marketplace?");
+    if (!reason) return;
+    await runAction(
+      `trip-takedown-${trip.id}`,
+      () => getSupabase().rpc("admin_force_unpublish_offer", { p_offer_id: trip.id, p_reason: reason }),
+      locale === "ku" ? `${trip.title} لە بازاڕ لابرا و کۆمپانیاکە ئاگادار کرایەوە.` : locale === "ar" ? `تم إنزال ${trip.title} من السوق وتم إبلاغ الشركة.` : `${trip.title} was taken down and the company was notified.`,
+    );
+  }
+
   async function agencyTripAction(trip: Trip) {
     if (["draft", "needs_changes"].includes(trip.lifecycle_status)) {
       await runAction(`trip-${trip.id}`, () => getSupabase().rpc("submit_package", { p_package_id: trip.id }), locale === "ku" ? `${trip.title} نێردرا بۆ پێداچوونەوە.` : locale === "ar" ? `تم إرسال ${trip.title} للمراجعة.` : `${trip.title} was submitted for review.`);
     } else if (trip.lifecycle_status === "published") {
       await runAction(`trip-${trip.id}`, () => getSupabase().rpc("pause_package", { p_package_id: trip.id, p_reason: "Paused from company web portal" }), locale === "ku" ? `${trip.title} ڕاگیرا.` : locale === "ar" ? `تم إيقاف ${trip.title} مؤقتاً.` : `${trip.title} is paused.`);
     }
+  }
+
+  // Approving an edit re-publishes the trip when it was published before, which runs
+  // assert_offer_complete() in Supabase. Mirror the checks that can only fail on the
+  // admin side so the reviewer sees the reason instead of a raw Postgres error.
+  function approvalBlocker(request: TripChangeRequest, trip?: Trip): string | null {
+    if (request.request_type !== "edit") return null;
+    const beforeFields = request.before_snapshot?.fields ?? {};
+    const proposedFields = request.proposed_snapshot?.fields ?? {};
+    const previousStatus = beforeFields.lifecycle_status ?? trip?.lifecycle_status;
+    if (previousStatus !== "published") return null;
+    const departure = proposedFields.departure_date ?? trip?.departure_date ?? null;
+    const returnDate = proposedFields.return_date ?? trip?.return_date ?? null;
+    const today = new Date().toISOString().slice(0, 10);
+    if (!departure || !returnDate) {
+      return locale === "ku"
+        ? "ناتوانرێت پەسەند بکرێت: بەرواری ڕۆیشتن و گەڕانەوە دیارینەکراون. داوا لە کۆمپانیاکە بکە بەروارەکان زیاد بکات."
+        : locale === "ar"
+          ? "لا يمكن الموافقة: تاريخا المغادرة والعودة غير محددين. اطلب من الشركة إضافتهما."
+          : "Cannot approve: departure and return dates are missing. Ask the company to add them.";
+    }
+    if (departure < today) {
+      return locale === "ku"
+        ? `ناتوانرێت پەسەند بکرێت: بەرواری ڕۆیشتن (${departure}) تێپەڕیوە. داوا لە کۆمپانیاکە بکە بەروارێکی داهاتوو دابنێت و دووبارە بینێرێت.`
+        : locale === "ar"
+          ? `لا يمكن الموافقة: تاريخ المغادرة (${departure}) قد مضى. اطلب من الشركة تحديده بتاريخ مستقبلي وإعادة الإرسال.`
+          : `Cannot approve: the departure date (${departure}) has already passed. Ask the company to set a future date and resubmit.`;
+    }
+    if (returnDate < departure) {
+      return locale === "ku"
+        ? "ناتوانرێت پەسەند بکرێت: بەرواری گەڕانەوە پێش بەرواری ڕۆیشتنە."
+        : locale === "ar"
+          ? "لا يمكن الموافقة: تاريخ العودة يسبق تاريخ المغادرة."
+          : "Cannot approve: the return date is before the departure date.";
+    }
+    return null;
   }
 
   async function reviewTripChange(request: TripChangeRequest, decision: "approved" | "rejected") {
@@ -1392,6 +1581,14 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
         description={role === "admin" ? (locale === "ku" ? "پێداچوونەوە بە هەر پاکێجێکی عومرە بکە پێش ئەوەی بگاتە دەستی زیارەتکاران." : locale === "ar" ? "راجع كل باقة عمرة قبل أن تصل إلى المعتمرين." : "Review every Umrah package before it reaches pilgrims.") : (locale === "ku" ? "گەشتی نوێ دروست بکە، پێشکەشی بکە و کاروباری گەشتەکەت بەڕێوەبەرە." : locale === "ar" ? "أنشئ وأرسل وأدر رحلات عمرة شركتك." : "Create, submit and operate your company’s Umrah departures.")}
         action={role === "agency" ? <button className="portal-primary-button" type="button" onClick={onCreateTrip}><Plus size={16} /> {t.createTrip}</button> : undefined}
       />
+      {role === "admin" && (
+        <section className="portal-mini-metrics">
+          <div><span className="warning"><ClipboardCheck size={17} /></span><p><b>{countByStatus("pending_review") + pendingChanges.length}</b><small>{locale === "ku" ? "چاوەڕێی پێداچوونەوە" : locale === "ar" ? "بانتظار المراجعة" : "Awaiting review"}</small></p></div>
+          <div><span className="positive"><Plane size={17} /></span><p><b>{countByStatus("published")}</b><small>{locale === "ku" ? "بڵاوکراوە لە بازاڕدا" : locale === "ar" ? "منشورة في السوق" : "Live in marketplace"}</small></p></div>
+          <div><span className="neutral"><Clock3 size={17} /></span><p><b>{countByStatus("paused") + countByStatus("draft")}</b><small>{locale === "ku" ? "ڕاگیراو یان ڕەشنووس" : locale === "ar" ? "موقوفة أو مسودة" : "Paused or draft"}</small></p></div>
+          <div><span className="gold"><Star size={17} /></span><p><b>{data.trips.filter((item) => item.is_featured && item.lifecycle_status === "published").length}</b><small>{locale === "ku" ? "گەشتی تایبەتکراو" : locale === "ar" ? "رحلات مميزة" : "Featured trips"}</small></p></div>
+        </section>
+      )}
       {role === "admin" && pendingChanges.length > 0 && (
         <section className="trip-change-review-queue">
           <header>
@@ -1403,6 +1600,7 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
               const trip = data.trips.find((item) => item.id === request.package_id);
               const beforeFields = request.before_snapshot?.fields ?? {};
               const proposedFields = request.proposed_snapshot?.fields ?? {};
+              const blocker = approvalBlocker(request, trip);
               return (
                 <article className="trip-change-review-card" key={request.id}>
                   <header>
@@ -1429,9 +1627,10 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                       );
                     })}
                   </div>
+                  {blocker && <p className="trip-change-blocked"><AlertTriangle size={13} /> {blocker}</p>}
                   <footer>
                     <button type="button" className="danger" onClick={() => reviewTripChange(request, "rejected")} disabled={busy === `trip-change-${request.id}`}><X size={14} /> Reject</button>
-                    <button type="button" className="approve" onClick={() => reviewTripChange(request, "approved")} disabled={busy === `trip-change-${request.id}`}>{busy === `trip-change-${request.id}` ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />} Approve & apply</button>
+                    <button type="button" className="approve" onClick={() => reviewTripChange(request, "approved")} disabled={busy === `trip-change-${request.id}` || Boolean(blocker)} title={blocker ?? undefined}>{busy === `trip-change-${request.id}` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} Approve & apply</button>
                   </footer>
                 </article>
               );
@@ -1439,14 +1638,20 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
           </div>
         </section>
       )}
-      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ گەشت یان کۆمپانیا..." : locale === "ar" ? "البحث عن رحلة أو شركة..." : "Search trip or company…"} filters={[["all", t.allAll || "All"], ["draft", locale === "ku" ? "ڕەشنووس" : locale === "ar" ? "مسودة" : "Draft"], ["pending_review", locale === "ku" ? "پێداچوونەوە" : locale === "ar" ? "قيد المراجعة" : "Pending review"], ["published", locale === "ku" ? "چالاک" : locale === "ar" ? "نشط" : "Published"], ["paused", locale === "ku" ? "ڕاگیراو" : locale === "ar" ? "موقوف" : "Paused"]]} activeFilter={filter} setFilter={setFilter} />
+      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ گەشت یان کۆمپانیا..." : locale === "ar" ? "البحث عن رحلة أو شركة..." : "Search trip or company…"} filters={[["all", t.allAll || "All"], ["draft", locale === "ku" ? "ڕەشنووس" : locale === "ar" ? "مسودة" : "Draft"], ["pending_review", locale === "ku" ? "پێداچوونەوە" : locale === "ar" ? "قيد المراجعة" : "Pending review"], ["published", locale === "ku" ? "چالاک" : locale === "ar" ? "نشط" : "Published"], ["paused", locale === "ku" ? "ڕاگیراو" : locale === "ar" ? "موقوف" : "Paused"], ["rejected", locale === "ku" ? "ڕەتکراوە" : locale === "ar" ? "مرفوض" : "Rejected"]]} activeFilter={filter} setFilter={setFilter} />
       <section className="portal-trip-grid">
         {trips.map((trip) => {
           const fill = Math.min(100, ((trip.seats_reserved ?? 0) / Math.max(1, trip.capacity ?? 1)) * 100);
+          // A trip whose departure has passed can no longer be published or re-approved
+          // (assert_offer_complete rejects past dates), so surface it before someone tries.
+          const departed = Boolean(trip.departure_date) && trip.departure_date! < new Date().toISOString().slice(0, 10)
+            && !["removed", "rejected"].includes(trip.lifecycle_status);
           return (
             <article className="portal-trip-card" key={trip.id}>
-              <div className="portal-trip-visual">
-                <span><Plane size={22} /></span>
+              <div className={`portal-trip-visual${trip.image_url ? " has-image" : ""}`}>
+                {/* Placeholder always renders underneath, so a broken storage URL degrades cleanly. */}
+                <span className="portal-trip-placeholder"><Plane size={22} /></span>
+                {trip.image_url && <img src={trip.image_url} alt="" loading="lazy" onError={(event) => { event.currentTarget.closest(".portal-trip-visual")?.classList.remove("has-image"); }} />}
                 <StatusPill status={trip.lifecycle_status} />
                 {trip.is_featured && <i><Star size={12} fill="currentColor" /> {locale === "ku" ? "تایبەت" : locale === "ar" ? "مميز" : "Featured"}</i>}
               </div>
@@ -1459,7 +1664,7 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                   <span><Plane size={14} /> {locale === "ku" ? (trip.transport === "plane" ? "فڕۆکە" : "پاس") : locale === "ar" ? (trip.transport === "plane" ? "طائرة" : "حافلة") : titleCase(trip.transport)}</span>
                 </div>
                 <div className="portal-trip-dates">
-                  <div><small>{t.departure}</small><b>{formatDate(trip.departure_date, true)}</b></div>
+                  <div><small>{t.departure}</small><b className={departed ? "is-past" : undefined}>{formatDate(trip.departure_date, true)}</b></div>
                   <div><small>{locale === "ku" ? "نرخ / بۆ هەر کەسێک" : locale === "ar" ? "السعر / للمعتمر" : "Price / pilgrim"}</small><b>{formatIqd(trip.price_iqd)}</b></div>
                 </div>
                 <div className="portal-capacity">
@@ -1467,6 +1672,7 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                   <small>{Math.round(fill)}% {locale === "ku" ? "پڕبووەتەوە" : locale === "ar" ? "ممتلئ" : "filled"}</small>
                   <i><b style={{ width: `${fill}%` }} /></i>
                 </div>
+                {departed && <p className="portal-departed-note"><AlertTriangle size={12} /> {locale === "ku" ? "بەرواری ڕۆیشتن تێپەڕیوە — پێویستە نوێ بکرێتەوە پێش بڵاوکردنەوە." : locale === "ar" ? "تاريخ المغادرة قد مضى — يجب تحديثه قبل النشر." : "Departure date has passed — it must be updated before this trip can be published again."}</p>}
                 {trip.review_reason && <p className="portal-review-note">{trip.review_reason}</p>}
                 <div className="portal-card-actions">
                   {role === "admin" && trip.lifecycle_status === "pending_review" ? (
@@ -1474,9 +1680,14 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                       <button type="button" className="approve" onClick={() => reviewTrip(trip, "published")} disabled={busy === `trip-review-${trip.id}`}><Check size={14} /> {t.accept}</button>
                       <button type="button" className="danger" onClick={() => reviewTrip(trip, "rejected")} disabled={busy === `trip-review-${trip.id}`}><X size={14} /> {t.reject}</button>
                     </>
+                  ) : role === "admin" && trip.lifecycle_status === "published" ? (
+                    <>
+                      <button type="button" onClick={() => toggleFeatured(trip)} disabled={busy === `trip-feature-${trip.id}`}>{busy === `trip-feature-${trip.id}` ? <TawafLoadingSpinner size={14} /> : <Star size={14} />} {trip.is_featured ? (locale === "ku" ? "لابردنی تایبەتکردن" : locale === "ar" ? "إزالة التمييز" : "Unfeature") : (locale === "ku" ? "تایبەتکردن" : locale === "ar" ? "تمييز الرحلة" : "Feature")}</button>
+                      <button type="button" className="danger" onClick={() => takeDownTrip(trip)} disabled={busy === `trip-takedown-${trip.id}`}>{busy === `trip-takedown-${trip.id}` ? <TawafLoadingSpinner size={14} /> : <X size={14} />} {locale === "ku" ? "لابردن لە بازاڕ" : locale === "ar" ? "إنزال من السوق" : "Take down"}</button>
+                    </>
                   ) : role === "agency" && ["draft", "needs_changes", "published"].includes(trip.lifecycle_status) ? (
                     <button type="button" className={trip.lifecycle_status === "published" ? "danger" : "approve"} onClick={() => agencyTripAction(trip)} disabled={busy === `trip-${trip.id}`}>
-                      {busy === `trip-${trip.id}` ? <LoaderCircle className="spin" size={14} /> : trip.lifecycle_status === "published" ? <X size={14} /> : <ArrowUpRight size={14} />}
+                      {busy === `trip-${trip.id}` ? <TawafLoadingSpinner size={14} /> : trip.lifecycle_status === "published" ? <X size={14} /> : <ArrowUpRight size={14} />}
                       {trip.lifecycle_status === "published" ? (locale === "ku" ? "ڕاگرتنی گەشت" : locale === "ar" ? "إيقاف مؤقت" : "Pause trip") : (locale === "ku" ? "ناردن بۆ پێداچوونەوە" : locale === "ar" ? "إرسال للمراجعة" : "Submit for review")}
                     </button>
                   ) : <span className="portal-card-note">{locale === "ku" ? "هیچ کردارێک پێویست نییە" : locale === "ar" ? "لا إجراء مطلوب" : "No action required"}</span>}
@@ -1515,16 +1726,41 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
     );
   }
 
+  function exportCsv() {
+    const header = ["Booking", "Trip", "Company", "Travellers", "Total IQD", "Paid IQD", "Stage", "Pay method", "Phone", "Departure", "Created"];
+    const rows = bookings.map((booking) => [
+      booking.id.slice(0, 8).toUpperCase(),
+      tripMap.get(booking.package_id) ?? "Umrah trip",
+      companyMap.get(booking.company_id) ?? "Company",
+      booking.travellers,
+      booking.total_iqd,
+      booking.amount_paid_iqd,
+      booking.operational_stage,
+      booking.pay_method,
+      booking.contact_phone ?? "",
+      booking.departure_date ?? "",
+      booking.created_at,
+    ]);
+    const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
+    link.download = `tawaf-bookings-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  const activeValue = data.bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
+
   return (
     <>
-      <PageHeading eyebrow={locale === "ku" ? "ئۆپەراسیۆنی گەشتیاران" : locale === "ar" ? "عمليات المسافرين" : "Traveller operations"} title={locale === "ku" ? "حیجزەکان" : locale === "ar" ? "الحجوزات" : "Bookings"} description={role === "admin" ? (locale === "ku" ? "چاودێری چالاکییەکانی حیجزکردن بکە لە سەرانسەری بازاڕی تەوافدا." : locale === "ar" ? "راقب نشاط الحجز عبر سوق طواف بالكامل." : "Monitor booking activity across the entire Tawaf marketplace.") : (locale === "ku" ? "داواکارییەکان بپشکنە، پارەدانەکان پشتڕاست بکەرەوە، و گەشتیاران ڕێکبخە لە هەر قۆناغێکی گەشتەکەدا." : locale === "ar" ? "راجع الطلبات، وأكد المدفوعات، وتابع المسافرين خلال كل مرحلة من الرحلة." : "Review requests, confirm payments and move travellers through every trip stage.")} />
+      <PageHeading eyebrow={locale === "ku" ? "ئۆپەراسیۆنی گەشتیاران" : locale === "ar" ? "عمليات المسافرين" : "Traveller operations"} title={locale === "ku" ? "حیجزەکان" : locale === "ar" ? "الحجوزات" : "Bookings"} description={role === "admin" ? (locale === "ku" ? "چاودێری چالاکییەکانی حیجزکردن بکە لە سەرانسەری بازاڕی تەوافدا." : locale === "ar" ? "راقب نشاط الحجز عبر سوق طواف بالكامل." : "Monitor booking activity across the entire Tawaf marketplace.") : (locale === "ku" ? "داواکارییەکان بپشکنە، پارەدانەکان پشتڕاست بکەرەوە، و گەشتیاران ڕێکبخە لە هەر قۆناغێکی گەشتەکەدا." : locale === "ar" ? "راجع الطلبات، وأكد المدفوعات، وتابع المسافرين خلال كل مرحلة من الرحلة." : "Review requests, confirm payments and move travellers through every trip stage.")} action={<button className="portal-secondary-button" type="button" onClick={exportCsv} disabled={!bookings.length}><FileText size={15} /> {locale === "ku" ? "هەناردەکردنی CSV" : locale === "ar" ? "تصدير CSV" : "Export CSV"}</button>} />
       <section className="portal-mini-metrics">
         <div><span className="warning"><Clock3 size={17} /></span><p><b>{data.bookings.filter((item) => item.operational_stage === "requested").length}</b><small>{t.newRequests}</small></p></div>
         <div><span className="positive"><BadgeCheck size={17} /></span><p><b>{data.bookings.filter((item) => ["confirmed", "ready"].includes(item.operational_stage)).length}</b><small>{locale === "ku" ? "پشتڕاستکراوە" : locale === "ar" ? "مؤكد" : "Confirmed"}</small></p></div>
         <div><span className="neutral"><Activity size={17} /></span><p><b>{data.bookings.filter((item) => item.operational_stage === "in_progress").length}</b><small>{locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"}</small></p></div>
-        <div><span className="gold"><CircleDollarSign size={17} /></span><p><b>{formatIqd(data.bookings.reduce((sum, item) => sum + Number(item.total_iqd), 0), true)}</b><small>{locale === "ku" ? "کۆی گشتی" : locale === "ar" ? "القيمة الإجمالية" : "Total value"}</small></p></div>
+        <div><span className="gold"><CircleDollarSign size={17} /></span><p><b>{formatIqd(activeValue, true)}</b><small>{locale === "ku" ? "بەهای حیجزە چالاکەکان" : locale === "ar" ? "قيمة الحجوزات النشطة" : "Active booking value"}</small></p></div>
       </section>
-      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ حیجز، گەشت یان ژمارە..." : locale === "ar" ? "البحث عن حجز أو رحلة أو هاتف..." : "Search booking, trip or phone…"} filters={[["all", t.allAll || "All"], ["requested", locale === "ku" ? "داواکراو" : locale === "ar" ? "مطلوب" : "Requested"], ["awaiting_payment", locale === "ku" ? "چاوەڕێی پارە" : locale === "ar" ? "في انتظار الدفع" : "Awaiting payment"], ["confirmed", locale === "ku" ? "پشتڕاستکراو" : locale === "ar" ? "مؤكد" : "Confirmed"], ["ready", locale === "ku" ? "ئامادە" : locale === "ar" ? "جاهز" : "Ready"], ["in_progress", locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"], ["completed", locale === "ku" ? "تەواوبوو" : locale === "ar" ? "مكتمل" : "Completed"]]} activeFilter={filter} setFilter={setFilter} />
+      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ حیجز، گەشت یان ژمارە..." : locale === "ar" ? "البحث عن حجز أو رحلة أو هاتف..." : "Search booking, trip or phone…"} filters={[["all", t.allAll || "All"], ["requested", locale === "ku" ? "داواکراو" : locale === "ar" ? "مطلوب" : "Requested"], ["awaiting_payment", locale === "ku" ? "چاوەڕێی پارە" : locale === "ar" ? "في انتظار الدفع" : "Awaiting payment"], ["confirmed", locale === "ku" ? "پشتڕاستکراو" : locale === "ar" ? "مؤكد" : "Confirmed"], ["ready", locale === "ku" ? "ئامادە" : locale === "ar" ? "جاهز" : "Ready"], ["in_progress", locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"], ["completed", locale === "ku" ? "تەواوبوو" : locale === "ar" ? "مكتمل" : "Completed"], ["cancelled", locale === "ku" ? "هەڵوەشاوە" : locale === "ar" ? "ملغي" : "Cancelled"]]} activeFilter={filter} setFilter={setFilter} />
       <section className="portal-panel portal-table-panel">
         <PanelHeader title={`${bookings.length} ${locale === "ku" ? "حیجز" : locale === "ar" ? "حجوزات" : "bookings"}`} subtitle={locale === "ku" ? "زانیارییە پارێزراوەکانی حیجز لە تەواف" : locale === "ar" ? "بيانات الحجز المؤمنة من طواف" : "Role-secured booking data from Tawaf"} />
         {bookings.length ? (
@@ -1539,8 +1775,8 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
                       <td><b>#{booking.id.slice(0, 8).toUpperCase()}</b><small className="portal-cell-sub">{relativeTime(booking.created_at)}</small></td>
                       <td>{tripMap.get(booking.package_id) ?? "Umrah trip"}<small className="portal-cell-sub">{formatDate(booking.departure_date, true)}</small></td>
                       {role === "admin" && <td>{companyMap.get(booking.company_id) ?? "Company"}</td>}
-                      <td>{booking.travellers}</td>
-                      <td><b>{formatIqd(booking.total_iqd)}</b><small className="portal-cell-sub">{remaining ? (locale === "ku" ? `${formatIqd(remaining)} ماوە` : locale === "ar" ? `متبقي ${formatIqd(remaining)}` : `${formatIqd(remaining)} due`) : (locale === "ku" ? "دراوە" : locale === "ar" ? "مدفوع" : "Paid")}</small></td>
+                      <td>{booking.travellers}{booking.contact_phone && <small className="portal-cell-sub" dir="ltr">{booking.contact_phone}</small>}</td>
+                      <td><b>{formatIqd(booking.total_iqd)}</b><small className="portal-cell-sub">{titleCase(booking.pay_method)} · {remaining ? (locale === "ku" ? `${formatIqd(remaining)} ماوە` : locale === "ar" ? `متبقي ${formatIqd(remaining)}` : `${formatIqd(remaining)} due`) : (locale === "ku" ? "دراوە" : locale === "ar" ? "مدفوع" : "Paid")}</small></td>
                       <td><StatusPill status={booking.operational_stage} /></td>
                       <td className="right">
                         <BookingActions booking={booking} busy={busy === `booking-${booking.id}`} transition={(action) => transition(booking, action)} role={role} runAction={runAction} locale={locale} />
@@ -1559,7 +1795,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
 
 function BookingActions({ booking, busy, transition, role, runAction, locale }: { booking: Booking; busy: boolean; transition: (action: string) => void; role: Role; runAction: RunAction; locale: "ku" | "ar" | "en" }) {
   const t = dashboardTranslations[locale];
-  if (busy) return <LoaderCircle className="spin" size={16} />;
+  if (busy) return <TawafLoadingSpinner size={16} />;
   if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage)) {
     return (
       <div className="portal-row-actions">
@@ -1571,8 +1807,22 @@ function BookingActions({ booking, busy, transition, role, runAction, locale }: 
       </div>
     );
   }
-  if (booking.operational_stage === "confirmed") return <button type="button" className="portal-action-button" onClick={() => transition("ready")}><ClipboardCheck size={14} /> {t.markReady}</button>;
-  if (booking.operational_stage === "ready") return <button type="button" className="portal-action-button" onClick={() => transition("start")}><Plane size={14} /> {t.startTrip}</button>;
+  if (booking.operational_stage === "confirmed") {
+    return (
+      <div className="portal-row-actions">
+        <button type="button" className="approve" onClick={() => transition("ready")}><ClipboardCheck size={14} /> {t.markReady}</button>
+        <button type="button" className="danger" onClick={() => transition("cancel")}>{locale === "ku" ? "هەڵوەشاندنەوە" : locale === "ar" ? "إلغاء" : "Cancel"}</button>
+      </div>
+    );
+  }
+  if (booking.operational_stage === "ready") {
+    return (
+      <div className="portal-row-actions">
+        <button type="button" className="approve" onClick={() => transition("start")}><Plane size={14} /> {t.startTrip}</button>
+        <button type="button" className="danger" onClick={() => transition("cancel")}>{locale === "ku" ? "هەڵوەشاندنەوە" : locale === "ar" ? "إلغاء" : "Cancel"}</button>
+      </div>
+    );
+  }
   if (booking.operational_stage === "in_progress") return <button type="button" className="portal-action-button" onClick={() => transition("complete")}><Check size={14} /> {t.complete}</button>;
   return null;
 }
@@ -1605,7 +1855,7 @@ function FinancePage({ role, data, busy, runAction, locale }: { role: Role; data
                   <div><b>{role === "admin" ? companyMap.get(item.company_id) ?? "Company" : (locale === "ku" ? `حیجزی #${item.booking_id.slice(0, 8).toUpperCase()}` : locale === "ar" ? `حجز #${item.booking_id.slice(0, 8).toUpperCase()}` : `Booking #${item.booking_id.slice(0, 8).toUpperCase()}`)}</b><small>{formatDate(item.created_at, true)}</small></div>
                   <strong>{formatIqd(item.amount_iqd)}</strong>
                   <StatusPill status={item.status} />
-                  {role === "admin" && item.status === "owed" && <button type="button" onClick={() => runAction(`commission-${item.id}`, () => getSupabase().from("commissions").update({ status: "collected", collected_at: new Date().toISOString() }).eq("id", item.id), locale === "ku" ? "کۆمسیۆن وەک کۆکراوە نیشان کرا." : locale === "ar" ? "تم تحديد العمولة كمحصلة." : "Commission marked as collected.")} disabled={busy === `commission-${item.id}`}>{busy === `commission-${item.id}` ? <LoaderCircle className="spin" size={14} /> : (locale === "ku" ? "نیشانکردنی کۆکراوە" : locale === "ar" ? "تحديد كمحصل" : "Mark collected")}</button>}
+                  {role === "admin" && item.status === "owed" && <button type="button" onClick={() => runAction(`commission-${item.id}`, () => getSupabase().from("commissions").update({ status: "collected", collected_at: new Date().toISOString() }).eq("id", item.id), locale === "ku" ? "کۆمسیۆن وەک کۆکراوە نیشان کرا." : locale === "ar" ? "تم تحديد العمولة كمحصلة." : "Commission marked as collected.")} disabled={busy === `commission-${item.id}`}>{busy === `commission-${item.id}` ? <TawafLoadingSpinner size={14} /> : (locale === "ku" ? "نیشانکردنی کۆکراوە" : locale === "ar" ? "تحديد كمحصل" : "Mark collected")}</button>}
                 </div>
               ))}
             </div>
@@ -1683,39 +1933,11 @@ function MessagesPage({ data, profile, busy, runAction, locale }: { data: Portal
               </div>
               <form className="portal-message-compose" onSubmit={sendReply}>
                 <input value={reply} onChange={(event) => setReply(event.target.value)} placeholder={locale === "ku" ? "وەڵامێکی ڕوون بنووسە..." : locale === "ar" ? "اكتب رداً واضحاً..." : "Write a clear reply…"} />
-                <button type="submit" disabled={!reply.trim() || busy === `reply-${selected.id}`}>{busy === `reply-${selected.id}` ? <LoaderCircle className="spin" size={16} /> : <ArrowUpRight size={16} />}</button>
+                <button type="submit" disabled={!reply.trim() || busy === `reply-${selected.id}`}>{busy === `reply-${selected.id}` ? <TawafLoadingSpinner size={16} /> : <ArrowUpRight size={16} />}</button>
               </form>
             </>
           ) : <EmptyState icon={MessageSquareText} title={locale === "ku" ? "هیچ گفتوگۆیەک هەڵنەبژێردراوە" : locale === "ar" ? "لم يتم تحديد محادثة" : "No conversation selected"} text={locale === "ku" ? "گفتوگۆ نوێیەکانی زیارەتکاران لەم شوێنی کارەدا دەردەکەون." : locale === "ar" ? "ستظهر استفسارات المعتمرين الجديدة في مساحة العمل هذه." : "New pilgrim inquiries will appear in this workspace."} />}
         </article>
-      </section>
-    </>
-  );
-}
-
-function TeamPage({ data, company, locale }: { data: PortalData; company: Company; locale: "ku" | "ar" | "en" }) {
-  const t = dashboardTranslations[locale];
-  return (
-    <>
-      <PageHeading eyebrow={locale === "ku" ? "دەستگەیشتنی کۆمپانیا" : locale === "ar" ? "وصول الشركة" : "Company access"} title={locale === "ku" ? "کارمەندان" : locale === "ar" ? "فريق العمل" : "Team"} description={locale === "ku" ? `بەڕێوەبەرایەتی بکە کێ دەتوانێت لە ناو شوێنی کاری تەوافی ${company.name} کار بکات.` : locale === "ar" ? `أدر من يمكنه العمل داخل مساحة عمل طواف لشركة ${company.name}.` : `Manage who can work inside the ${company.name} Tawaf workspace.`} action={<a className="portal-primary-button" href="mailto:hello@tawaf.app?subject=Tawaf%20company%20staff%20access"><Plus size={16} /> {locale === "ku" ? "بانگهێشتکردنی کارمەند" : locale === "ar" ? "دعوة موظف" : "Invite staff"}</a>} />
-      <section className="portal-team-grid">
-        <article className="portal-team-owner">
-          <span><ShieldCheck size={23} /></span><div><small>{locale === "ku" ? "خاوەنی شوێنی کار" : locale === "ar" ? "مالك مساحة العمل" : "Workspace owner"}</small><h3>{company.name}</h3><p>{locale === "ku" ? "دەستگەیشتنی تەواو بۆ گەشتەکان، حیجزەکان، پارە، بەڵگەنامەکان، کارمەندان و ڕێکخستنەکانی کۆمپانیا." : locale === "ar" ? "وصول كامل للرحلات والحجوزات والأموال والمستندات والموظفين وإعدادات الشركة." : "Full access to trips, bookings, money, documents, staff and company settings."}</p></div><StatusPill status="active" />
-        </article>
-        {data.staff.map((member) => (
-          <article className="portal-team-card" key={member.id}>
-            <div className="portal-team-avatar">{(member.profiles?.full_name || member.role).slice(0, 2).toUpperCase()}</div>
-            <h3>{member.profiles?.full_name || titleCase(member.role)}</h3>
-            <p>{titleCase(member.role)} · {member.profiles?.phone || (locale === "ku" ? "هیچ ژمارەیەک زیاد نەکراوە" : locale === "ar" ? "لم يتم إضافة هاتف" : "No phone added")}</p>
-            <StatusPill status={member.status} />
-            <div>{(member.permissions ?? []).slice(0, 4).map((permission) => <span key={permission}>{titleCase(permission)}</span>)}</div>
-          </article>
-        ))}
-        {!data.staff.length && <EmptyState icon={Users} title={t.noMembers} text={locale === "ku" ? "کارمەندانی حیجز، ڤیزە، دارایی، یان پشتیوانی بانگهێشت بکە کاتێک تیمەکەت ئامادەیە." : locale === "ar" ? "ادعُ موظفي الحجز أو التأشيرات أو المالية أو الدعم عندما يكون فريقك جاهزاً." : "Invite booking, visa, finance, guide or support staff when your team is ready."} />}
-      </section>
-      <section className="portal-panel portal-permissions">
-        <PanelHeader title={locale === "ku" ? "ڕۆڵەکانی دەسەڵات" : locale === "ar" ? "أدوار الصلاحيات" : "Permission roles"} subtitle={locale === "ku" ? "تەواف زانیارییە هەستیارەکان سنووردار دەکات تەنها بۆ ئەو کەسانەی پێویستیان پێیەتی" : locale === "ar" ? "يطبق طواف حدوداً على البيانات الحساسة للأشخاص الذين يحتاجونها فقط" : "Tawaf limits sensitive data to the people who need it"} />
-        <div><PermissionItem icon={BookOpenCheck} title={locale === "ku" ? "بەڕێوەبەری حیجزەکان" : locale === "ar" ? "مدير الحجوزات" : "Booking manager"} text={locale === "ku" ? "حیجزەکان، گەشتیاران و ئۆپەراسیۆنەکانی گەشت" : locale === "ar" ? "الحجوزات والمسافرين وعمليات الرحلات" : "Bookings, travellers and trip operations"} /><PermissionItem icon={FileCheck2} title={locale === "ku" ? "بەرپرسی ڤیزە" : locale === "ar" ? "مسؤول التأشيرات" : "Visa officer"} text={locale === "ku" ? "بەڵگەنامەکان، پێداچوونەوەی پاسپۆرت و قۆناغەکانی ڤیزە" : locale === "ar" ? "المستندات، مراجعة الجوازات ومراحل التأشيرة" : "Documents, passport review and visa stages"} /><PermissionItem icon={Banknote} title={locale === "ku" ? "ژمێریار" : locale === "ar" ? "محاسب" : "Accountant"} text={locale === "ku" ? "پارەدانەکان، دەفتەری حیسابات و دارایی کۆمپانیا" : locale === "ar" ? "المدفوعات، دفتر الحسابات ومالية الشركة" : "Payments, ledger and company finance"} /><PermissionItem icon={Headphones} title={locale === "ku" ? "پشتیوانی" : locale === "ar" ? "الدعم" : "Support"} text={locale === "ku" ? "پرسیارەکانی زیارەتکاران و ئاگادارکردنەوەکان" : locale === "ar" ? "استفسارات المعتمرين والإعلانات" : "Pilgrim inquiries and announcements"} /></div>
       </section>
     </>
   );
@@ -1892,7 +2114,7 @@ function CompanyProfile({
             <div className="portal-profile-banner" style={company.banner_url ? { backgroundImage: `linear-gradient(rgba(5,45,36,.15), rgba(5,45,36,.3)), url("${company.banner_url}")` } : undefined}>
               <div><Upload size={18} /><b>{locale === "ku" ? "غلافی کۆمپانیا" : locale === "ar" ? "غلاف الشركة" : "Company cover"}</b><small>{locale === "ku" ? "پێشنیارکراو ١٦٠٠ × ٦٠٠ · JPG, PNG یان WebP" : locale === "ar" ? "الموصى به ١٦٠٠ × ٦٠٠ · JPG أو PNG أو WebP" : "Recommended 1600 × 600 · JPG, PNG or WebP"}</small></div>
               <label className={!canEdit ? "disabled" : ""}>
-                {busy === "company-banner" ? <LoaderCircle className="spin" size={15} /> : <Camera size={15} />}
+                {busy === "company-banner" ? <TawafLoadingSpinner size={15} /> : <Camera size={15} />}
                 {company.banner_url ? (locale === "ku" ? "گۆڕینی غلاف" : locale === "ar" ? "تغيير الغلاف" : "Replace cover") : (locale === "ku" ? "بارکردنی غلاف" : locale === "ar" ? "رفع الغلاف" : "Upload cover")}
                 <input type="file" accept="image/jpeg,image/png,image/webp" disabled={!canEdit || busy === "company-banner"} onChange={(event) => uploadCompanyImage("banner", event.target.files?.[0])} />
               </label>
@@ -1905,7 +2127,7 @@ function CompanyProfile({
               </div>
               <div><b>{locale === "ku" ? "وێنەی پڕۆفایل" : locale === "ar" ? "الصورة الشخصية" : "Profile picture"}</b><small>{locale === "ku" ? "وێنەی چوارگۆشە · زۆرترین ٥ مێگابایت" : locale === "ar" ? "صورة مربعة · الحد الأقصى ٥ ميجابايت" : "Square image · Maximum 5 MB"}</small></div>
               <label className={!canEdit ? "disabled" : ""}>
-                {busy === "company-logo" ? <LoaderCircle className="spin" size={15} /> : <Camera size={15} />}
+                {busy === "company-logo" ? <TawafLoadingSpinner size={15} /> : <Camera size={15} />}
                 {locale === "ku" ? "گۆڕینی وێنە" : locale === "ar" ? "تغيير الصورة" : "Change picture"}
                 <input type="file" accept="image/jpeg,image/png,image/webp" disabled={!canEdit || busy === "company-logo"} onChange={(event) => uploadCompanyImage("logo", event.target.files?.[0])} />
               </label>
@@ -1968,7 +2190,7 @@ function CompanyProfile({
 
           <div className="portal-form-actions portal-profile-save">
             <span><ShieldCheck size={15} /> {locale === "ku" ? "گۆڕانکارییەکان بە پارێزراوی پاشەکەوت دەبن بۆ پڕۆفایلی کۆمپانیاکەت." : locale === "ar" ? "يتم حفظ التغييرات بأمان في ملف شركتك على طواف." : "Changes are securely saved to your Tawaf company profile."}</span>
-            <button className="portal-primary-button" type="submit" disabled={!canEdit || busy === "company-profile"}>{busy === "company-profile" ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />} {locale === "ku" ? "پاشەکەوتکردنی پڕۆفایل بە تەواوی" : locale === "ar" ? "حفظ الملف الشخصي بالكامل" : "Save complete profile"}</button>
+            <button className="portal-primary-button" type="submit" disabled={!canEdit || busy === "company-profile"}>{busy === "company-profile" ? <TawafLoadingSpinner size={16} /> : <Check size={16} />} {locale === "ku" ? "پاشەکەوتکردنی پڕۆفایل بە تەواوی" : locale === "ar" ? "حفظ الملف الشخصي بالكامل" : "Save complete profile"}</button>
           </div>
         </form>
       </section>
@@ -1986,7 +2208,7 @@ function SupportPage({ data, busy, runAction, locale }: { data: PortalData; busy
           <article className="portal-support-card" key={message.id}>
             <header><span><Mail size={18} /></span><div><b>{message.email || "Tawaf user"}</b><small>{relativeTime(message.created_at)}</small></div><StatusPill status={message.status || "open"} /></header>
             <p>{message.message}</p>
-            <footer><a href={`mailto:${message.email ?? "hello@tawaf.app"}?subject=Your%20Tawaf%20support%20request`}>{locale === "ku" ? "وەڵامدانەوە بە ئیمەیڵ" : locale === "ar" ? "الرد عبر البريد الإلكتروني" : "Reply by email"} <ArrowUpRight size={14} /></a><button type="button" onClick={() => runAction(`support-${message.id}`, () => getSupabase().from("support_messages").delete().eq("id", message.id), locale === "ku" ? "کێشەی پشتیوانی چارەسەر کرا." : locale === "ar" ? "تم حل رسالة الدعم." : "Support message resolved.")} disabled={busy === `support-${message.id}`}>{busy === `support-${message.id}` ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />} {locale === "ku" ? "چارەسەرکردن" : locale === "ar" ? "حل" : "Resolve"}</button></footer>
+            <footer><a href={`mailto:${message.email ?? "hello@tawaf.app"}?subject=Your%20Tawaf%20support%20request`}>{locale === "ku" ? "وەڵامدانەوە بە ئیمەیڵ" : locale === "ar" ? "الرد عبر البريد الإلكتروني" : "Reply by email"} <ArrowUpRight size={14} /></a><button type="button" onClick={() => runAction(`support-${message.id}`, () => getSupabase().from("support_messages").delete().eq("id", message.id), locale === "ku" ? "کێشەی پشتیوانی چارەسەر کرا." : locale === "ar" ? "تم حل رسالة الدعم." : "Support message resolved.")} disabled={busy === `support-${message.id}`}>{busy === `support-${message.id}` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {locale === "ku" ? "چارەسەرکردن" : locale === "ar" ? "حل" : "Resolve"}</button></footer>
           </article>
         ))}
         {!data.support.length && <EmptyState icon={Headphones} title={locale === "ku" ? "سندوقی نامەکان پاکە" : locale === "ar" ? "صندوق الوارد فارغ" : "Inbox is clear"} text={locale === "ku" ? "هیچ نامەیەکی پشتیوانی چارەسەرنەکراو نییە." : locale === "ar" ? "لا توجد رسائل دعم غير محلولة." : "There are no unresolved support messages."} />}
@@ -2067,10 +2289,6 @@ function EmptyInline({ text }: { text: string }) {
 
 function EmptyState({ icon: Icon, title, text, compact = false }: { icon: LucideIcon; title: string; text: string; compact?: boolean }) {
   return <div className={`portal-empty ${compact ? "compact" : ""}`}><span><Icon size={23} /></span><h3>{title}</h3><p>{text}</p></div>;
-}
-
-function PermissionItem({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
-  return <article><span><Icon size={18} /></span><div><b>{title}</b><small>{text}</small></div></article>;
 }
 
 function SystemItem({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {

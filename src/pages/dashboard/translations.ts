@@ -66,7 +66,10 @@ export const dashboardTranslations = {
     latestRequests: "دوایین داواکارییەکان",
     recentBookingActivity: "چالاکییەکانی حیجزکردنی کۆتایی بۆ کۆمپانیاکەت",
     noDepartureScheduledText: "هیچ بەڕێ کەوتنێکی داهاتوو لە کاتێکی نزیکدا نییە.",
-    
+    openTripOperations: "بەڕێوەبردنی گەشتەکان",
+    allAll: "هەموو",
+    finance: "دارایی",
+
     // Trips workspace
     allTrips: "هەموو گەشتەکان",
     createTrip: "گەشت دروست بکە",
@@ -240,7 +243,10 @@ export const dashboardTranslations = {
     latestRequests: "أحدث الطلبات",
     recentBookingActivity: "نشاط الحجز الأخير لشركتك",
     noDepartureScheduledText: "لا توجد أي مغادرة مجدولة قريباً.",
-    
+    openTripOperations: "إدارة عمليات الرحلة",
+    allAll: "الكل",
+    finance: "المالية",
+
     // Trips workspace
     allTrips: "كل الرحلات",
     createTrip: "أنشئ رحلة",
@@ -414,7 +420,10 @@ export const dashboardTranslations = {
     latestRequests: "Latest requests",
     recentBookingActivity: "Recent booking activity for your company",
     noDepartureScheduledText: "No departure scheduled",
-    
+    openTripOperations: "Open trip operations",
+    allAll: "All",
+    finance: "Finance",
+
     // Trips workspace
     allTrips: "All trips",
     createTrip: "Create trip",

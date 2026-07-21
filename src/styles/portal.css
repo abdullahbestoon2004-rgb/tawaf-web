@@ -850,6 +850,7 @@
 .portal-attention-list button > span.gold { color: #9f7525; background: rgba(201,162,75,.13); }
 .portal-attention-list button > span.teal { color: #397c74; background: rgba(57,124,116,.1); }
 .portal-attention-list button > span.green { color: #0f5c4d; background: rgba(15,92,77,.09); }
+.portal-attention-list button > span.sand { color: #895f38; background: rgba(137,95,56,.1); }
 .portal-attention-list b,
 .portal-attention-list small { display: block; }
 .portal-attention-list b { font-size: 8.5px; }
@@ -1088,7 +1089,8 @@
     linear-gradient(145deg, #0b4b3e, #073229);
 }
 
-.portal-trip-visual > span {
+/* Must not match the status pill, which is also a direct span child of the cover. */
+.portal-trip-visual > .portal-trip-placeholder {
   width: 47px;
   height: 47px;
   display: grid;

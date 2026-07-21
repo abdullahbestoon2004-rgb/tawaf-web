@@ -7,11 +7,11 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  LoaderCircle,
   LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
+import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import { translations } from "../translations.ts";
 import "../styles/sign-in.css";
 
@@ -200,7 +200,7 @@ export default function SignIn() {
             {message && <p className="signin-message" role="alert">{message}</p>}
             <button type="submit" className="signin-submit" disabled={checking || loading}>
               {checking || loading ? (
-                <><LoaderCircle className="spin" size={18} /> {t.authSecuringWorkspace}</>
+                <><TawafLoadingSpinner size={18} /> {t.authSecuringWorkspace}</>
               ) : (
                 <>{t.authSignInButton} <SubmitArrow size={17} /></>
               )}
