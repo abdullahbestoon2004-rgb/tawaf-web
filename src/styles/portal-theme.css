@@ -199,8 +199,25 @@
 }
 .portal-next-trip h2 { font-family: "Amiri", Georgia, serif; font-weight: 400; color: #f6efdd; }
 .portal-next-label { color: #e4c278; }
+/* The base rule styles these as bare text links (padding: 0). Turning them into
+   filled pills means restoring the padding too, or the background collapses to
+   the text line box. */
 .portal-next-trip > button,
-.portal-next-empty button { border-radius: 100px; background: #c9a24b; color: #14251f; font-weight: 800; }
+.portal-next-empty button {
+  min-height: 46px;
+  padding: 0 24px;
+  border-radius: 100px;
+  background: #c9a24b;
+  color: #14251f;
+  font-weight: 800;
+  transition: background .12s, transform .12s, box-shadow .12s;
+}
+.portal-next-trip > button:hover,
+.portal-next-empty button:hover { background: #d8b45c; box-shadow: 0 8px 20px rgba(201,162,75,.28); }
+.portal-next-trip > button:active,
+.portal-next-empty button:active { transform: translateY(1px); }
+.portal-next-trip > button:focus-visible,
+.portal-next-empty button:focus-visible { outline: 2px solid #f6efdd; outline-offset: 3px; }
 
 /* ---------- Trip cards ---------- */
 .portal-trip-card { background: #fffdf7; border: 1px solid rgba(15, 92, 77, 0.12); border-radius: 18px; }

@@ -3,7 +3,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  ArrowUpRight,
   BadgeCheck,
   Banknote,
   BookOpenCheck,
@@ -454,7 +453,6 @@ const wizardT = {
     errTitle: "پێش پاشەکەوتکردن ناونیشانی گەشت زیاد بکە.", errTitleImage: "پێش بارکردنی وێنە ناونیشانی گەشت زیاد بکە.", errImageType: "وێنەیەکی JPG، PNG یان WebP هەڵبژێرە کە لە ٦ MB کەمتر بێت.",
     toastDraftSaved: "ڕەشنووسی گەشت پاشەکەوت کرا.", toastProgressSaved: "پێشکەوتنی ڕەشنووس پاشەکەوت کرا.", toastSubmitted: "گەشتەکە نێردرا بۆ پێداچوونەوەی تەواف.", toastChangesSent: "گۆڕانکارییەکانی گەشت نێردران بۆ پەسەندکردنی بەڕێوەبەر.",
     livePreviewTag: "پێشبینینی ڕاستەقینە", livePreviewHint: "ئەمە بەو شێوەیەیە کە زیارەتکاران گەشتەکەت پێی دەبینن. کرتە لەسەر هەر بەهایەک بکە بۆ دەستکاریکردنی.",
-    pilgrimReviews: "هەڵسەنگاندنی زیارەتکاران", viewAgency: "بینینی کۆمپانیا",
     overviewTitle: "پوختە", accommodationTitle: "شوێنی مانەوە", transportationTitle: "گواستنەوە", includedTitle: "ئەوەی لەخۆگیراوە", trustTitle: "متمانە، سیاسەت و پارەدان",
     packagePerPerson: "پاکێج (بۆ هەر کەسێک)", totalFrom: "کۆی گشتی دەستپێدەکات لە", bookThisTrip: "حیجزکردنی ئەم گەشتە",
     hotelWord: "هۆتێل", seatsRemaining: "شوێن ماوە", onlyLeftWord: "تەنها ماوە", soldOutWord: "تەواو بوو", clickToEdit: "کرتە بکە بۆ دەستکاریکردن", groundTransfersIncluded: "هەموو گواستنەوەکانی زەوی لەخۆگیراون",
@@ -516,7 +514,6 @@ const wizardT = {
     errTitle: "أضف عنوان الرحلة قبل حفظ المسودة.", errTitleImage: "أضف عنوان الرحلة قبل رفع الصورة.", errImageType: "اختر صورة JPG أو PNG أو WebP أصغر من ٦ MB.",
     toastDraftSaved: "تم حفظ مسودة الرحلة.", toastProgressSaved: "تم حفظ تقدم المسودة.", toastSubmitted: "تم إرسال الرحلة لمراجعة طواف.", toastChangesSent: "تم إرسال تغييرات الرحلة لموافقة المشرف.",
     livePreviewTag: "معاينة حية", livePreviewHint: "هذا بالضبط كيف سيرى المعتمرون رحلتك. انقر على أي قيمة لتعديلها.",
-    pilgrimReviews: "تقييمات المعتمرين", viewAgency: "عرض الشركة",
     overviewTitle: "نظرة عامة", accommodationTitle: "الإقامة", transportationTitle: "النقل", includedTitle: "ما يشمله السعر", trustTitle: "الثقة والسياسة والدفع",
     packagePerPerson: "الباقة (للفرد)", totalFrom: "الإجمالي يبدأ من", bookThisTrip: "احجز هذه الرحلة",
     hotelWord: "فندق", seatsRemaining: "مقعد متبقٍ", onlyLeftWord: "تبقى فقط", soldOutWord: "مكتملة", clickToEdit: "انقر للتعديل", groundTransfersIncluded: "جميع التنقلات البرية مشمولة",
@@ -578,7 +575,6 @@ const wizardT = {
     errTitle: "Add a trip title before saving this draft.", errTitleImage: "Add a trip title before uploading a main image.", errImageType: "Choose a JPG, PNG or WebP image smaller than 6 MB.",
     toastDraftSaved: "Trip draft saved.", toastProgressSaved: "Draft progress saved.", toastSubmitted: "Trip submitted to Tawaf for admin review.", toastChangesSent: "Trip changes sent to Tawaf for admin approval.",
     livePreviewTag: "LIVE PREVIEW", livePreviewHint: "This is exactly how pilgrims will see your trip. Click any value to edit it.",
-    pilgrimReviews: "pilgrim reviews", viewAgency: "View agency",
     overviewTitle: "Overview", accommodationTitle: "Accommodation", transportationTitle: "Transportation", includedTitle: "What's included", trustTitle: "Trust, policy & payment",
     packagePerPerson: "Package (per person)", totalFrom: "Total from", bookThisTrip: "Book this trip",
     hotelWord: "hotel", seatsRemaining: "seats remaining", onlyLeftWord: "Only left", soldOutWord: "Sold out", clickToEdit: "Click to edit", groundTransfersIncluded: "All ground transfers included",
@@ -1610,12 +1606,6 @@ function TripLivePreview({
             <LiveSelect icon={Users} value={wizard.group_type} onChange={(value) => setWizard((current) => ({ ...current, group_type: value as WizardState["group_type"] }))} options={[["family", W.typeFamily], ["individual", W.typeIndividual], ["group", W.typeGroup]]} />
             <LiveSelect icon={CalendarDays} value={wizard.season_tag} onChange={(value) => setWizard((current) => ({ ...current, season_tag: value as WizardState["season_tag"] }))} options={[["regular", W.seasonRegular], ["ramadan", W.seasonRamadan], ["shawwal", W.seasonShawwal], ["other", W.seasonOther]]} />
             <span className={`trip-live-pill ${capacityNum <= 10 ? "warning" : ""}`}><Users size={13} /><input type="number" min={0} max={500} value={wizard.capacity} onChange={(event) => setWizard((current) => ({ ...current, capacity: event.target.value }))} />{capacityNum <= 0 ? W.soldOutWord : W.seatsRemaining}</span>
-          </div>
-
-          <div className="trip-live-rating">
-            <span><Star size={14} /> 5.0</span>
-            <span>· 2 {W.pilgrimReviews}</span>
-            <a><span>{W.viewAgency}</span><ArrowUpRight size={14} /></a>
           </div>
 
           <div className="trip-live-section">

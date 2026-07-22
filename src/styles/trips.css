@@ -587,7 +587,28 @@
 .trip-live-tag { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
 .trip-live-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
-.trip-live-card { border: 1px solid var(--portal-border); border-radius: 22px; overflow: hidden; background: #fff; box-shadow: 0 15px 38px rgba(18,59,48,.06); }
+.trip-live-card {
+  border: 1px solid var(--portal-border); border-radius: 22px; overflow: hidden; background: #fff; box-shadow: 0 15px 38px rgba(18,59,48,.06);
+
+  /* Editable-field affordance: always visible so every typeable field reads as a
+     field at a glance, deepening on hover/focus. `-on-dark` variants are used
+     inside the hero and the price card. */
+  --edit-fill: rgba(15,92,77,.035);
+  --edit-fill-hover: rgba(15,92,77,.075);
+  --edit-line: rgba(15,92,77,.28);
+  --edit-line-hover: rgba(15,92,77,.6);
+  --edit-ring: 0 0 0 2px rgba(15,92,77,.16);
+  --edit-fill-on-dark: rgba(255,255,255,.09);
+  --edit-fill-on-dark-hover: rgba(255,255,255,.16);
+  --edit-line-on-dark: rgba(255,255,255,.38);
+  --edit-line-on-dark-hover: rgba(255,255,255,.75);
+  --edit-ring-on-dark: 0 0 0 2px rgba(255,255,255,.28);
+}
+
+.trip-live-card input,
+.trip-live-card textarea { transition: background .12s, border-color .12s, box-shadow .12s; }
+.trip-live-card input::placeholder,
+.trip-live-card textarea::placeholder { color: #9aa8a1; opacity: 1; }
 
 .trip-live-hero {
   position: relative; min-height: 280px; display: flex; flex-direction: column; justify-content: space-between;
@@ -601,12 +622,14 @@
 .trip-live-hero-bottom { position: relative; z-index: 1; padding: 0 20px 18px; }
 .trip-live-agency-row { display: flex; align-items: center; gap: 6px; color: var(--gold-light); font-size: 12px; font-weight: 700; }
 .trip-live-agency-row i { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: rgba(228,194,120,.18); color: var(--gold-light); align-items: center; justify-content: center; font-style: normal; }
-.trip-live-title-input { display: block; width: 100%; margin-top: 6px; padding: 0; border: 0; border-bottom: 1px dashed transparent; background: transparent; color: #fff; font-family: "Amiri", Georgia, serif; font-size: 28px; }
-.trip-live-title-input:hover, .trip-live-title-input:focus { border-bottom-color: rgba(255,255,255,.4); outline: none; }
-.trip-live-title-input::placeholder { color: rgba(255,255,255,.55); }
+.trip-live-title-input { display: block; width: 100%; margin-top: 6px; padding: 2px 8px; border: 0; border-bottom: 1px dashed var(--edit-line-on-dark); border-radius: 8px 8px 0 0; background: var(--edit-fill-on-dark); color: #fff; font-family: "Amiri", Georgia, serif; font-size: 28px; }
+.trip-live-title-input:hover, .trip-live-title-input:focus { border-bottom-color: var(--edit-line-on-dark-hover); background: var(--edit-fill-on-dark-hover); outline: none; }
+.trip-live-title-input:focus { box-shadow: var(--edit-ring-on-dark); }
+.trip-live-title-input::placeholder { color: rgba(255,255,255,.6); }
 .trip-live-hero-date { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #c1d1ca; font-size: 11px; }
-.trip-live-hero-date input { border: 0; border-bottom: 1px dashed rgba(255,255,255,.35); background: transparent; color: #f0ead9; font: inherit; color-scheme: dark; cursor: pointer; }
-.trip-live-hero-date input:hover, .trip-live-hero-date input:focus { border-bottom-color: rgba(255,255,255,.6); outline: none; }
+.trip-live-hero-date input { padding: 3px 8px; border: 0; border-bottom: 1px dashed var(--edit-line-on-dark); border-radius: 7px 7px 0 0; background: var(--edit-fill-on-dark); color: #f0ead9; font: inherit; color-scheme: dark; cursor: pointer; }
+.trip-live-hero-date input:hover, .trip-live-hero-date input:focus { border-bottom-color: var(--edit-line-on-dark-hover); background: var(--edit-fill-on-dark-hover); outline: none; }
+.trip-live-hero-date input:focus { box-shadow: var(--edit-ring-on-dark); }
 
 .trip-live-body { padding: 22px; display: flex; flex-direction: column; gap: 22px; }
 
@@ -634,8 +657,10 @@
 .trip-live-fact .ic { display: inline-flex; margin-bottom: 8px; color: var(--green); }
 .trip-live-fact.gold .ic { color: var(--gold); }
 .trip-live-fact b { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 15px; cursor: pointer; }
-.trip-live-fact input[type="number"] { width: 34px; border: 0; background: transparent; text-align: center; font: inherit; font-weight: 800; color: var(--ink); }
-.trip-live-fact b input[type="number"] { width: 40px; padding: 2px 0; border-radius: 7px; background: var(--cream); text-align: center; }
+.trip-live-fact input[type="number"] { width: 34px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 7px 7px 0 0; background: var(--edit-fill); text-align: center; font: inherit; font-weight: 800; color: var(--ink); }
+.trip-live-fact b input[type="number"] { width: 40px; padding: 2px 0; background: var(--cream); text-align: center; }
+.trip-live-fact input[type="number"]:hover, .trip-live-fact input[type="number"]:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-fact input[type="number"]:focus { box-shadow: var(--edit-ring); }
 .trip-live-stepper-row { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
 .trip-live-stepper-row > button { width: 30px; height: 26px; flex: none; display: grid; place-items: center; border: 1px solid var(--portal-border); border-radius: 8px; background: #fff; color: var(--green); cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .trip-live-stepper-row > button:hover:not(:disabled) { background: var(--green); color: #fff; border-color: var(--green); }
@@ -645,24 +670,22 @@
 .trip-live-card input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .trip-live-card input[type="number"] { -moz-appearance: textfield; }
 .trip-live-fact small { display: block; margin-top: 4px; color: var(--muted); font-size: 10.5px; }
-.trip-live-fact-sub-input { width: 100%; margin-top: 4px; border: 0; border-bottom: 1px dashed transparent; background: transparent; text-align: center; color: var(--muted); font-size: 10.5px; font-family: inherit; }
-.trip-live-fact-sub-input:hover, .trip-live-fact-sub-input:focus { border-bottom-color: var(--portal-border); outline: none; }
+.trip-live-fact-sub-input { width: 100%; margin-top: 6px; padding: 3px 6px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 7px 7px 0 0; background: var(--edit-fill); text-align: center; color: var(--muted); font-size: 10.5px; font-family: inherit; }
+.trip-live-fact-sub-input:hover, .trip-live-fact-sub-input:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-fact-sub-input:focus { box-shadow: var(--edit-ring); }
 
 .trip-live-pills { display: flex; flex-wrap: wrap; gap: 8px; }
 .trip-live-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 100px; background: #eef2ec; color: var(--green); font-size: 11px; font-weight: 700; }
 .trip-live-pill.warning { background: #f6ecd8; color: #9c6d1f; }
-.trip-live-pill input { border: 0; background: transparent; font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
-.trip-live-pill input[type="number"] { width: 30px; cursor: text; }
-
-.trip-live-rating { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border: 1px solid var(--portal-border); border-radius: 14px; font-size: 12px; color: var(--ink); }
-.trip-live-rating span:first-child { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; color: var(--gold); }
-.trip-live-rating span:first-child svg { fill: var(--gold); }
-.trip-live-rating span:nth-child(2) { color: var(--muted); }
-.trip-live-rating a { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-weight: 700; cursor: default; }
+.trip-live-pill input { padding: 1px 6px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 6px 6px 0 0; background: var(--edit-fill); font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
+.trip-live-pill input:hover, .trip-live-pill input:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-pill input:focus { box-shadow: var(--edit-ring); }
+.trip-live-pill input[type="number"] { width: 38px; text-align: center; cursor: text; }
 
 .trip-live-section h3 { margin: 0 0 10px; font-family: "Amiri", Georgia, serif; font-weight: 400; font-size: 20px; color: var(--ink); }
-.trip-live-section > textarea { display: block; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 6px; margin: -6px; resize: vertical; color: var(--ink); font-size: 13.5px; line-height: 1.65; font-family: inherit; }
-.trip-live-section > textarea:hover, .trip-live-section > textarea:focus { border-color: var(--portal-border); outline: none; }
+.trip-live-section > textarea { display: block; width: 100%; box-sizing: border-box; border: 1px dashed var(--edit-line); border-radius: 10px; background: var(--edit-fill); padding: 10px; resize: vertical; color: var(--ink); font-size: 13.5px; line-height: 1.65; font-family: inherit; }
+.trip-live-section > textarea:hover, .trip-live-section > textarea:focus { border-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-section > textarea:focus { box-shadow: var(--edit-ring); }
 
 .trip-live-accom-card { border: 1px solid var(--portal-border); border-radius: 16px; padding: 0 16px; }
 .trip-live-accom-row { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--portal-border); }
@@ -670,17 +693,21 @@
 .trip-live-accom-row .ic { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--cream); color: var(--green); display: grid; place-items: center; }
 .trip-live-accom-row > div { flex: 1; min-width: 0; }
 .trip-live-accom-row small { display: block; color: var(--muted); font-size: 10.5px; }
-.trip-live-strong-input { display: block; width: 100%; margin: 3px 0; border: 0; border-bottom: 1px dashed transparent; background: transparent; font-weight: 800; font-size: 14px; color: var(--ink); font-family: inherit; }
+.trip-live-strong-input { display: block; width: 100%; margin: 3px 0; padding: 3px 7px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 7px 7px 0 0; background: var(--edit-fill); font-weight: 800; font-size: 14px; color: var(--ink); font-family: inherit; }
 .trip-live-accom-meta { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; }
-.trip-live-accom-meta input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.trip-live-accom-meta input { flex: 1; min-width: 0; padding: 2px 6px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 6px 6px 0 0; background: var(--edit-fill); color: inherit; font: inherit; }
 .trip-live-accom-meta span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.trip-live-accom-meta input[type="number"] { width: 26px; }
+.trip-live-accom-meta input[type="number"] { flex: none; width: 40px; text-align: center; }
 .trip-live-accom-foot { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--gold); font-size: 11.5px; }
 .trip-live-accom-foot .stars { letter-spacing: 1px; }
 .trip-live-accom-foot span:last-child { color: var(--green); }
-.trip-live-accom-foot input[type="number"] { width: 34px; border: 0; background: transparent; color: inherit; font: inherit; }
+.trip-live-accom-foot input[type="number"] { width: 40px; padding: 2px 4px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 6px 6px 0 0; background: var(--edit-fill); text-align: center; color: inherit; font: inherit; }
 .trip-live-strong-input:hover, .trip-live-strong-input:focus,
-.trip-live-accom-meta input:hover, .trip-live-accom-meta input:focus { border-bottom-color: var(--portal-border); outline: none; }
+.trip-live-accom-meta input:hover, .trip-live-accom-meta input:focus,
+.trip-live-accom-foot input:hover, .trip-live-accom-foot input:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-strong-input:focus,
+.trip-live-accom-meta input:focus,
+.trip-live-accom-foot input:focus { box-shadow: var(--edit-ring); }
 
 .trip-live-transport-card { border: 1px solid var(--portal-border); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .trip-live-transport-main { display: flex; gap: 12px; align-items: center; }
@@ -691,7 +718,11 @@
 .trip-live-transport-pills .trip-live-pill { border: 1px solid var(--portal-border); background: #eef4f0; color: var(--green); cursor: pointer; }
 .trip-live-transport-pills button.trip-live-pill { border: 0; }
 .trip-live-transport-pills .trip-live-pill.toggle.active { background: var(--green); color: #fff; }
-.trip-live-transport-pills input.trip-live-pill { flex: 1; min-width: 160px; text-align: start; cursor: text; }
+/* Dashed border + lighter fill so the typeable pill never reads as a toggle button */
+.trip-live-transport-pills input.trip-live-pill { flex: 1; min-width: 160px; border: 1px dashed var(--edit-line); background: var(--edit-fill); text-align: start; cursor: text; }
+.trip-live-transport-pills input.trip-live-pill:hover,
+.trip-live-transport-pills input.trip-live-pill:focus { border-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-transport-pills input.trip-live-pill:focus { box-shadow: var(--edit-ring); }
 
 .trip-live-itinerary { display: flex; flex-direction: column; }
 .trip-live-day { position: relative; display: flex; gap: 14px; padding-bottom: 18px; }
@@ -702,9 +733,13 @@
 .trip-live-day-head { display: flex; align-items: center; justify-content: space-between; }
 .trip-live-day-head span { color: var(--gold); font-size: 10px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
 .trip-live-day-head button { border: 0; background: transparent; color: var(--muted-2, #9aa6a0); cursor: pointer; }
-.trip-live-day input { display: block; width: 100%; margin-top: 4px; border: 0; background: transparent; font-weight: 700; font-size: 13px; color: var(--ink); font-family: inherit; }
-.trip-live-day textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 2px; border: 0; background: transparent; resize: vertical; color: var(--muted); font-size: 12px; font-family: inherit; }
-.trip-live-day input:hover, .trip-live-day input:focus, .trip-live-day textarea:hover, .trip-live-day textarea:focus { outline: none; background: var(--cream); border-radius: 6px; }
+.trip-live-day input,
+.trip-live-day textarea { display: block; width: 100%; box-sizing: border-box; padding: 5px 8px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 7px 7px 0 0; background: var(--edit-fill); font-family: inherit; }
+.trip-live-day input { margin-top: 4px; font-weight: 700; font-size: 13px; color: var(--ink); }
+.trip-live-day textarea { margin-top: 5px; resize: vertical; color: var(--muted); font-size: 12px; }
+.trip-live-day input:hover, .trip-live-day input:focus,
+.trip-live-day textarea:hover, .trip-live-day textarea:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-day input:focus, .trip-live-day textarea:focus { box-shadow: var(--edit-ring); }
 .trip-live-add-day { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--portal-border); background: transparent; color: var(--green); border-radius: 100px; padding: 8px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; }
 
 .trip-live-included { border: 1px solid var(--portal-border); border-radius: 16px; }
@@ -717,16 +752,22 @@
 
 .trip-live-trust { border: 1px solid var(--portal-border); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .trip-live-trust b { font-size: 13px; }
-.trip-live-trust textarea { display: block; width: 100%; box-sizing: border-box; border: 0; background: transparent; resize: vertical; color: var(--muted); font-size: 12px; line-height: 1.6; font-family: inherit; }
-.trip-live-trust textarea:hover, .trip-live-trust textarea:focus { outline: none; background: var(--cream); border-radius: 8px; }
+.trip-live-trust textarea { display: block; width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px dashed var(--edit-line); border-radius: 10px; background: var(--edit-fill); resize: vertical; color: var(--muted); font-size: 12px; line-height: 1.6; font-family: inherit; }
+.trip-live-trust textarea:hover, .trip-live-trust textarea:focus { border-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-trust textarea:focus { box-shadow: var(--edit-ring); }
 .trip-live-trust-row { display: flex; align-items: center; gap: 6px; color: var(--green); font-size: 12px; font-weight: 700; }
-.trip-live-trust-row input { width: 90px; border: 0; border-bottom: 1px dashed var(--portal-border); background: transparent; font: inherit; color: inherit; }
+.trip-live-trust-row input { width: 100px; padding: 3px 7px; border: 0; border-bottom: 1px dashed var(--edit-line); border-radius: 7px 7px 0 0; background: var(--edit-fill); font: inherit; color: inherit; }
+.trip-live-trust-row input:hover, .trip-live-trust-row input:focus { border-bottom-color: var(--edit-line-hover); background: var(--edit-fill-hover); outline: none; }
+.trip-live-trust-row input:focus { box-shadow: var(--edit-ring); }
 .trip-live-trust-toggle { display: inline-flex; align-items: center; gap: 6px; color: #a3532b; font-size: 11.5px; font-weight: 700; cursor: pointer; }
 
 .trip-live-price-card { border-radius: 18px; padding: 20px; color: #fff; background: linear-gradient(135deg, #0c5a49, #062f27); display: flex; flex-direction: column; gap: 10px; }
 .trip-live-price-card > div { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: #cde2d9; }
 .trip-live-price-input { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-weight: 700; }
-.trip-live-price-input input { width: 90px; text-align: end; border: 0; border-bottom: 1px dashed rgba(255,255,255,.35); background: transparent; color: #fff; font: inherit; font-weight: 700; }
+.trip-live-price-input input { width: 105px; padding: 3px 8px; text-align: end; border: 0; border-bottom: 1px dashed var(--edit-line-on-dark); border-radius: 7px 7px 0 0; background: var(--edit-fill-on-dark); color: #fff; font: inherit; font-weight: 700; }
+.trip-live-price-input input:hover, .trip-live-price-input input:focus { border-bottom-color: var(--edit-line-on-dark-hover); background: var(--edit-fill-on-dark-hover); outline: none; }
+.trip-live-price-input input:focus { box-shadow: var(--edit-ring-on-dark); }
+.trip-live-price-input input::placeholder { color: rgba(255,255,255,.6); }
 .trip-live-price-card hr { border: 0; border-top: 1px solid rgba(255,255,255,.14); margin: 0; }
 .trip-live-price-card .total { color: #f0ead9; font-size: 13px; }
 .trip-live-price-card .total strong { font-family: "Amiri", Georgia, serif; font-size: 24px; font-weight: 400; color: #f6efdd; }

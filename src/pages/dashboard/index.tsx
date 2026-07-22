@@ -586,6 +586,20 @@ export default function DashboardPage() {
             throw new Error("No company workspace is attached to this account.");
           }
 
+          // An unapproved company must not reach the workspace, however it got
+          // here: fresh sign-in, a restored session, or a direct /dashboard link.
+          // The sign-in form checks this too, but it is bypassed whenever a
+          // session already exists, so this loader is the real gate.
+          //
+          // 'draft' and 'needs_changes' are deliberately allowed through: those
+          // companies need to get in to complete their profile and use "Submit
+          // for review" in the verification banner.
+          if (["pending", "rejected", "suspended"].includes(companyRow.verification_status)) {
+            await supabase.auth.signOut();
+            navigate("/sign-in", { replace: true, state: { blocked: companyRow.verification_status } });
+            return;
+          }
+
           setCompany(companyRow);
           const [
             tripsResult,
@@ -851,9 +865,14 @@ export default function DashboardPage() {
         <div className="portal-content">
           {error && (
             <div className="portal-alert error">
-              <span>
+              <button
+                type="button"
+                className="portal-alert-close"
+                onClick={() => setError("")}
+                aria-label={locale === "ku" ? "داخستن" : locale === "ar" ? "إغلاق" : "Dismiss"}
+              >
                 <X size={16} />
-              </span>
+              </button>
               <p>{error}</p>
               <button type="button" onClick={() => setError("")}>Dismiss</button>
             </div>
@@ -1012,7 +1031,7 @@ function CompanyPages({
   if (page === "finance") return <FinancePage role="agency" data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "team") return <TeamPage data={data} company={company} locale={locale} />;
   if (page === "more") return <CompanyProfile company={company} profile={profile} busy={busy} runAction={runAction} locale={locale} changeLocale={changeLocale} />;
-  return <CompanyOverview data={data} company={company} goTo={goTo} locale={locale} />;
+  return <CompanyOverview data={data} company={company} goTo={goTo} locale={locale} busy={busy} runAction={runAction} />;
 }
 
 function PageHeading({
@@ -1152,7 +1171,7 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
   );
 }
 
-function CompanyOverview({ data, company, goTo, locale }: { data: PortalData; company: Company; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en" }) {
+function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { data: PortalData; company: Company; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en"; busy: string; runAction: RunAction }) {
   const t = dashboardTranslations[locale];
   const activeTrips = data.trips.filter((item) => ["published", "pending_review"].includes(item.lifecycle_status));
   const pending = data.bookings.filter((item) => item.operational_stage === "requested");
@@ -1163,6 +1182,7 @@ function CompanyOverview({ data, company, goTo, locale }: { data: PortalData; co
   const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
 
   // Translate verification status
+  const canSubmitApplication = ["draft", "needs_changes", "rejected"].includes(company.verification_status);
   const getVerificationStatusLabel = (status: string) => {
     if (locale === "ku") {
       switch (status) {
@@ -1196,12 +1216,30 @@ function CompanyOverview({ data, company, goTo, locale }: { data: PortalData; co
 
       {!company.is_verified && (
         <div className="portal-verification-banner">
+          {/* submit_company_application() accepts exactly these three states; it
+              raises 'company cannot be submitted from %' for anything else. */}
           <span><ShieldCheck size={20} /></span>
           <div>
             <b>{t.companyVerificationStatus.replace("{status}", getVerificationStatusLabel(company.verification_status))}</b>
             <p>{company.verification_reason || (locale === "ku" ? "تەواف پێداچوونەوە بە زانیارییەکانی کۆمپانیاکەتدا دەکات. دەتوانیت گەشتەکان ئامادە بکەیت کاتێک پێداچوونەوەکە لە پرۆسەدایە." : locale === "ar" ? "يقوم طواف بمراجعة معلومات شركتك. يمكنك إعداد الرحلات أثناء عملية المراجعة." : "Tawaf is reviewing your company information. You can prepare trips while the review is in progress.")}</p>
           </div>
-          <button type="button" onClick={() => goTo("more")}>{t.viewCompanyProfile}</button>
+          {canSubmitApplication ? (
+            <button
+              type="button"
+              className="approve"
+              disabled={busy === `company-submit-${company.id}`}
+              onClick={() => runAction(
+                `company-submit-${company.id}`,
+                () => getSupabase().rpc("submit_company_application", { p_company_id: company.id }),
+                locale === "ku" ? "داواکارییەکەت نێردرا بۆ پێداچوونەوە." : locale === "ar" ? "تم إرسال طلبك للمراجعة." : "Your application was sent for review.",
+              )}
+            >
+              {busy === `company-submit-${company.id}` ? <LoaderCircle className="spin" size={14} /> : <ShieldCheck size={14} />}
+              {locale === "ku" ? "ناردن بۆ پێداچوونەوە" : locale === "ar" ? "إرسال للمراجعة" : "Submit for review"}
+            </button>
+          ) : (
+            <button type="button" onClick={() => goTo("more")}>{t.viewCompanyProfile}</button>
+          )}
         </div>
       )}
 
