@@ -223,6 +223,48 @@
 .portal-trip-card { background: #fffdf7; border: 1px solid rgba(15, 92, 77, 0.12); border-radius: 18px; }
 .portal-trip-body h3 { font-family: "Amiri", Georgia, serif; font-weight: 400; font-size: 26px; }
 .portal-trip-visual { background: linear-gradient(135deg, #e9e2cc, #d8ccae); color: #7a6b45; }
+.portal-trip-visual > img { display: none; }
+/* `has-image` is dropped on load error, revealing the plane placeholder underneath. */
+.portal-trip-visual.has-image > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Scrim keeps the overlay pills legible over both the beige placeholder and any cover photo. */
+.portal-trip-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8,40,33,.42) 0%, rgba(8,40,33,.10) 45%, transparent 100%);
+  pointer-events: none;
+}
+.portal-trip-visual > .portal-status,
+.portal-trip-visual > i { z-index: 1; }
+.portal-trip-visual > i { gap: 5px; padding: 5px 10px; color: #f4e2b0; background: rgba(7,42,34,.62); backdrop-filter: blur(10px); font-size: 10px; font-weight: 800; white-space: nowrap; }
+/* Beat the later `.portal-status.<tone>` theme rules, which are otherwise a specificity tie. */
+.portal-trip-visual > .portal-status.positive,
+.portal-trip-visual > .portal-status.warning,
+.portal-trip-visual > .portal-status.negative,
+.portal-trip-visual > .portal-status.neutral {
+  color: #fdfbf4;
+  background: rgba(7,42,34,.62);
+  backdrop-filter: blur(10px);
+}
+.portal-trip-visual > .portal-status.positive i { background: #6fd3a6; }
+.portal-trip-visual > .portal-status.warning i { background: #e5bc61; }
+.portal-trip-visual > .portal-status.negative i { background: #e58f7c; }
+.portal-trip-visual > .portal-status.neutral i { background: #c3d2cb; }
+.portal-trip-dates b.is-past { color: #a3532b; }
+.portal-departed-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  color: #a3532b;
+  background: rgba(163,83,43,.07);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.portal-departed-note svg { flex-shrink: 0; }
 .portal-capacity i { border-radius: 100px; background: #eef2ec; }
 .portal-capacity i b { background: #0f5c4d; border-radius: 100px; }
 
@@ -451,3 +493,108 @@
 [dir="rtl"] .trip-change-review-card { text-align: right; }
 .trip-change-review-card { border-radius: 18px; background: #fffdf7; }
 .trip-change-kind { border-radius: 100px; font-weight: 800; }
+
+/* Admin company detail drawer */
+.portal-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 88;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(4, 29, 23, 0.55);
+  backdrop-filter: blur(4px);
+  animation: portal-fade-in 0.15s ease;
+}
+[dir="rtl"] .portal-drawer-scrim { justify-content: flex-start; }
+.portal-drawer {
+  width: 460px;
+  max-width: 94vw;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fffdf7;
+  border-inline-start: 1px solid rgba(15, 92, 77, 0.14);
+  box-shadow: -18px 0 44px rgba(5, 45, 36, 0.18);
+  animation: portal-drawer-in 0.2s ease;
+}
+[dir="rtl"] .portal-drawer { animation-name: portal-drawer-in-rtl; }
+@keyframes portal-drawer-in { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes portal-drawer-in-rtl { from { transform: translateX(-28px); opacity: 0; } to { transform: none; opacity: 1; } }
+.portal-drawer-head {
+  position: relative;
+  padding: 26px 22px 18px;
+  background: linear-gradient(135deg, #0f5c4d, #052d24);
+  background-size: cover;
+  background-position: center;
+  color: #fdfbf4;
+}
+.portal-drawer-head h2 { margin: 10px 0 4px; font-family: "Amiri", Georgia, serif; font-weight: 400; font-size: 22px; }
+.portal-drawer-head p { margin: 0; font-size: 12px; opacity: 0.82; }
+.portal-drawer-badges { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.portal-drawer-close {
+  position: absolute;
+  top: 14px;
+  inset-inline-end: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fdfbf4;
+  cursor: pointer;
+}
+.portal-drawer-close:hover { background: rgba(255, 255, 255, 0.28); }
+.portal-drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 18px; }
+.portal-drawer-body section h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #7c8a82; }
+.portal-drawer-reason {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: rgba(201, 162, 75, 0.12);
+  border: 1px solid rgba(201, 162, 75, 0.3);
+  color: #7c5a17;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.portal-drawer-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.portal-drawer-stats > div {
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #f4f6f1;
+  border: 1px solid rgba(15, 92, 77, 0.08);
+}
+.portal-drawer-stats b { display: block; font-family: "Amiri", Georgia, serif; font-weight: 400; font-size: 18px; color: #12362c; }
+.portal-drawer-stats small { color: #84918a; font-size: 10.5px; }
+.portal-drawer-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.portal-drawer-facts li { display: flex; gap: 9px; align-items: center; font-size: 13px; color: #3d4a43; }
+.portal-drawer-facts li svg { color: #0f5c4d; flex-shrink: 0; }
+.portal-drawer-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.portal-drawer-tags span {
+  padding: 4px 11px;
+  border-radius: 100px;
+  background: rgba(15, 92, 77, 0.07);
+  color: #0f5c4d;
+  font-size: 11px;
+  font-weight: 700;
+}
+.portal-drawer-about { margin: 0; font-size: 13px; line-height: 1.65; color: #4a564f; white-space: pre-line; }
+.portal-drawer-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 15px 22px;
+  border-top: 1px solid rgba(15, 92, 77, 0.1);
+  background: #fbf8ef;
+}
+.portal-drawer-actions .portal-secondary-button.danger { color: #a03d31; border-color: rgba(160, 61, 49, 0.35); }
+.portal-table tr.clickable { cursor: pointer; }
+.portal-table tr.clickable:hover td { background: rgba(15, 92, 77, 0.045); }
+@media (max-width: 640px) {
+  .portal-drawer { width: 100vw; max-width: 100vw; }
+  .portal-drawer-stats { grid-template-columns: 1fr 1fr; }
+}

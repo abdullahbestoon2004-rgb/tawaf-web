@@ -187,3 +187,57 @@ img { max-width: 100%; display: block; }
   .brand img { width: 60px; height: 48px; }
   .brand-kurdish { font-size: 24px; }
 }
+
+/* ---------- Tawaf loading spinner ---------- */
+/* Two aligned layers: the Kaaba stays still, only the outer ring rotates. */
+.tawaf-spinner {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+.tawaf-spinner-outer,
+.tawaf-spinner-center {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Outer ring sits behind the static centre and spins clockwise, 3s per turn. */
+.tawaf-spinner-outer {
+  z-index: 0;
+  animation: tawaf-spin 3s linear infinite;
+  will-change: transform;
+}
+
+.tawaf-spinner-center { z-index: 1; }
+
+@keyframes tawaf-spin { to { transform: rotate(360deg); } }
+
+.tawaf-spinner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  background: #f6f2e9;
+}
+
+.tawaf-spinner-overlay p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tawaf-spinner-outer { animation: none !important; }
+}

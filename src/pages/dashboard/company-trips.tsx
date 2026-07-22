@@ -22,7 +22,6 @@ import {
   Heart,
   Hotel,
   Image as ImageIcon,
-  LoaderCircle,
   MapPin,
   Minus,
   Pencil,
@@ -43,6 +42,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 
 type Company = {
   id: string;
@@ -610,10 +610,29 @@ function formatDate(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
+/**
+ * Format as a local YYYY-MM-DD. toISOString() converts to UTC first, which
+ * shifts the calendar day backwards for any positive-offset timezone (Iraq is
+ * UTC+3), so it must not be used to render a plain date.
+ */
+function isoDate(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * review_trip_change rejects same-day departures, so accepting one here would
+ * let a company submit a request no admin can ever approve.
+ */
+function earliestDepartureDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return isoDate(date);
+}
+
 function addDays(value: string | null | undefined, days: number) {
   const base = value ? new Date(`${value}T00:00:00`) : new Date();
   base.setDate(base.getDate() + Math.max(1, days));
-  return base.toISOString().slice(0, 10);
+  return isoDate(base);
 }
 
 function titleCase(value: string) {
@@ -944,7 +963,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
     const W = wizardT[locale];
     return [
       { label: W.cTitleDesc, done: Boolean(wizard.title.trim() && wizard.overview.trim()) },
-      { label: W.cDates, done: Boolean(wizard.departure_date && wizard.return_date && wizard.departure_date >= new Date().toISOString().slice(0, 10) && wizard.return_date >= wizard.departure_date) },
+      { label: W.cDates, done: Boolean(wizard.departure_date && wizard.return_date && wizard.departure_date >= earliestDepartureDate() && wizard.return_date >= wizard.departure_date) },
       { label: W.cCapPrice, done: Number(wizard.capacity) > 0 && Number(wizard.package_price_iqd) > 0 },
       { label: W.cHotels, done: wizard.hotels.every((hotel) => hotel.name.trim() && hotel.description.trim() && hotel.nights > 0) && hotelNights > 0 },
       { label: W.cItinerary, done: wizard.itinerary.some((day) => day.title.trim()) },
@@ -1129,7 +1148,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
           ))}
         </nav>
 
-        {detailsLoading ? <div className="trip-detail-loading"><LoaderCircle className="spin" size={22} /> {tt.loadingTrips}</div> : (
+        {detailsLoading ? <div className="trip-detail-loading"><TawafLoadingSpinner size={22} /> {tt.loadingTrips}</div> : (
           <TripManagementTab
             tab={tab}
             trip={selectedTrip}
@@ -1139,6 +1158,9 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
             payments={payments.filter((item) => selectedBookingIds.has(item.booking_id))}
             busy={busy}
             runAction={runAction}
+            askReason={askReason}
+            locale={locale}
+            onRefreshDetails={() => loadDetails(selectedTrip.id)}
             onEdit={() => openEdit(selectedTrip)}
             onSubmit={() => runAction(`trip-${selectedTrip.id}`, () => getSupabase().rpc("submit_package", { p_package_id: selectedTrip.id }), locale === "ku" ? "گەشتەکە پێشکەش کرا بۆ پێداچوونەوە." : locale === "ar" ? "تم إرسال الرحلة للمراجعة." : "Trip submitted for review.")}
             onPause={() => pauseTrip(selectedTrip)}
@@ -1153,6 +1175,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
 
   const published = trips.filter((trip) => trip.lifecycle_status === "published").length;
   const underReview = trips.filter((trip) => trip.lifecycle_status === "pending_review").length;
+  const pendingChangeTripIds = new Set(changeRequests.filter((request) => request.status === "pending").map((request) => request.package_id));
   const totalSeats = trips.reduce((sum, trip) => sum + Number(trip.capacity ?? 0), 0);
   const bookedSeats = trips.reduce((sum, trip) => sum + Number(trip.seats_reserved ?? 0), 0);
 
@@ -1219,7 +1242,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
                     <td>{trip.days} {locale === "ku" ? "ڕۆژ" : locale === "ar" ? "يوم" : "days"}<span className="portal-cell-sub">{trip.nights} {locale === "ku" ? "شەو" : locale === "ar" ? "ليلة" : "nights"}</span></td>
                     <td><b>{formatIqd(trip.price_iqd)}</b></td>
                     <td><div className="trip-capacity-cell"><span><b>{reserved}</b> / {capacity || "—"}</span><small>{fill}%</small><i><b style={{ width: `${Math.min(100, fill)}%` }} /></i></div></td>
-                    <td><Status value={trip.lifecycle_status} /></td>
+                    <td><div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}><Status value={trip.lifecycle_status} />{pendingChangeTripIds.has(trip.id) && <span className="portal-status warning"><i />{locale === "ku" ? "چاوەڕێی پەسەندکردن" : locale === "ar" ? "بانتظار الموافقة" : "Awaiting approval"}</span>}</div></td>
                     <td className="right"><button type="button" className="portal-icon-button" aria-label={`Manage ${trip.title}`} onClick={(event) => { event.stopPropagation(); openManage(trip); }}><ChevronRight size={16} /></button></td>
                   </tr>
                 );
@@ -1249,6 +1272,9 @@ function TripManagementTab({
   payments,
   busy,
   runAction,
+  askReason,
+  locale,
+  onRefreshDetails,
   onEdit,
   onSubmit,
   onPause,
@@ -1264,6 +1290,9 @@ function TripManagementTab({
   payments: Payment[];
   busy: string;
   runAction: Props["runAction"];
+  askReason: Props["askReason"];
+  locale: "ku" | "ar" | "en";
+  onRefreshDetails: () => Promise<any>;
   onEdit: () => void;
   onSubmit: () => Promise<any>;
   onPause: () => void;
@@ -1277,11 +1306,45 @@ function TripManagementTab({
   const received = payments.filter((payment) => payment.status === "succeeded").reduce((sum, payment) => sum + Number(payment.amount_iqd), 0);
   const commission = commissions.reduce((sum, item) => sum + Number(item.amount_iqd), 0);
 
+  // Bookings confirm automatically after payment (transition_booking rejects an
+  // "accept" action), so the actions here mirror what the RPC actually allows.
+  async function transition(booking: Booking, action: "request_information" | "reject" | "ready" | "start" | "complete") {
+    let reason: string | null = null;
+    if (["request_information", "reject"].includes(action)) {
+      reason = await askReason(action === "request_information"
+        ? (locale === "ku" ? "چی زانیارییەک کەمە؟" : locale === "ar" ? "ما هي المعلومات الناقصة؟" : "What information is missing?")
+        : (locale === "ku" ? "تکایە هۆکارێک زیاد بکە:" : locale === "ar" ? "يرجى إضافة سبب:" : "Please add a reason:"));
+      if (!reason) return;
+    }
+    await runAction(
+      `booking-${booking.id}`,
+      () => getSupabase().rpc("transition_booking", { p_booking_id: booking.id, p_action: action, p_reason: reason }),
+      locale === "ku" ? "دۆخی حیجزەکە نوێ کرایەوە." : locale === "ar" ? "تم تحديث حالة الحجز." : `Booking ${action.replaceAll("_", " ")} completed.`,
+    );
+  }
+
+  function bookingActions(booking: Booking) {
+    if (busy === `booking-${booking.id}`) return <TawafLoadingSpinner size={15} />;
+    if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage)) {
+      return (
+        <div className="portal-row-actions">
+          {booking.pay_method === "cash" && <button type="button" className="approve" onClick={() => runAction(`booking-${booking.id}`, () => getSupabase().rpc("confirm_cash_received", { p_booking_id: booking.id, p_amount_iqd: null }), locale === "ku" ? "پارەی نەختینە پشتڕاستکرایەوە." : locale === "ar" ? "تم تأكيد الدفع النقدي." : "Cash payment confirmed.")}><Banknote size={13} /> {locale === "ku" ? "نەختینە" : locale === "ar" ? "تأكيد النقد" : "Confirm cash"}</button>}
+          {booking.operational_stage === "requested" && <button type="button" onClick={() => transition(booking, "request_information")}>{locale === "ku" ? "داوای زانیاری" : locale === "ar" ? "طلب معلومات" : "Request info"}</button>}
+          <button type="button" className="danger" onClick={() => transition(booking, "reject")}>{locale === "ku" ? "ڕەتکردنەوە" : locale === "ar" ? "رفض" : "Reject"}</button>
+        </div>
+      );
+    }
+    if (booking.operational_stage === "confirmed") return <div className="portal-row-actions"><button type="button" className="approve" onClick={() => transition(booking, "ready")}><Check size={13} /> {locale === "ku" ? "ئامادەیە" : locale === "ar" ? "جاهز" : "Mark ready"}</button></div>;
+    if (booking.operational_stage === "ready") return <div className="portal-row-actions"><button type="button" className="approve" onClick={() => transition(booking, "start")}><Plane size={13} /> {locale === "ku" ? "دەستپێکردن" : locale === "ar" ? "بدء الرحلة" : "Start trip"}</button></div>;
+    if (booking.operational_stage === "in_progress") return <div className="portal-row-actions"><button type="button" className="approve" onClick={() => transition(booking, "complete")}><Check size={13} /> {locale === "ku" ? "تەواوکردن" : locale === "ar" ? "إكمال" : "Complete"}</button></div>;
+    return null;
+  }
+
   if (tab === "bookings") return (
     <section className="portal-panel trip-operation-panel">
       <div className="portal-panel-header"><div><h2>Trip bookings</h2><p>Only bookings attached to this departure are shown</p></div><span className="portal-period">{bookings.length} records</span></div>
       {bookings.length ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Reference</th><th>Travellers</th><th>Total</th><th>Paid</th><th>Method</th><th>Status</th><th className="right">Action</th></tr></thead><tbody>
-        {bookings.map((booking) => <tr key={booking.id}><td><b>#{booking.id.slice(0, 8).toUpperCase()}</b><span className="portal-cell-sub">{booking.contact_phone || "No contact"}</span></td><td>{booking.travellers}</td><td>{formatIqd(booking.total_iqd)}</td><td>{formatIqd(booking.amount_paid_iqd)}</td><td>{titleCase(booking.pay_method)}</td><td><Status value={booking.operational_stage} /></td><td className="right"><div className="portal-row-actions">{booking.operational_stage === "requested" && <button type="button" className="approve" disabled={busy === `booking-${booking.id}`} onClick={() => runAction(`booking-${booking.id}`, () => getSupabase().rpc("transition_booking", { p_booking_id: booking.id, p_action: "accept", p_reason: null }), "Booking accepted.")}><Check size={13} /> Accept</button>}</div></td></tr>)}
+        {bookings.map((booking) => <tr key={booking.id}><td><b>#{booking.id.slice(0, 8).toUpperCase()}</b><span className="portal-cell-sub">{booking.contact_phone || "No contact"}</span></td><td>{booking.travellers}</td><td>{formatIqd(booking.total_iqd)}</td><td>{formatIqd(booking.amount_paid_iqd)}</td><td>{titleCase(booking.pay_method)}</td><td><Status value={booking.operational_stage} /></td><td className="right">{bookingActions(booking)}</td></tr>)}
       </tbody></table></div> : <OperationEmpty icon={BookOpenCheck} title="No bookings yet" text="Bookings will appear here when pilgrims reserve this trip." />}
     </section>
   );
@@ -1297,11 +1360,28 @@ function TripManagementTab({
 
   if (tab === "documents") {
     const docs = details?.documents.filter((document) => bookingIds.has(document.booking_id)) ?? [];
+
+    async function reviewDocument(document: TravellerDocument, status: "approved" | "rejected") {
+      let reason: string | null = null;
+      if (status === "rejected") {
+        reason = await askReason(locale === "ku" ? "بۆچی ئەم بەڵگەنامەیە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذا المستند؟" : "Why is this document being rejected?");
+        if (!reason) return;
+      }
+      const result = await runAction(
+        `document-${document.id}`,
+        () => getSupabase().rpc("review_traveller_document", { p_document_id: document.id, p_status: status, p_reason: reason, p_expires_on: null }),
+        status === "approved"
+          ? (locale === "ku" ? "بەڵگەنامەکە پەسەند کرا." : locale === "ar" ? "تمت الموافقة على المستند." : "Document approved.")
+          : (locale === "ku" ? "بەڵگەنامەکە ڕەتکرایەوە و گەشتیارەکە ئاگادار کرایەوە." : locale === "ar" ? "تم رفض المستند وإبلاغ المسافر." : "Document rejected and the traveller was notified."),
+      );
+      if (result) await onRefreshDetails();
+    }
+
     return (
       <section className="portal-panel trip-operation-panel">
         <div className="portal-panel-header"><div><h2>Traveller documents</h2><p>Review documents only for pilgrims on this trip</p></div><span className="portal-period">{docs.length} files</span></div>
-        {docs.length ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Document</th><th>Traveller</th><th>Booking</th><th>Submitted</th><th>Status</th></tr></thead><tbody>
-          {docs.map((document) => <tr key={document.id}><td><b>{titleCase(document.kind)}</b></td><td>{details?.travellers.find((traveller) => traveller.id === document.traveller_id)?.full_name ?? "Traveller"}</td><td>#{document.booking_id.slice(0, 8).toUpperCase()}</td><td>{formatDate(document.created_at.slice(0, 10))}</td><td><Status value={document.status} /></td></tr>)}
+        {docs.length ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Document</th><th>Traveller</th><th>Booking</th><th>Submitted</th><th>Status</th><th className="right">Action</th></tr></thead><tbody>
+          {docs.map((document) => <tr key={document.id}><td><b>{titleCase(document.kind)}</b></td><td>{details?.travellers.find((traveller) => traveller.id === document.traveller_id)?.full_name ?? "Traveller"}</td><td>#{document.booking_id.slice(0, 8).toUpperCase()}</td><td>{formatDate(document.created_at.slice(0, 10))}</td><td><Status value={document.status} />{document.status === "rejected" && document.rejection_reason && <span className="portal-cell-sub">{document.rejection_reason}</span>}</td><td className="right">{busy === `document-${document.id}` ? <TawafLoadingSpinner size={15} /> : document.status === "under_review" ? <div className="portal-row-actions"><button type="button" className="approve" onClick={() => reviewDocument(document, "approved")}><Check size={13} /> {locale === "ku" ? "پەسەندکردن" : locale === "ar" ? "موافقة" : "Approve"}</button><button type="button" className="danger" onClick={() => reviewDocument(document, "rejected")}><X size={13} /> {locale === "ku" ? "ڕەتکردنەوە" : locale === "ar" ? "رفض" : "Reject"}</button></div> : null}</td></tr>)}
         </tbody></table></div> : <OperationEmpty icon={FileCheck2} title="No documents submitted" text="Passport, visa and traveller files will be organized here." />}
       </section>
     );
@@ -1426,8 +1506,8 @@ function TripWizard({
         <footer className="trip-wizard-footer">
           <button type="button" className="portal-secondary-button" onClick={onBack}><BackIcon size={15} /> {W.cancel}</button>
           <div>
-            {!approvalMode && <button type="button" className="trip-save-draft" onClick={onSave} disabled={busy === "trip-wizard-save"}>{busy === "trip-wizard-save" ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} {W.saveDraftBtn}</button>}
-            <button type="button" className="portal-primary-button" onClick={onSubmit} disabled={!canSubmit || busy.startsWith("trip-")}>{busy.startsWith("trip-") ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} {approvalMode ? W.requestApprovalBtn : W.submitBtn}</button>
+            {!approvalMode && <button type="button" className="trip-save-draft" onClick={onSave} disabled={busy === "trip-wizard-save"}>{busy === "trip-wizard-save" ? <TawafLoadingSpinner size={15} /> : <Save size={15} />} {W.saveDraftBtn}</button>}
+            <button type="button" className="portal-primary-button" onClick={onSubmit} disabled={!canSubmit || busy.startsWith("trip-")}>{busy.startsWith("trip-") ? <TawafLoadingSpinner size={15} /> : <Send size={15} />} {approvalMode ? W.requestApprovalBtn : W.submitBtn}</button>
           </div>
         </footer>
       </form>
@@ -1497,7 +1577,7 @@ function TripLivePreview({
   locale: "ku" | "ar" | "en";
   W: typeof wizardT["en"];
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const minDeparture = earliestDepartureDate();
   const totalNights = wizard.hotels.reduce((sum, hotel) => sum + hotel.nights, 0);
   const totalDays = totalNights + 1;
   const capacityNum = Number(wizard.capacity || 0);
@@ -1510,9 +1590,11 @@ function TripLivePreview({
   // with the departure date automatically instead of asking for it separately.
   useEffect(() => {
     if (!wizard.departure_date) return;
-    const wanted = addDays(wizard.departure_date, totalDays);
+    // A 10-day / 9-night trip departing the 21st returns on the 30th, so the
+    // return date is offset by the night count, not the day count.
+    const wanted = addDays(wizard.departure_date, totalNights);
     if (wizard.return_date !== wanted) setWizard((current) => ({ ...current, return_date: wanted }));
-  }, [wizard.departure_date, wizard.return_date, totalDays, setWizard]);
+  }, [wizard.departure_date, wizard.return_date, totalNights, setWizard]);
 
   function handleStarChange(value: string) {
     const stars = Number(value);
@@ -1552,7 +1634,7 @@ function TripLivePreview({
             <span className="trip-live-hero-btn"><Heart size={16} /></span>
           </div>
           <label className="trip-live-hero-upload">
-            {uploadingImage ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />}
+            {uploadingImage ? <TawafLoadingSpinner size={16} /> : <Upload size={16} />}
             <span>{wizard.image_url ? W.replaceImage : W.addCover}</span>
             <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={(event) => onUploadImage(event.target.files?.[0])} />
           </label>
@@ -1567,7 +1649,7 @@ function TripLivePreview({
             <div className="trip-live-hero-date">
               <span>{wizard.transport === "plane" ? wizard.departure_airport : (wizard.pickup_point || W.byCoach)}</span>
               <span>·</span>
-              <input type="date" min={today} value={wizard.departure_date} onChange={(event) => setWizard((current) => ({ ...current, departure_date: event.target.value }))} />
+              <input type="date" min={minDeparture} value={wizard.departure_date} onChange={(event) => setWizard((current) => ({ ...current, departure_date: event.target.value }))} />
             </div>
           </div>
         </div>

@@ -285,6 +285,9 @@
 .trip-change-kind.pause { color: #8c651e; background: rgba(201,162,75,.12); }
 .trip-change-reason { margin: 0; padding: 10px 15px; color: #6f7e77; background: #fafbf9; font-size: 9px; }
 .trip-change-reason b { color: #405a50; }
+.trip-change-blocked { display: flex; align-items: center; gap: 7px; margin: 0; padding: 10px 15px; color: #9a473d; background: rgba(180,74,63,.06); font-size: 9px; font-weight: 700; }
+.trip-change-blocked svg { flex-shrink: 0; }
+.trip-change-review-card > footer button.approve:disabled { opacity: .45; cursor: not-allowed; }
 .trip-change-diff { padding: 5px 15px; }
 .trip-change-diff > div {
   display: grid;
