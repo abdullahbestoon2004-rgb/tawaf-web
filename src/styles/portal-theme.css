@@ -348,7 +348,7 @@
 .portal-reason-scrim {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 110;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -394,6 +394,193 @@
   margin-top: 18px;
 }
 .portal-reason-actions .portal-primary-button:disabled { opacity: 0.55; cursor: default; }
+
+/* ---------- Trip review detail modal ---------- */
+.portal-trip-card.is-clickable { cursor: pointer; }
+.portal-trip-card.is-clickable:focus-visible { outline: 2px solid #0f5c4d; outline-offset: 2px; }
+
+.portal-trip-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  background: rgba(4, 29, 23, 0.55);
+  backdrop-filter: blur(4px);
+  animation: portal-fade-in 0.15s ease;
+}
+.portal-trip-modal {
+  width: 640px;
+  max-width: 100%;
+  margin: auto;
+  background: #fffdf7;
+  border: 1px solid rgba(15, 92, 77, 0.14);
+  border-radius: 22px;
+  box-shadow: 0 40px 90px rgba(4, 18, 14, 0.35);
+  animation: portal-modal-in 0.18s ease;
+  overflow: hidden;
+}
+.portal-trip-modal-head {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 16px 18px;
+  min-height: 96px;
+  color: #f4f1e7;
+  background: linear-gradient(145deg, #0b4b3e, #073229);
+}
+.portal-trip-modal-cover {
+  flex-shrink: 0;
+  position: relative;
+  width: 78px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  overflow: hidden;
+  color: #e1c071;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+.portal-trip-modal-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.portal-trip-modal-cover.has-image .portal-trip-placeholder { display: none; }
+.portal-trip-modal-cover .portal-trip-placeholder { border: none; background: transparent; }
+.portal-trip-modal-title { flex: 1; min-width: 0; }
+.portal-trip-modal-title small { display: block; color: #d8b45c; font-size: 10px; font-weight: 800; letter-spacing: 0.7px; text-transform: uppercase; }
+.portal-trip-modal-title h2 { margin: 4px 0 8px; font-family: "Amiri", Georgia, serif; font-size: 26px; font-weight: 400; line-height: 1.2; color: #fff; }
+.portal-trip-modal-title .portal-status { color: #e8e9e5; background: rgba(5, 38, 31, 0.5); }
+.portal-trip-modal-title .portal-status i { background: #d8b45c; }
+.portal-trip-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #f4f1e7;
+  background: rgba(255, 255, 255, 0.12);
+}
+[dir="rtl"] .portal-trip-modal-close { right: auto; left: 14px; }
+.portal-trip-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+.portal-trip-modal-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+.portal-trip-modal-body .portal-review-note { margin: 0 0 16px; font-size: 12px; }
+.portal-trip-modal-section { padding: 16px 0; border-top: 1px solid rgba(15, 92, 77, 0.1); }
+.portal-trip-modal-section:first-of-type { border-top: none; padding-top: 0; }
+.portal-trip-modal-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  color: #0f5c4d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.portal-trip-modal-text { margin: 0 0 6px; color: #2c3b35; font-size: 13px; line-height: 1.7; }
+.portal-trip-modal-text.muted { color: #6c7a73; font-size: 12px; }
+
+.portal-trip-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 18px; }
+.portal-trip-facts > div { display: flex; flex-direction: column; gap: 4px; }
+.portal-trip-facts small { color: #8b9791; font-size: 10.5px; }
+.portal-trip-facts b { color: #14251f; font-size: 13.5px; font-weight: 700; }
+
+.portal-trip-hotels { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.portal-trip-hotel { padding: 12px 14px; border: 1px solid rgba(15, 92, 77, 0.12); border-radius: 14px; background: #fff; }
+.portal-trip-hotel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.portal-trip-hotel-head > b { color: #a27b2b; font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.portal-trip-hotel-head > span { color: #d8b45c; font-size: 12px; letter-spacing: 1px; }
+.portal-trip-hotel-name { display: block; color: #14251f; font-size: 14px; font-weight: 700; }
+.portal-trip-hotel-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 6px 0; color: #6c7a73; font-size: 11px; }
+.portal-trip-hotel .portal-trip-modal-text { margin: 4px 0 0; }
+
+.portal-trip-pricing { display: flex; flex-wrap: wrap; gap: 10px; }
+.portal-trip-pricing > div { flex: 1 1 120px; padding: 10px 12px; border: 1px solid rgba(15, 92, 77, 0.12); border-radius: 12px; background: #fff; }
+.portal-trip-pricing small { display: block; color: #8b9791; font-size: 10.5px; text-transform: capitalize; }
+.portal-trip-pricing b { display: block; margin-top: 4px; color: #14251f; font-size: 13.5px; }
+
+.portal-trip-inclusions { display: flex; flex-wrap: wrap; gap: 8px; }
+.portal-trip-inclusions > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 100px;
+  color: #176a50;
+  background: rgba(49, 151, 113, 0.09);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.portal-trip-itinerary { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.portal-trip-itinerary > li { display: flex; gap: 12px; }
+.portal-trip-day-no {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 100px;
+  color: #0f5c4d;
+  background: rgba(15, 92, 77, 0.09);
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.portal-trip-itinerary b { display: block; color: #14251f; font-size: 13.5px; }
+.portal-trip-itinerary p { margin: 4px 0 0; color: #5a6862; font-size: 12px; line-height: 1.6; }
+
+.portal-trip-modal-loading,
+.portal-trip-modal-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 0;
+  font-size: 12.5px;
+}
+.portal-trip-modal-loading { color: #5a6862; }
+.portal-trip-modal-error { color: #9c493e; }
+
+.portal-trip-modal-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid rgba(15, 92, 77, 0.12);
+  background: #fbf8f0;
+}
+.portal-trip-modal-actions > button {
+  flex: 1;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--portal-border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+.portal-trip-modal-actions > button.approve { color: #176a50; border-color: rgba(23, 106, 80, 0.2); background: rgba(49, 151, 113, 0.1); }
+.portal-trip-modal-actions > button.danger { color: #9c493e; border-color: rgba(156, 73, 62, 0.2); background: rgba(185, 84, 72, 0.07); }
+.portal-trip-modal-actions > button:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 560px) {
+  .portal-trip-facts,
+  .portal-trip-hotels { grid-template-columns: 1fr; }
+  .portal-trip-modal-title h2 { font-size: 22px; }
+}
 
 /* ---------- Notifications bell dropdown ---------- */
 .portal-bell-wrap { position: relative; }

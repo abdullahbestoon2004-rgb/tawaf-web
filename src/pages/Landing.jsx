@@ -165,6 +165,14 @@ export default function Landing() {
         </div>
         <div className="hero-photo-wrap">
           <div className="hero-photo">
+            {/* Drop the real photo at public/assets/images/hero-umrah.jpg — on 404 it
+                hides itself and the decorative placeholder underneath shows through. */}
+            <img
+              className="hero-photo-img"
+              src="/assets/images/hero-umrah.jpg"
+              alt={t.heroPhotoAlt ?? "Kaaba, Makkah"}
+              onError={(event) => { event.currentTarget.style.display = "none"; }}
+            />
             <div className="img-slot"><span>وێنەی حەرەم / کەعبە</span></div>
           </div>
           <div className="hero-verified">

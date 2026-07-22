@@ -1507,10 +1507,234 @@ function CompanyDetailDrawer({
   );
 }
 
+type TripDetailData = {
+  itinerary: Array<{ day_no: number; title: string; summary: string | null }>;
+  pricing: Array<{ occupancy_type: string; price_iqd: number }>;
+  hotels: Array<{ city: string; nights: number; distance_from_haram_m: number | null; hotels: { name: string; description: string | null; star_rating: number } | null }>;
+  inclusions: Array<{ type: string; included: boolean; details: string | null }>;
+};
+
+// Read-only detail sheet the admin opens by clicking a trip card, so every field the
+// company submitted can be reviewed before the approve/reject decision. Pulls the child
+// tables (itinerary/pricing/hotels/inclusions) on open — admin RLS (is_admin) already
+// allows reading these for pending trips, so no server change is needed.
+function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onClose }: {
+  trip: any;
+  companyName: string;
+  locale: "ku" | "ar" | "en";
+  role: Role;
+  busy: string;
+  onReview: (decision: "published" | "rejected") => Promise<void>;
+  onClose: () => void;
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [details, setDetails] = useState<TripDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const rowBusy = busy === `trip-review-${trip.id}`;
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      setLoadError("");
+      const supabase = getSupabase();
+      const [itinerary, pricing, hotels, inclusions] = await Promise.all([
+        supabase.from("itinerary_days").select("*").eq("package_id", trip.id).order("day_no"),
+        supabase.from("offer_pricing").select("*").eq("offer_id", trip.id).order("price_iqd"),
+        supabase.from("offer_hotels").select("*, hotels(*)").eq("offer_id", trip.id),
+        supabase.from("offer_inclusions").select("*").eq("offer_id", trip.id).order("sort_order"),
+      ]);
+      if (!active) return;
+      const err = [itinerary, pricing, hotels, inclusions].find((result) => result.error)?.error;
+      if (err) {
+        setLoadError(err.message);
+        setLoading(false);
+        return;
+      }
+      setDetails({
+        itinerary: (itinerary.data ?? []) as any,
+        pricing: (pricing.data ?? []) as any,
+        hotels: (hotels.data ?? []) as any,
+        inclusions: (inclusions.data ?? []) as any,
+      });
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [trip.id]);
+
+  // Close on Escape for keyboard reviewers.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const facts: Array<{ label: string; value: string }> = [
+    { label: tr("بەرواری ڕۆیشتن", "تاريخ المغادرة", "Departure"), value: formatDate(trip.departure_date, true) },
+    { label: tr("بەرواری گەڕانەوە", "تاريخ العودة", "Return"), value: formatDate(trip.return_date, true) },
+    { label: tr("ماوە", "المدة", "Duration"), value: `${trip.days ?? "—"} ${tr("ڕۆژ", "أيام", "days")} · ${trip.nights ?? "—"} ${tr("شەو", "ليالٍ", "nights")}` },
+    { label: tr("نرخ / بۆ هەر کەسێک", "السعر / للمعتمر", "Price / pilgrim"), value: formatIqd(trip.price_iqd) },
+    { label: tr("پێشەکی", "العربون", "Deposit"), value: trip.deposit_iqd ? formatIqd(trip.deposit_iqd) : tr("دیارینەکراوە", "غير محدد", "Not set") },
+    { label: tr("گونجایش", "السعة", "Capacity"), value: `${trip.seats_reserved ?? 0} / ${trip.capacity ?? "—"} ${tr("شوێن", "مقعد", "seats")}` },
+    { label: tr("پلەی هۆتێل", "تصنيف الفندق", "Hotel rating"), value: `${trip.acc_stars ?? "—"} ${tr("ئەستێرە", "نجوم", "star")}` },
+    { label: tr("ژەم لە ڕۆژێکدا", "الوجبات في اليوم", "Meals / day"), value: trip.meals_per_day != null ? String(trip.meals_per_day) : (trip.meals || tr("دیارینەکراوە", "غير محدد", "Not set")) },
+  ];
+
+  const transportBits = [
+    trip.transport === "plane" ? tr("فڕۆکە", "طائرة", "Plane") : trip.transport === "bus" ? tr("پاس", "حافلة", "Bus") : titleCase(trip.transport || ""),
+    trip.airline_name || trip.carrier,
+    trip.departure_airport && tr(`فڕۆکەخانە: ${trip.departure_airport}`, `المطار: ${trip.departure_airport}`, `Airport: ${trip.departure_airport}`),
+    trip.airport_transfers ? tr("گواستنەوەی فڕۆکەخانە", "نقل المطار", "Airport transfers") : null,
+    trip.bus_between_cities ? tr("پاس نێوان شارەکان", "حافلة بين المدن", "Bus between cities") : null,
+  ].filter(Boolean) as string[];
+
+  const includedInclusions = (details?.inclusions ?? []).filter((row) => row.included);
+
+  return (
+    <div className="portal-trip-modal-scrim" onClick={onClose}>
+      <div className="portal-trip-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <header className="portal-trip-modal-head">
+          <div className={`portal-trip-modal-cover${trip.image_url ? " has-image" : ""}`}>
+            <span className="portal-trip-placeholder"><Plane size={22} /></span>
+            {trip.image_url && <img src={trip.image_url} alt="" onError={(event) => { event.currentTarget.closest(".portal-trip-modal-cover")?.classList.remove("has-image"); }} />}
+          </div>
+          <div className="portal-trip-modal-title">
+            {role === "admin" && <small>{companyName}</small>}
+            <h2>{trip.title}</h2>
+            <StatusPill status={trip.lifecycle_status} />
+          </div>
+          <button type="button" className="portal-trip-modal-close" onClick={onClose} aria-label={tr("داخستن", "إغلاق", "Close")}><X size={18} /></button>
+        </header>
+
+        <div className="portal-trip-modal-body">
+          {trip.review_reason && (
+            <p className="portal-review-note">{trip.review_reason}</p>
+          )}
+
+          {trip.overview && (
+            <section className="portal-trip-modal-section">
+              <h3><FileText size={13} /> {tr("پێناسە", "الوصف", "Overview")}</h3>
+              <p className="portal-trip-modal-text">{trip.overview}</p>
+            </section>
+          )}
+
+          <section className="portal-trip-modal-section">
+            <h3><ClipboardCheck size={13} /> {tr("زانیاری سەرەکی", "المعلومات الأساسية", "Key details")}</h3>
+            <div className="portal-trip-facts">
+              {facts.map((fact) => (
+                <div key={fact.label}><small>{fact.label}</small><b>{fact.value}</b></div>
+              ))}
+            </div>
+          </section>
+
+          <section className="portal-trip-modal-section">
+            <h3><Plane size={13} /> {tr("گواستنەوە", "النقل", "Transport")}</h3>
+            <p className="portal-trip-modal-text">{transportBits.length ? transportBits.join(" · ") : tr("زانیاری نییە", "لا معلومات", "No details")}</p>
+            {trip.transport_notes && <p className="portal-trip-modal-text muted">{trip.transport_notes}</p>}
+          </section>
+
+          {loading ? (
+            <div className="portal-trip-modal-loading"><TawafLoadingSpinner size={20} /> {tr("زانیاری دەهێنرێت…", "جارٍ تحميل التفاصيل…", "Loading details…")}</div>
+          ) : loadError ? (
+            <div className="portal-trip-modal-error"><AlertTriangle size={14} /> {loadError}</div>
+          ) : (
+            <>
+              {details && details.hotels.length > 0 && (
+                <section className="portal-trip-modal-section">
+                  <h3><MapPin size={13} /> {tr("هۆتێلەکان", "الفنادق", "Hotels")}</h3>
+                  <div className="portal-trip-hotels">
+                    {details.hotels
+                      .slice()
+                      .sort((a, b) => (a.city === "makkah" ? -1 : 1) - (b.city === "makkah" ? -1 : 1))
+                      .map((hotel, index) => (
+                        <div key={index} className="portal-trip-hotel">
+                          <div className="portal-trip-hotel-head">
+                            <b>{hotel.city === "makkah" ? tr("مەککە", "مكة", "Makkah") : tr("مەدینە", "المدينة", "Madinah")}</b>
+                            <span>{"★".repeat(Math.max(0, Math.min(5, hotel.hotels?.star_rating ?? 0)))}</span>
+                          </div>
+                          <b className="portal-trip-hotel-name">{hotel.hotels?.name ?? tr("هۆتێل دیارینەکراوە", "فندق غير محدد", "Hotel not set")}</b>
+                          <div className="portal-trip-hotel-meta">
+                            <span>{hotel.nights} {tr("شەو", "ليالٍ", "nights")}</span>
+                            {hotel.distance_from_haram_m != null && <span>{hotel.distance_from_haram_m}{tr("م لە حەرەم", "م من الحرم", "m from Haram")}</span>}
+                          </div>
+                          {hotel.hotels?.description && <p className="portal-trip-modal-text muted">{hotel.hotels.description}</p>}
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              )}
+
+              {details && details.pricing.length > 0 && (
+                <section className="portal-trip-modal-section">
+                  <h3><CircleDollarSign size={13} /> {tr("نرخەکان بەپێی ژوور", "الأسعار حسب الغرفة", "Pricing by occupancy")}</h3>
+                  <div className="portal-trip-pricing">
+                    {details.pricing.map((row, index) => (
+                      <div key={index}><small>{titleCase(row.occupancy_type)}</small><b>{formatIqd(row.price_iqd)}</b></div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {includedInclusions.length > 0 && (
+                <section className="portal-trip-modal-section">
+                  <h3><Check size={13} /> {tr("خزمەتگوزاریە لەخۆگیراوەکان", "الخدمات المشمولة", "What's included")}</h3>
+                  <div className="portal-trip-inclusions">
+                    {includedInclusions.map((row, index) => (
+                      <span key={index}><Check size={11} /> {row.details || titleCase(row.type)}</span>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {details && details.itinerary.length > 0 && (
+                <section className="portal-trip-modal-section">
+                  <h3><CalendarDays size={13} /> {tr("بەرنامەی ڕۆژانە", "البرنامج اليومي", "Daily itinerary")}</h3>
+                  <ol className="portal-trip-itinerary">
+                    {details.itinerary.map((day) => (
+                      <li key={day.day_no}>
+                        <span className="portal-trip-day-no">{tr("ڕۆژ", "يوم", "Day")} {day.day_no}</span>
+                        <div>
+                          <b>{day.title}</b>
+                          {day.summary && <p>{day.summary}</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+            </>
+          )}
+
+          {(trip.cancellation_policy || trip.deposit_terms) && (
+            <section className="portal-trip-modal-section">
+              <h3><ShieldCheck size={13} /> {tr("مەرجەکان", "السياسات", "Policies")}</h3>
+              {trip.deposit_terms && <p className="portal-trip-modal-text"><b>{tr("مەرجی پێشەکی: ", "شروط العربون: ", "Deposit terms: ")}</b>{trip.deposit_terms}</p>}
+              {trip.cancellation_policy && <p className="portal-trip-modal-text"><b>{tr("مەرجی هەڵوەشاندنەوە: ", "سياسة الإلغاء: ", "Cancellation: ")}</b>{trip.cancellation_policy}</p>}
+            </section>
+          )}
+        </div>
+
+        {role === "admin" && trip.lifecycle_status === "pending_review" && (
+          <footer className="portal-trip-modal-actions">
+            <button type="button" className="approve" onClick={async () => { await onReview("published"); onClose(); }} disabled={rowBusy}>
+              {rowBusy ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {tr("پەسەندکردن", "قبول", "Approve trip")}
+            </button>
+            <button type="button" className="danger" onClick={async () => { await onReview("rejected"); onClose(); }} disabled={rowBusy}>
+              <X size={14} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
+            </button>
+          </footer>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, locale }: { role: Role; data: PortalData; busy: string; runAction: RunAction; askReason: AskReason; onCreateTrip?: () => void; locale: "ku" | "ar" | "en" }) {
   const t = dashboardTranslations[locale];
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [detailTrip, setDetailTrip] = useState<Trip | null>(null);
   const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
   const trips = data.trips.filter((item) => {
     const matches = `${item.title} ${companyMap.get(item.company_id) ?? ""}`.toLowerCase().includes(query.toLowerCase());
@@ -1685,7 +1909,14 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
           const departed = Boolean(trip.departure_date) && trip.departure_date! < new Date().toISOString().slice(0, 10)
             && !["removed", "rejected"].includes(trip.lifecycle_status);
           return (
-            <article className="portal-trip-card" key={trip.id}>
+            <article
+              className="portal-trip-card is-clickable"
+              key={trip.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailTrip(trip)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDetailTrip(trip); } }}
+            >
               <div className={`portal-trip-visual${trip.image_url ? " has-image" : ""}`}>
                 {/* Placeholder always renders underneath, so a broken storage URL degrades cleanly. */}
                 <span className="portal-trip-placeholder"><Plane size={22} /></span>
@@ -1712,7 +1943,7 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                 </div>
                 {departed && <p className="portal-departed-note"><AlertTriangle size={12} /> {locale === "ku" ? "بەرواری ڕۆیشتن تێپەڕیوە — پێویستە نوێ بکرێتەوە پێش بڵاوکردنەوە." : locale === "ar" ? "تاريخ المغادرة قد مضى — يجب تحديثه قبل النشر." : "Departure date has passed — it must be updated before this trip can be published again."}</p>}
                 {trip.review_reason && <p className="portal-review-note">{trip.review_reason}</p>}
-                <div className="portal-card-actions">
+                <div className="portal-card-actions" onClick={(event) => event.stopPropagation()}>
                   {role === "admin" && trip.lifecycle_status === "pending_review" ? (
                     <>
                       <button type="button" className="approve" onClick={() => reviewTrip(trip, "published")} disabled={busy === `trip-review-${trip.id}`}><Check size={14} /> {t.accept}</button>
@@ -1736,6 +1967,17 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
         })}
         {!trips.length && <EmptyState icon={Plane} title={t.noTripsFound} text={role === "agency" ? t.noTripsCreated : (locale === "ku" ? "گەڕانێکی تر یان فلتەرێکی تر تاقی بکەرەوە." : locale === "ar" ? "حاول البحث بكلمات أخرى أو تغيير الفلاتر." : "Try another search or status filter.")} />}
       </section>
+      {detailTrip && (
+        <TripDetailModal
+          trip={detailTrip}
+          companyName={companyMap.get(detailTrip.company_id) ?? "Tawaf company"}
+          locale={locale}
+          role={role}
+          busy={busy}
+          onReview={(decision) => reviewTrip(detailTrip, decision)}
+          onClose={() => setDetailTrip(null)}
+        />
+      )}
     </>
   );
 }

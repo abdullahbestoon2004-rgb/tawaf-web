@@ -345,7 +345,10 @@
   color: #718079;
 }
 
-.portal-loading img {
+/* Direct-child only: the loading screen now renders <TawafLoadingSpinner>, whose
+   nested <img> layers must keep their own rotation. This rule stays for any plain
+   logo <img> dropped directly into .portal-loading. */
+.portal-loading > img {
   width: 58px;
   height: 58px;
   border-radius: 17px;
@@ -2189,7 +2192,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .portal-loading img,
+  .portal-loading > img,
   .portal-live i,
   .spin { animation: none !important; }
   .portal-sidebar,
