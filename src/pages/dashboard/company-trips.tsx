@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { useScrollLock } from "@/lib/use-scroll-lock";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 
 type Company = {
@@ -860,7 +861,8 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
   const [dateFilter, setDateFilter] = useState("");
   const [tripPeriod, setTripPeriod] = useState<"active" | "past">("active");
   const [viewedBookingIds, setViewedBookingIds] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<"overview" | "bookings" | "travellers" | "documents" | "financials">("overview");
+  const [viewedBookingIdsLoaded, setViewedBookingIdsLoaded] = useState(false);
+  const [tab, setTab] = useState<"overview" | "bookings" | "financials">("overview");
   const [wizard, setWizard] = useState<WizardState>(() => defaultWizard());
   const [step, setStep] = useState(0);
   const [wizardError, setWizardError] = useState("");
@@ -880,6 +882,14 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
   const selectedBookings = bookings.filter((booking) => booking.package_id === selectedId);
   const selectedBookingIds = new Set(selectedBookings.map((booking) => booking.id));
 
+  // Switching views/tabs mounts new content in place without a route change, so
+  // the browser keeps whatever scroll position the list or previous tab was at.
+  // On mobile that can leave the new view opening with its top clipped under the
+  // sticky topbar. Reset scroll on every view/tab change to land at the top.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [view, tab]);
+
   const filteredTrips = useMemo(() => trips.filter((trip) => {
     const matchesQuery = `${trip.title} ${trip.departure_airport ?? ""} ${trip.airline_name ?? ""}`.toLowerCase().includes(query.toLowerCase());
     const matchesStatus = statusFilter === "all" || trip.lifecycle_status === statusFilter;
@@ -890,13 +900,18 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
     const matchesPeriod = tripPeriod === "past" ? ended : !ended;
     return matchesQuery && matchesStatus && matchesTier && matchesDate && matchesPeriod;
   }).sort((a, b) => {
-    const unseenA = bookings.some((booking) => booking.package_id === a.id && !viewedBookingIds.has(booking.id)) ? 1 : 0;
-    const unseenB = bookings.some((booking) => booking.package_id === b.id && !viewedBookingIds.has(booking.id)) ? 1 : 0;
+    // Until we actually know which bookings this company has opened, an empty
+    // viewedBookingIds would make every trip look "unseen" and jump to the top,
+    // then silently re-sort once the real data lands a moment later. Skip the
+    // unseen-first tiebreak until that fetch resolves so the list is stable
+    // from the first paint.
+    const unseenA = viewedBookingIdsLoaded && bookings.some((booking) => booking.package_id === a.id && !viewedBookingIds.has(booking.id)) ? 1 : 0;
+    const unseenB = viewedBookingIdsLoaded && bookings.some((booking) => booking.package_id === b.id && !viewedBookingIds.has(booking.id)) ? 1 : 0;
     if (tripPeriod === "active" && unseenA !== unseenB) return unseenB - unseenA;
     const aDate = a.departure_date ?? (tripPeriod === "active" ? "9999-12-31" : "0000-01-01");
     const bDate = b.departure_date ?? (tripPeriod === "active" ? "9999-12-31" : "0000-01-01");
     return tripPeriod === "active" ? aDate.localeCompare(bDate) : bDate.localeCompare(aDate);
-  }), [trips, bookings, viewedBookingIds, query, statusFilter, tierFilter, dateFilter, tripPeriod]);
+  }), [trips, bookings, viewedBookingIds, viewedBookingIdsLoaded, query, statusFilter, tierFilter, dateFilter, tripPeriod]);
 
   useEffect(() => {
     let active = true;
@@ -913,8 +928,10 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
       if (active && !result.error) {
         setViewedBookingIds(new Set((result.data ?? []).map((row) => row.booking_id as string)));
       }
+      if (active) setViewedBookingIdsLoaded(true);
     }
     setViewedBookingIds(new Set());
+    setViewedBookingIdsLoaded(false);
     void loadBookingViews();
     return () => { active = false; };
   }, [company.id]);
@@ -1353,6 +1370,18 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
     );
   }
 
+  async function resumeTrip(trip: Trip) {
+    await runAction(
+      `trip-resume-${trip.id}`,
+      () => getSupabase().rpc("resume_package", { p_package_id: trip.id }),
+      locale === "ku"
+        ? "گەشتەکە دووبارە خرایەوە سەر فرۆشتن."
+        : locale === "ar"
+          ? "أعيدت الرحلة إلى البيع."
+          : "Trip is back on sale.",
+    );
+  }
+
   async function deleteDraft(trip: Trip) {
     const confirmed = window.confirm(
       locale === "ku"
@@ -1497,8 +1526,6 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
           {([
             ["overview", tt.overview, Eye],
             ["bookings", tt.bookings, BookOpenCheck],
-            ["travellers", tt.travellers, Users],
-            ["documents", tt.documents, FileCheck2],
             ["financials", tt.financials, WalletCards],
           ] as const).map(([id, label, Icon]) => (
             <button type="button" key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
@@ -1524,10 +1551,10 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
             runAction={runAction}
             askReason={askReason}
             locale={locale}
-            onRefreshDetails={() => loadDetails(selectedTrip.id)}
             onEdit={() => openEdit(selectedTrip)}
             onSubmit={() => runAction(`trip-${selectedTrip.id}`, () => getSupabase().rpc("submit_package", { p_package_id: selectedTrip.id }), locale === "ku" ? "گەشتەکە پێشکەش کرا بۆ پێداچوونەوە." : locale === "ar" ? "تم إرسال الرحلة للمراجعة." : "Trip submitted for review.")}
             onPause={() => pauseTrip(selectedTrip)}
+            onResume={() => resumeTrip(selectedTrip)}
             onDelete={() => deleteDraft(selectedTrip)}
             onWithdraw={() => withdrawSubmission(selectedTrip)}
             onAdjustSeats={() => adjustCapacity(selectedTrip)}
@@ -1544,7 +1571,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
   const pendingChangeTripIds = new Set(changeRequests.filter((request) => request.status === "pending").map((request) => request.package_id));
   const totalSeats = trips.reduce((sum, trip) => sum + Number(trip.capacity ?? 0), 0);
   const bookedSeats = trips.reduce((sum, trip) => sum + Number(trip.seats_reserved ?? 0), 0);
-  const unseenBookings = bookings.filter((booking) => !viewedBookingIds.has(booking.id));
+  const unseenBookings = viewedBookingIdsLoaded ? bookings.filter((booking) => !viewedBookingIds.has(booking.id)) : [];
   const allCashPending = bookings.filter(isCashPending);
   const today = new Date().toISOString().slice(0, 10);
   const activeTripCount = trips.filter((trip) => !["completed", "archived", "expired"].includes(trip.lifecycle_status) && !(trip.return_date && trip.return_date < today)).length;
@@ -1628,7 +1655,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
         <section className="trip-card-grid">
           {filteredTrips.map((trip) => {
             const tripBookings = bookings.filter((booking) => booking.package_id === trip.id);
-            const tripUnseen = tripBookings.filter((booking) => !viewedBookingIds.has(booking.id)).length;
+            const tripUnseen = viewedBookingIdsLoaded ? tripBookings.filter((booking) => !viewedBookingIds.has(booking.id)).length : 0;
             const tripCashPending = tripBookings.filter(isCashPending).length;
             const reserved = Number(trip.seats_reserved ?? 0);
             const capacity = Number(trip.capacity ?? 0);
@@ -1799,7 +1826,11 @@ function BookingInbox({
   }
 
   function startGesture(event: ReactPointerEvent, booking: Booking) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
+    // Swipe-to-confirm-cash and long-press-to-mark-unread are touch gestures.
+    // Mouse users already have explicit call/mail buttons and right-click for
+    // mark-unread — letting a mouse drag trigger "confirm cash" risked firing
+    // a payment action from an ordinary imprecise click.
+    if (event.pointerType !== "touch") return;
     const state = { booking, x: event.clientX, timer: null as number | null, longPressed: false };
     state.timer = window.setTimeout(() => {
       state.longPressed = true;
@@ -1826,8 +1857,9 @@ function BookingInbox({
   }
 
   function cancelGesture() {
-    if (gestureRef.current?.timer !== null) window.clearTimeout(gestureRef.current.timer);
+    const state = gestureRef.current;
     gestureRef.current = null;
+    if (state?.timer != null) window.clearTimeout(state.timer);
   }
 
   function exportPassengerList() {
@@ -2011,6 +2043,32 @@ function BookingInboxDetail({
   onCall: (booking: Booking) => void;
   onClose: () => void;
 }) {
+  const [docs, setDocs] = useState<TravellerDocument[]>([]);
+  const [docsRevision, setDocsRevision] = useState(0);
+  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+
+  useScrollLock();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !lightbox) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, lightbox]);
+
+  // Fetched per booking rather than passed down, so this works the same in the
+  // per-trip Bookings tab and in the cross-trip "all new bookings" inbox.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const result = await getSupabase()
+        .from("traveller_documents")
+        .select("*")
+        .eq("booking_id", booking.id)
+        .order("created_at", { ascending: false });
+      if (active && !result.error) setDocs((result.data ?? []) as TravellerDocument[]);
+    })();
+    return () => { active = false; };
+  }, [booking.id, docsRevision]);
+
   async function transition(action: "request_information" | "reject" | "ready" | "start" | "complete") {
     let reason: string | null = null;
     if (["request_information", "reject"].includes(action)) {
@@ -2054,14 +2112,25 @@ function BookingInboxDetail({
             <Status value={booking.operational_stage} />
           </div>
           <div className="trip-booking-detail-travellers">
-            <h3>{locale === "ku" ? "لیستی گەشتیاران" : locale === "ar" ? "قائمة المسافرين" : "Passenger list"}</h3>
-            {travellers.map((traveller) => (
-              <div key={traveller.id}>
-                <span><UserRound size={15} /></span>
-                <div><b>{traveller.full_name}</b><small>{traveller.passport_no || (locale === "ku" ? "پاسپۆرت زیاد نەکراوە" : locale === "ar" ? "لم يضف جواز السفر" : "No passport yet")}</small></div>
-                <Status value={traveller.visa_status || "not_started"} />
-              </div>
-            ))}
+            <h3>
+              {locale === "ku" ? "لیستی گەشتیاران" : locale === "ar" ? "قائمة المسافرين" : "Passenger list"}
+              {travellers.length > 1 && <i>{travellers.length}</i>}
+            </h3>
+            {travellers.length ? travellers.map((traveller) => (
+              <BookingTravellerPanel
+                key={traveller.id}
+                traveller={traveller}
+                docs={docs.filter((document) => document.traveller_id === traveller.id)}
+                busy={busy}
+                runAction={runAction}
+                askReason={askReason}
+                locale={locale}
+                onDocsChanged={() => setDocsRevision((revision) => revision + 1)}
+                onOpenImage={(images, index) => setLightbox({ images, index })}
+              />
+            )) : (
+              <p className="booking-inline-note">{locale === "ku" ? "هیچ گەشتیارێک تۆمار نەکراوە." : locale === "ar" ? "لم يسجل أي مسافر." : "No travellers recorded for this booking."}</p>
+            )}
           </div>
           {booking.note && <div className="trip-booking-note"><small>{locale === "ku" ? "تێبینی کڕیار" : locale === "ar" ? "ملاحظة العميل" : "Client note"}</small><p>{booking.note}</p></div>}
         </div>
@@ -2078,6 +2147,7 @@ function BookingInboxDetail({
           {booking.operational_stage === "in_progress" && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("complete")}><Check size={15} /> {locale === "ku" ? "تەواوکردن" : locale === "ar" ? "إكمال" : "Complete"}</button>}
         </footer>
       </section>
+      {lightbox && <TravellerLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
@@ -2097,17 +2167,17 @@ function TripManagementTab({
   runAction,
   askReason,
   locale,
-  onRefreshDetails,
   onEdit,
   onSubmit,
   onPause,
+  onResume,
   onDelete,
   onWithdraw,
   onAdjustSeats,
   canEdit,
   hasPendingRequest,
 }: {
-  tab: "overview" | "bookings" | "travellers" | "documents" | "financials";
+  tab: "overview" | "bookings" | "financials";
   trip: Trip;
   details: TripDetails | null;
   bookings: Booking[];
@@ -2121,19 +2191,17 @@ function TripManagementTab({
   runAction: Props["runAction"];
   askReason: Props["askReason"];
   locale: "ku" | "ar" | "en";
-  onRefreshDetails: () => Promise<any>;
   onEdit: () => void;
   onSubmit: () => Promise<any>;
   onPause: () => void;
+  onResume: () => void;
   onDelete: () => void;
   onWithdraw: () => void;
   onAdjustSeats: () => void;
   canEdit: boolean;
   hasPendingRequest: boolean;
 }) {
-  const [travellerId, setTravellerId] = useState<string | null>(null);
   const activeBookings = bookings.filter((booking) => !["cancelled", "rejected", "expired"].includes(booking.operational_stage));
-  const bookingIds = new Set(bookings.map((booking) => booking.id));
   const gross = bookings.reduce((sum, booking) => sum + Number(booking.total_iqd), 0);
   const received = payments.filter((payment) => payment.status === "succeeded").reduce((sum, payment) => sum + Number(payment.amount_iqd), 0);
   const commission = commissions.reduce((sum, item) => sum + Number(item.amount_iqd), 0);
@@ -2153,62 +2221,6 @@ function TripManagementTab({
       locale={locale}
     />
   );
-
-  if (tab === "travellers") {
-    const selectedTraveller = details?.travellers.find((traveller) => traveller.id === travellerId) ?? null;
-    return (
-      <section className="portal-panel trip-operation-panel">
-        <div className="portal-panel-header"><div><h2>Traveller manifest</h2><p>Open a traveller to review documents and confirm visa readiness</p></div><span className="portal-period">{details?.travellers.length ?? 0} travellers</span></div>
-        {details?.travellers.length ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Traveller</th><th>Passport</th><th>Booking</th><th>Documents</th><th>Visa</th><th>Seat</th></tr></thead><tbody>
-          {details.travellers.map((traveller) => <tr key={traveller.id} className="portal-row-clickable" onClick={() => setTravellerId(traveller.id)}><td><div className="trip-person"><span><UserRound size={16} /></span><div><b>{traveller.full_name}</b><small>{traveller.phone || "No phone"}</small></div></div></td><td>{traveller.passport_no || "Not provided"}</td><td>#{traveller.booking_id.slice(0, 8).toUpperCase()}</td><td><Status value={traveller.document_status || "missing"} /></td><td><Status value={traveller.visa_status || "not_started"} /></td><td>{traveller.transport_seat || "Unassigned"}</td></tr>)}
-        </tbody></table></div> : <OperationEmpty icon={Users} title="No travellers yet" text="Traveller records appear after a booking is created." />}
-        {selectedTraveller && (
-          <TravellerDetailModal
-            traveller={selectedTraveller}
-            docs={details?.documents.filter((document) => document.traveller_id === selectedTraveller.id) ?? []}
-            booking={bookings.find((item) => item.id === selectedTraveller.booking_id)}
-            tripTitle={trip.title}
-            siblings={details?.travellers.filter((item) => item.booking_id === selectedTraveller.booking_id) ?? []}
-            busy={busy}
-            runAction={runAction}
-            askReason={askReason}
-            locale={locale}
-            onRefreshDetails={onRefreshDetails}
-            onClose={() => setTravellerId(null)}
-          />
-        )}
-      </section>
-    );
-  }
-
-  if (tab === "documents") {
-    const docs = details?.documents.filter((document) => bookingIds.has(document.booking_id)) ?? [];
-
-    async function reviewDocument(document: TravellerDocument, status: "approved" | "rejected") {
-      let reason: string | null = null;
-      if (status === "rejected") {
-        reason = await askReason(locale === "ku" ? "بۆچی ئەم بەڵگەنامەیە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذا المستند؟" : "Why is this document being rejected?");
-        if (!reason) return;
-      }
-      const result = await runAction(
-        `document-${document.id}`,
-        () => getSupabase().rpc("review_traveller_document", { p_document_id: document.id, p_status: status, p_reason: reason, p_expires_on: null }),
-        status === "approved"
-          ? (locale === "ku" ? "بەڵگەنامەکە پەسەند کرا." : locale === "ar" ? "تمت الموافقة على المستند." : "Document approved.")
-          : (locale === "ku" ? "بەڵگەنامەکە ڕەتکرایەوە و گەشتیارەکە ئاگادار کرایەوە." : locale === "ar" ? "تم رفض المستند وإبلاغ المسافر." : "Document rejected and the traveller was notified."),
-      );
-      if (result) await onRefreshDetails();
-    }
-
-    return (
-      <section className="portal-panel trip-operation-panel">
-        <div className="portal-panel-header"><div><h2>Traveller documents</h2><p>Review documents only for pilgrims on this trip</p></div><span className="portal-period">{docs.length} files</span></div>
-        {docs.length ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Document</th><th>Traveller</th><th>Booking</th><th>Submitted</th><th>Status</th><th className="right">Action</th></tr></thead><tbody>
-          {docs.map((document) => <tr key={document.id}><td><b>{titleCase(document.kind)}</b></td><td>{details?.travellers.find((traveller) => traveller.id === document.traveller_id)?.full_name ?? "Traveller"}</td><td>#{document.booking_id.slice(0, 8).toUpperCase()}</td><td>{formatDate(document.created_at.slice(0, 10))}</td><td><Status value={document.status} />{document.status === "rejected" && document.rejection_reason && <span className="portal-cell-sub">{document.rejection_reason}</span>}</td><td className="right">{busy === `document-${document.id}` ? <TawafLoadingSpinner size={15} /> : document.status === "under_review" ? <div className="portal-row-actions"><button type="button" className="approve" onClick={() => reviewDocument(document, "approved")}><Check size={13} /> {locale === "ku" ? "پەسەندکردن" : locale === "ar" ? "موافقة" : "Approve"}</button><button type="button" className="danger" onClick={() => reviewDocument(document, "rejected")}><X size={13} /> {locale === "ku" ? "ڕەتکردنەوە" : locale === "ar" ? "رفض" : "Reject"}</button></div> : null}</td></tr>)}
-        </tbody></table></div> : <OperationEmpty icon={FileCheck2} title="No documents submitted" text="Passport, visa and traveller files will be organized here." />}
-      </section>
-    );
-  }
 
   if (tab === "financials") return (
     <>
@@ -2247,9 +2259,10 @@ function TripManagementTab({
             {hasPendingRequest && <div className="trip-action-pending"><ShieldCheck size={17} /><span><b>Admin review pending</b><small>More trip requests unlock after Tawaf decides.</small></span></div>}
             {trip.lifecycle_status === "pending_review" && <div className="trip-action-pending"><ShieldCheck size={17} /><span><b>Admin review pending</b><small>Editing is locked until Tawaf decides or you withdraw.</small></span></div>}
             {canEdit && <button type="button" onClick={onEdit}><span className="green"><Pencil size={17} /></span><div><b>Edit trip</b><small>{["draft", "needs_changes", "rejected"].includes(trip.lifecycle_status) ? "Update the complete trip bundle" : "Send proposed changes to Tawaf"}</small></div><ChevronRight size={16} /></button>}
-            {!hasPendingRequest && ["draft", "needs_changes", "rejected", "paused"].includes(trip.lifecycle_status) && <button type="button" onClick={onSubmit}><span className="gold"><Send size={17} /></span><div><b>Submit for review</b><small>Tawaf admin approval required</small></div><ChevronRight size={16} /></button>}
+            {!hasPendingRequest && ["draft", "needs_changes", "rejected"].includes(trip.lifecycle_status) && <button type="button" onClick={onSubmit}><span className="gold"><Send size={17} /></span><div><b>Submit for review</b><small>Tawaf admin approval required</small></div><ChevronRight size={16} /></button>}
             {trip.lifecycle_status === "pending_review" && <button type="button" onClick={onWithdraw}><span className="sand"><ArrowLeft size={17} /></span><div><b>Withdraw submission</b><small>Return this trip to draft</small></div><ChevronRight size={16} /></button>}
             {!hasPendingRequest && trip.lifecycle_status === "published" && <button type="button" onClick={onPause}><span className="sand"><X size={17} /></span><div><b>Pause sales</b><small>Stop accepting new bookings</small></div><ChevronRight size={16} /></button>}
+            {!hasPendingRequest && trip.lifecycle_status === "paused" && <button type="button" onClick={onResume}><span className="green"><Check size={17} /></span><div><b>Resume sales</b><small>Put this trip back on sale immediately</small></div><ChevronRight size={16} /></button>}
             {!hasPendingRequest && trip.lifecycle_status === "sold_out" && <button type="button" onClick={onAdjustSeats}><span className="gold"><Users size={17} /></span><div><b>Adjust seats</b><small>Increase capacity to reopen sales</small></div><ChevronRight size={16} /></button>}
             {!hasPendingRequest && ["draft", "needs_changes", "rejected"].includes(trip.lifecycle_status) && <button type="button" className="danger" onClick={onDelete}><span><Trash2 size={17} /></span><div><b>Delete trip</b><small>Available only while there are no bookings</small></div><ChevronRight size={16} /></button>}
           </div>
@@ -2267,6 +2280,38 @@ function OperationEmpty({ icon: Icon, title, text }: { icon: typeof Users; title
 const PASSPORT_BUCKET = "booking-passports";
 const isImagePath = (path?: string | null) => /\.(jpe?g|png|webp|gif|heic|avif)$/i.test(path ?? "");
 type LightboxImage = { url: string; label: string };
+type DocSource = { key: string; bucket: string; path: string; label: string; image: boolean };
+
+// The passport and selfie live on the traveller row itself; everything else is a
+// traveller_documents row. Both the booking modal and the traveller modal render
+// the same set, so the shape is built in one place.
+function travellerDocSources(traveller: Traveller, docs: TravellerDocument[], tr: (ku: string, ar: string, en: string) => string): DocSource[] {
+  const t = traveller as any;
+  return [
+    t.passport_image_path ? { key: `${traveller.id}-passport`, bucket: PASSPORT_BUCKET, path: t.passport_image_path as string, label: tr("پاسپۆرت", "جواز السفر", "Passport"), image: true } : null,
+    t.selfie_image_path ? { key: `${traveller.id}-selfie`, bucket: PASSPORT_BUCKET, path: t.selfie_image_path as string, label: tr("وێنەی کەسی", "صورة شخصية", "Selfie"), image: true } : null,
+    ...docs.map((d) => ({ key: d.id, bucket: (d as any).storage_bucket ?? "traveller-documents", path: (d as any).storage_path as string, label: titleCase(d.kind), image: isImagePath((d as any).storage_path) })),
+  ].filter(Boolean) as DocSource[];
+}
+
+// Storage objects are private, so each render needs fresh signed URLs.
+function useSignedDocumentUrls(sources: DocSource[]) {
+  const [signed, setSigned] = useState<Record<string, string>>({});
+  const signKey = sources.map((s) => `${s.bucket}:${s.path}`).join("|");
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = getSupabase();
+      const entries = await Promise.all(sources.map(async (s) => {
+        const { data } = await supabase.storage.from(s.bucket).createSignedUrl(s.path, 3600);
+        return [s.key, data?.signedUrl ?? ""] as const;
+      }));
+      if (active) setSigned(Object.fromEntries(entries.filter(([, url]) => url)));
+    })();
+    return () => { active = false; };
+  }, [signKey]);
+  return signed;
+}
 
 function TravellerLightbox({ images, index, onClose }: { images: LightboxImage[]; index: number; onClose: () => void }) {
   const [current, setCurrent] = useState(index);
@@ -2305,185 +2350,119 @@ function TravellerLightbox({ images, index, onClose }: { images: LightboxImage[]
 
 const TRAVELLER_VISA_STEPS = ["submitted", "under_review", "approved", "rejected"] as const;
 
-function TravellerDetailModal({ traveller, docs, booking, tripTitle, siblings, busy, runAction, askReason, locale, onRefreshDetails, onClose }: {
+// One traveller's documents and visa controls, rendered inline inside the
+// booking modal so a multi-passenger booking shows every pilgrim's paperwork
+// under their own name without drilling into a second screen.
+function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, locale, onDocsChanged, onOpenImage }: {
   traveller: Traveller;
   docs: TravellerDocument[];
-  booking: Booking | undefined;
-  tripTitle: string;
-  siblings: Traveller[];
   busy: string;
-  runAction: (id: string, action: () => any, success: string) => Promise<any>;
-  askReason: (question: string) => Promise<string | null>;
+  runAction: Props["runAction"];
+  askReason?: Props["askReason"];
   locale: "ku" | "ar" | "en";
-  onRefreshDetails: () => Promise<any>;
-  onClose: () => void;
+  onDocsChanged: () => void;
+  onOpenImage: (images: LightboxImage[], index: number) => void;
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const t = traveller as any;
   const rowBusy = busy === `traveller-${traveller.id}`;
-  const [signed, setSigned] = useState<Record<string, string>>({});
   const [visaRef, setVisaRef] = useState<string>(t.visa_reference ?? "");
-  const [seat, setSeat] = useState<string>(traveller.transport_seat ?? "");
-  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+  useEffect(() => { setVisaRef(t.visa_reference ?? ""); }, [t.visa_reference]);
 
-  const sources = [
-    t.passport_image_path ? { key: "passport", bucket: PASSPORT_BUCKET, path: t.passport_image_path as string, label: tr("پاسپۆرت", "جواز السفر", "Passport"), image: true } : null,
-    t.selfie_image_path ? { key: "selfie", bucket: PASSPORT_BUCKET, path: t.selfie_image_path as string, label: tr("وێنەی کەسی", "صورة شخصية", "Selfie"), image: true } : null,
-    ...docs.map((d) => ({ key: d.id, bucket: (d as any).storage_bucket ?? "traveller-documents", path: (d as any).storage_path as string, label: titleCase(d.kind), image: isImagePath((d as any).storage_path) })),
-  ].filter(Boolean) as Array<{ key: string; bucket: string; path: string; label: string; image: boolean }>;
-  const signKey = sources.map((s) => `${s.bucket}:${s.path}`).join("|");
-
-  useEffect(() => { setVisaRef(t.visa_reference ?? ""); setSeat(traveller.transport_seat ?? ""); }, [t.visa_reference, traveller.transport_seat]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !lightbox) onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, lightbox]);
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const supabase = getSupabase();
-      const entries = await Promise.all(sources.map(async (s) => {
-        const { data } = await supabase.storage.from(s.bucket).createSignedUrl(s.path, 3600);
-        return [s.key, data?.signedUrl ?? ""] as const;
-      }));
-      if (active) setSigned(Object.fromEntries(entries.filter(([, url]) => url)));
-    })();
-    return () => { active = false; };
-  }, [signKey]);
-
+  const sources = travellerDocSources(traveller, docs, tr);
+  const signed = useSignedDocumentUrls(sources);
   const galleryImages: LightboxImage[] = sources.filter((s) => s.image && signed[s.key]).map((s) => ({ url: signed[s.key], label: s.label }));
-  const openImage = (key: string) => {
-    const label = sources.find((s) => s.key === key)?.label;
-    const idx = galleryImages.findIndex((g) => g.label === label);
-    if (idx >= 0) setLightbox({ images: galleryImages, index: idx });
-  };
+  const docsApproved = traveller.document_status === "approved";
+  const visaApproved = traveller.visa_status === "approved";
 
-  async function act(id: string, rpc: () => any, success: string) {
-    const result = await runAction(id, rpc, success);
-    if (result) await onRefreshDetails();
+  async function act(rpc: () => any, success: string) {
+    const result = await runAction(`traveller-${traveller.id}`, rpc, success);
+    if (result) onDocsChanged();
   }
   async function approveDocuments() {
-    await act(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
+    await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
   }
   async function rejectDocuments() {
+    if (!askReason) return;
     const reason = await askReason(tr("بۆچی بەڵگەنامەکان ڕەتدەکرێنەوە؟ (زیارەتکار ئەمە دەبینێت)", "لماذا ترفض المستندات؟ (يراها المعتمر)", "Why are the documents rejected? (the pilgrim sees this)"));
     if (!reason) return;
-    await act(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە و زیارەتکار ئاگادار کرایەوە.", "تم رفض المستندات وإبلاغ المعتمر.", "Documents rejected — the pilgrim was notified."));
+    await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە.", "تم رفض المستندات.", "Documents rejected — the pilgrim was notified."));
   }
   async function setVisa(status: string) {
     let reason: string | null = null;
     if (status === "rejected") {
+      if (!askReason) return;
       reason = await askReason(tr("هۆکاری ڕەتکردنەوەی ڤیزا:", "سبب رفض التأشيرة:", "Reason the visa was rejected:"));
       if (!reason) return;
     }
-    await act(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_visa_status: status, p_visa_reference: visaRef || null, p_visa_reason: reason }), status === "approved" ? tr("ڤیزا پشتڕاستکرا — زیارەتکار بۆ قۆناغی داهاتوو بردرا.", "تم تأكيد التأشيرة — انتقل المعتمر للمرحلة التالية.", "Visa confirmed — the pilgrim advances to the next step.") : tr("دۆخی ڤیزا نوێکرایەوە.", "تم تحديث حالة التأشيرة.", "Visa status updated."));
+    await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_visa_status: status, p_visa_reference: visaRef || null, p_visa_reason: reason }), tr("دۆخی ڤیزا نوێکرایەوە.", "تم تحديث حالة التأشيرة.", "Visa status updated."));
   }
-  async function saveSeat() {
-    await act(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_transport_seat: seat || null }), tr("کورسی گواستنەوە پاشەکەوتکرا.", "تم حفظ مقعد النقل.", "Transport seat saved."));
-  }
-  async function markReady() {
-    if (!booking) return;
-    await act(`booking-${booking.id}`, () => getSupabase().rpc("transition_booking", { p_booking_id: booking.id, p_action: "ready", p_reason: null }), tr("گەشتەکە ئامادە کرا بۆ زیارەتکار.", "تم تجهيز الرحلة للمعتمر.", "Trip marked ready for the pilgrim."));
-  }
-
-  const docsApproved = traveller.document_status === "approved";
-  const visaApproved = traveller.visa_status === "approved";
-  const allVisasApproved = siblings.length > 0 && siblings.every((s) => s.visa_status === "approved");
-  const canMarkReady = booking?.operational_stage === "confirmed" && allVisasApproved;
 
   return (
-    <div className="booking-modal-scrim" onClick={onClose}>
-      <div className="booking-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-        <header className="booking-modal-head">
-          <div>
-            <small>{tripTitle} · #{traveller.booking_id.slice(0, 8).toUpperCase()}</small>
-            <h2>{traveller.full_name}</h2>
-            <div className="booking-modal-tags">
-              <span className="booking-pill-label">{tr("بەڵگەنامە", "المستندات", "Documents")}</span><Status value={traveller.document_status || "missing"} />
-              <span className="booking-pill-label">{tr("ڤیزا", "التأشيرة", "Visa")}</span><Status value={traveller.visa_status || "not_started"} />
-            </div>
-          </div>
-          <button type="button" className="booking-modal-close" onClick={onClose} aria-label={tr("داخستن", "إغلاق", "Close")}><X size={18} /></button>
-        </header>
-
-        <div className="booking-modal-body">
-          <section className="booking-summary-grid">
-            <div><small>{tr("پاسپۆرت", "الجواز", "Passport")}</small><b>{traveller.passport_no || tr("نەدراوە", "غير متوفر", "Not provided")}</b></div>
-            <div><small>{tr("تەلەفۆن", "الهاتف", "Phone")}</small><b dir="ltr">{traveller.phone || "—"}</b></div>
-            <div><small>{tr("کورسی", "المقعد", "Seat")}</small><b>{traveller.transport_seat || tr("دیارینەکراوە", "غير محدد", "Unassigned")}</b></div>
-            {t.nationality && <div><small>{tr("نەتەوە", "الجنسية", "Nationality")}</small><b>{t.nationality}</b></div>}
-            {t.date_of_birth && <div><small>{tr("لەدایکبوون", "الميلاد", "Date of birth")}</small><b>{formatDate(t.date_of_birth)}</b></div>}
-            {t.visa_reference && <div><small>{tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa ref")}</small><b>{t.visa_reference}</b></div>}
-          </section>
-
-          {traveller.document_status === "rejected" && t.document_reason && <p className="booking-reason-note"><X size={12} /> {tr("هۆکاری ڕەتکردنەوە", "سبب الرفض", "Rejection note")}: {t.document_reason}</p>}
-
-          <div className="booking-section-title"><FileCheck2 size={14} /> {tr("بەڵگەنامەکان", "المستندات", "Documents")}</div>
-          <div className="booking-doc-row">
-            {sources.length === 0 && <div className="booking-doc-empty">{tr("هێشتا هیچ بەڵگەنامەیەک بارنەکراوە", "لم يتم رفع أي مستند بعد", "No documents uploaded yet")}</div>}
-            {sources.map((s) => {
-              const url = signed[s.key];
-              if (s.image) {
-                return (
-                  <button type="button" key={s.key} className="booking-doc-thumb" onClick={() => openImage(s.key)} disabled={!url}>
-                    {url ? <img src={url} alt={s.label} loading="lazy" /> : <span className="booking-doc-loading"><TawafLoadingSpinner size={14} /></span>}
-                    <small>{s.label}</small>
-                  </button>
-                );
-              }
-              return <a key={s.key} className="booking-doc-file" href={url || undefined} target="_blank" rel="noreferrer"><FileText size={16} /><small>{s.label}</small></a>;
-            })}
-          </div>
-          <div className="booking-review-actions">
-            <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || docsApproved || traveller.document_status === "missing"}>
-              {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
-            </button>
-            <button type="button" className="danger" onClick={rejectDocuments} disabled={rowBusy || traveller.document_status === "missing"}>
-              <X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
-            </button>
-          </div>
-
-          <div className="booking-section-title"><ShieldCheck size={14} /> {tr("ئامادەیی ڤیزا", "جاهزية التأشيرة", "Visa readiness")}</div>
-          {!docsApproved && <p className="booking-inline-note">{tr("سەرەتا بەڵگەنامەکان پەسەند بکە، پاشان ڤیزا پشتڕاست بکە.", "اعتمد المستندات أولاً ثم أكد التأشيرة.", "Approve the documents first, then confirm the visa.")}</p>}
-          <div className="booking-ops-grid">
-            <div className="booking-ops-block">
-              <label>{tr("قۆناغی ڤیزا", "مرحلة التأشيرة", "Visa stage")}</label>
-              <div className="booking-visa-steps">
-                {TRAVELLER_VISA_STEPS.map((s) => (
-                  <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={rowBusy}>{titleCase(s)}</button>
-                ))}
-              </div>
-              <div className="booking-inline-field">
-                <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} />
-              </div>
-              {t.visa_reason && <small className="booking-inline-note">{t.visa_reason}</small>}
-              {!visaApproved && (
-                <button type="button" className="booking-confirm-visa" onClick={() => setVisa("approved")} disabled={rowBusy}>
-                  {rowBusy ? <TawafLoadingSpinner size={13} /> : <BadgeCheck size={14} />} {tr("پشتڕاستکردنی ئامادەیی ڤیزا", "تأكيد جاهزية التأشيرة", "Confirm visa ready")}
-                </button>
-              )}
-            </div>
-            <div className="booking-ops-block">
-              <label>{tr("کورسی گواستنەوە", "مقعد النقل", "Transport seat")}</label>
-              <div className="booking-inline-field">
-                <input value={seat} onChange={(event) => setSeat(event.target.value)} placeholder={tr("وەک B12", "مثل B12", "e.g. B12")} />
-                <button type="button" onClick={saveSeat} disabled={rowBusy || seat === (traveller.transport_seat ?? "")}>{tr("پاشەکەوت", "حفظ", "Save")}</button>
-              </div>
-              {visaApproved && <p className="booking-inline-note" style={{ color: "#176a50" }}><Check size={12} /> {tr("ڤیزا ئامادەیە — زیارەتکار لە قۆناغی داهاتوودایە.", "التأشيرة جاهزة — المعتمر في المرحلة التالية.", "Visa ready — the pilgrim is on the next step.")}</p>}
-            </div>
-          </div>
+    <article className="booking-traveller-panel">
+      <header>
+        <span><UserRound size={15} /></span>
+        <div>
+          <b>{traveller.full_name}</b>
+          <small>{traveller.passport_no || tr("پاسپۆرت زیاد نەکراوە", "لم يضف جواز السفر", "No passport yet")}</small>
         </div>
+        <div className="booking-traveller-pills">
+          <span className="booking-pill-label">{tr("بەڵگەنامە", "المستندات", "Documents")}</span><Status value={traveller.document_status || "missing"} />
+          <span className="booking-pill-label">{tr("ڤیزا", "التأشيرة", "Visa")}</span><Status value={traveller.visa_status || "not_started"} />
+        </div>
+      </header>
 
-        <footer className="booking-modal-actions">
-          {canMarkReady && (
-            <button type="button" className="approve" onClick={markReady} disabled={busy === `booking-${booking?.id}`}><Check size={14} /> {tr("گەشت ئامادەیە بۆ زیارەتکاران", "الرحلة جاهزة للمعتمرين", "Mark trip ready for pilgrims")}</button>
-          )}
-          <span className="booking-readonly-note">{allVisasApproved ? tr("هەموو ڤیزاکان پەسەندکراون", "كل التأشيرات معتمدة", "All visas approved") : tr(`${siblings.filter((s) => s.visa_status === "approved").length}/${siblings.length} ڤیزا پەسەندکراوە`, `${siblings.filter((s) => s.visa_status === "approved").length}/${siblings.length} تأشيرات معتمدة`, `${siblings.filter((s) => s.visa_status === "approved").length}/${siblings.length} visas approved`)}</span>
-        </footer>
+      {traveller.document_status === "rejected" && t.document_reason && (
+        <p className="booking-reason-note"><X size={12} /> {tr("هۆکاری ڕەتکردنەوە", "سبب الرفض", "Rejection note")}: {t.document_reason}</p>
+      )}
+
+      <div className="booking-doc-row">
+        {sources.length === 0 && <div className="booking-doc-empty">{tr("هێشتا هیچ بەڵگەنامەیەک بارنەکراوە", "لم يتم رفع أي مستند بعد", "No documents uploaded yet")}</div>}
+        {sources.map((s) => {
+          const url = signed[s.key];
+          if (s.image) {
+            return (
+              <button
+                type="button"
+                key={s.key}
+                className="booking-doc-thumb"
+                onClick={() => {
+                  const idx = galleryImages.findIndex((g) => g.label === s.label);
+                  if (idx >= 0) onOpenImage(galleryImages, idx);
+                }}
+                disabled={!url}
+              >
+                {url ? <img src={url} alt={s.label} loading="lazy" /> : <span className="booking-doc-loading"><TawafLoadingSpinner size={14} /></span>}
+                <small>{s.label}</small>
+              </button>
+            );
+          }
+          return <a key={s.key} className="booking-doc-file" href={url || undefined} target="_blank" rel="noreferrer"><FileText size={16} /><small>{s.label}</small></a>;
+        })}
       </div>
-      {lightbox && <TravellerLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} />}
-    </div>
+
+      <div className="booking-review-actions">
+        <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || docsApproved || traveller.document_status === "missing"}>
+          {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
+        </button>
+        <button type="button" className="danger" onClick={rejectDocuments} disabled={rowBusy || traveller.document_status === "missing"}>
+          <X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
+        </button>
+      </div>
+
+      <label className="booking-traveller-visa-label">{tr("قۆناغی ڤیزا", "مرحلة التأشيرة", "Visa stage")}</label>
+      {!docsApproved && <p className="booking-inline-note">{tr("سەرەتا بەڵگەنامەکان پەسەند بکە، پاشان ڤیزا پشتڕاست بکە.", "اعتمد المستندات أولاً ثم أكد التأشيرة.", "Approve the documents first, then confirm the visa.")}</p>}
+      <div className="booking-visa-steps">
+        {TRAVELLER_VISA_STEPS.map((s) => (
+          <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={rowBusy}>{titleCase(s)}</button>
+        ))}
+      </div>
+      <div className="booking-inline-field">
+        <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} />
+      </div>
+      {t.visa_reason && <small className="booking-inline-note">{t.visa_reason}</small>}
+      {visaApproved && <p className="booking-inline-note" style={{ color: "#176a50" }}><Check size={12} /> {tr("ڤیزا ئامادەیە.", "التأشيرة جاهزة.", "Visa ready.")}</p>}
+    </article>
   );
 }
 

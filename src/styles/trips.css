@@ -383,7 +383,14 @@
 .trip-booking-quick button.cash { color: #805d10; border-color: #ead08b; background: #fff8e6; }
 .trip-booking-quick button:disabled { opacity: .35; cursor: not-allowed; }
 
-.trip-booking-gesture-help { margin: 0; padding: 10px 17px; color: #8b9791; background: #fbfcf8; font-size: 8.5px; text-align: center; }
+.trip-booking-gesture-help { margin: 0; padding: 10px 17px; color: #8b9791; background: #fbfcf8; font-size: 10.5px; text-align: center; }
+
+/* The gestures it describes are touch-only (see startGesture) — mouse/trackpad
+   users have explicit call/mail buttons and right-click instead, so the hint
+   would just be confusing noise on those devices. */
+@media (hover: hover) and (pointer: fine) {
+  .trip-booking-gesture-help { display: none; }
+}
 
 .portal-modal.trip-booking-detail { width: min(720px, 100%); max-height: min(780px, calc(100vh - 40px)); overflow: auto; }
 .trip-booking-detail > header { align-items: flex-start; }
@@ -403,13 +410,21 @@
 .trip-booking-detail-contact b { display: block; }
 .trip-booking-detail-contact small { color: #74877e; font-size: 8px; }
 .trip-booking-detail-contact b { margin-top: 3px; font-size: 10px; }
-.trip-booking-detail-travellers h3 { margin: 18px 0 8px; font-size: 11px; }
-.trip-booking-detail-travellers > div { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; padding: 8px 2px; border-bottom: 1px solid rgba(15,92,77,.09); }
-.trip-booking-detail-travellers > div > span { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; color: #0f5c4d; background: #edf5f1; }
-.trip-booking-detail-travellers b,
-.trip-booking-detail-travellers small { display: block; }
-.trip-booking-detail-travellers b { font-size: 10px; }
-.trip-booking-detail-travellers small { margin-top: 3px; color: #84918b; font-size: 8px; }
+.trip-booking-detail-travellers h3 { display: flex; align-items: center; gap: 7px; margin: 18px 0 8px; font-size: 11px; }
+.trip-booking-detail-travellers h3 > i { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border-radius: 7px; color: #0f5c4d; background: #e7eee9; font-size: 9px; font-style: normal; font-weight: 800; }
+
+/* One block per pilgrim: name, their documents, and their visa controls. Each
+   booking can carry several travellers, so the name heads its own panel. */
+.booking-traveller-panel { margin-top: 10px; padding: 13px 14px; border: 1px solid rgba(15,92,77,.12); border-radius: 13px; background: #fbfcf8; }
+.booking-traveller-panel + .booking-traveller-panel { margin-top: 12px; }
+.booking-traveller-panel > header { display: grid; grid-template-columns: 31px minmax(0, 1fr); align-items: center; gap: 10px; }
+.booking-traveller-panel > header > span:first-child { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; color: #0f5c4d; background: #edf5f1; }
+.booking-traveller-panel > header b,
+.booking-traveller-panel > header small { display: block; }
+.booking-traveller-panel > header b { font-size: 12px; }
+.booking-traveller-panel > header small { margin-top: 3px; color: #84918b; font-size: 10px; }
+.booking-traveller-pills { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.booking-traveller-visa-label { display: block; margin: 14px 0 7px; color: #46564f; font-size: 11px; font-weight: 800; }
 .trip-booking-note { margin-top: 14px; padding: 12px; border-radius: 11px; background: #fff8e8; }
 .trip-booking-note small { color: #8d6a23; font-size: 8px; font-weight: 800; }
 .trip-booking-note p { margin: 6px 0 0; color: #5d533d; font-size: 9.5px; line-height: 1.6; }
@@ -1162,6 +1177,18 @@
   .trip-manage-head { align-items: stretch; flex-direction: column; }
   .trip-manage-actions { width: 100%; }
   .trip-manage-actions > button { flex: 1; }
+  .trip-tabs { position: relative; }
+  .trip-tabs::after {
+    content: "";
+    position: absolute;
+    top: 7px;
+    right: 0;
+    bottom: 7px;
+    width: 28px;
+    border-radius: 0 14px 14px 0;
+    background: linear-gradient(to right, rgba(251,252,248,0), rgba(251,252,248,.95));
+    pointer-events: none;
+  }
   .trip-hero { min-height: 270px; align-items: flex-start; flex-direction: column; justify-content: flex-end; padding: 24px; }
   .trip-hero h1 { font-size: 38px; }
   .trip-hero-status { align-items: flex-start; }

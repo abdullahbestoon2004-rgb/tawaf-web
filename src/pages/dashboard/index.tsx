@@ -55,6 +55,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { useScrollLock } from "@/lib/use-scroll-lock";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
 import { dashboardTranslations } from "./translations.ts";
@@ -65,20 +66,6 @@ type AskReason = (title: string, options?: { optional?: boolean }) => Promise<st
 
 // Freeze background page scroll while a full-screen overlay (modal/drawer) is
 // mounted. Compensates for the scrollbar width so the page doesn't shift.
-function useScrollLock() {
-  useEffect(() => {
-    const { body, documentElement } = document;
-    const scrollbarWidth = window.innerWidth - documentElement.clientWidth;
-    const previousOverflow = body.style.overflow;
-    const previousPaddingRight = body.style.paddingRight;
-    body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
-    return () => {
-      body.style.overflow = previousOverflow;
-      body.style.paddingRight = previousPaddingRight;
-    };
-  }, []);
-}
 type PageId =
   | "overview"
   | "companies"
