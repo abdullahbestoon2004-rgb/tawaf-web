@@ -1,0 +1,8 @@
+-- "Everyone" announcements also go to the installation-level FCM topic, so
+-- signed-out and not-yet-registered users receive the system notification.
+-- Apply through the Flutter repository migration:
+--   supabase/migrations/20260726124500_public_guest_announcements.sql
+--
+-- The canonical migration is kept in the mobile repository because it changes
+-- both the dashboard RPC and the mobile push sender. This marker keeps the web
+-- repository's Supabase setup inventory honest without duplicating live DDL.

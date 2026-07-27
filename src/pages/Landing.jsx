@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useGSAP } from "@gsap/react";
 import { getSupabase } from "@/lib/supabase";
 import { translations } from "../translations.ts";
 import "../styles/landing.css";
+
+gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 function formatIqd(value) {
   return `IQD ${new Intl.NumberFormat("en-US").format(Number(value ?? 0))}`;
@@ -33,6 +38,14 @@ export default function Landing() {
     setLocale(newLocale);
     localStorage.setItem("tawaf-locale", newLocale);
   };
+
+  // Freeze background scroll while the package modal is open.
+  useEffect(() => {
+    if (!selectedPackage) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [selectedPackage]);
 
   const t = translations[locale];
 
@@ -113,8 +126,159 @@ export default function Landing() {
   const dir = locale === "en" ? "ltr" : "rtl";
   const arrow = locale === "en" ? "→" : "←";
 
+  const scope = useRef(null);
+
+  // Hero entrance, scroll reveals, and hover motion for the static sections.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+
+      // Full experience — only for users who haven't asked for reduced motion.
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        // Hero entrance timeline on load — timeScale keeps the staggered
+        // choreography but plays it back noticeably quicker.
+        const intro = gsap.timeline({ defaults: { ease: "power3.out", duration: 0.7 } });
+        intro
+          .from(".top-nav", { y: -24, autoAlpha: 0, duration: 0.6 })
+          .from(".hero-eyebrow", { y: 20, autoAlpha: 0, duration: 0.5 }, "-=0.2")
+          .from(".hero h1", { y: 34, autoAlpha: 0 }, "-=0.25")
+          .from(".hero p.lede", { y: 26, autoAlpha: 0, duration: 0.6 }, "-=0.4")
+          .from(".hero-cta-row > *", { y: 20, autoAlpha: 0, stagger: 0.1, duration: 0.5 }, "-=0.35")
+          .from(".hero-stats > div", { y: 20, autoAlpha: 0, stagger: 0.08, duration: 0.5 }, "-=0.25")
+          .from(".hero-photo", { scale: 1.06, autoAlpha: 0, duration: 0.9, ease: "power2.out" }, "-=0.9")
+          .from(".hero-verified", { y: 24, autoAlpha: 0, duration: 0.6 }, "-=0.4");
+        intro.timeScale(1.8);
+
+        // Gentle float on the "verified" badge once it's in.
+        gsap.to(".hero-verified", {
+          y: -8,
+          duration: 2.4,
+          ease: "sine.inOut",
+          yoyo: true,
+          repeat: -1,
+          delay: 1,
+        });
+
+        // Subtle parallax on the hero photo as the page scrolls.
+        gsap.to(".hero-photo-img", {
+          yPercent: 8,
+          ease: "none",
+          scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true },
+        });
+
+        // Scroll-reveal groups — each batch fades up as it enters the viewport.
+        const revealGroups = [
+          ".badge-strip > div",
+          ".section-head",
+          ".feature-head",
+          ".feature-grid > div",
+          ".steps-section > div:first-child > *",
+          ".step-row",
+          ".roles-section .head",
+          ".role-card",
+          ".lang-section > div",
+          ".faq-section > div:first-child > *",
+          ".faq-item",
+          ".cta-section > *:not(.cta-ring)",
+        ];
+        revealGroups.forEach((selector) => {
+          const items = gsap.utils.toArray(selector);
+          if (!items.length) return;
+          gsap.set(items, { autoAlpha: 0, y: 32 });
+          ScrollTrigger.batch(items, {
+            start: "top 88%",
+            onEnter: (batch) =>
+              gsap.to(batch, {
+                autoAlpha: 1,
+                y: 0,
+                duration: 0.7,
+                ease: "power3.out",
+                stagger: 0.09,
+                overwrite: true,
+              }),
+          });
+        });
+
+        ScrollTrigger.refresh();
+      });
+
+      // Hover lift on cards & buttons (pointer devices, motion allowed).
+      mm.add("(hover: hover) and (prefers-reduced-motion: no-preference)", () => {
+        const hoverTargets = gsap.utils.toArray(".role-card, .feature-grid > div");
+        const cleanups = hoverTargets.map((el) => {
+          const enter = () => gsap.to(el, { y: -8, duration: 0.35, ease: "power2.out" });
+          const leave = () => gsap.to(el, { y: 0, duration: 0.45, ease: "power2.out" });
+          el.addEventListener("mouseenter", enter);
+          el.addEventListener("mouseleave", leave);
+          return () => {
+            el.removeEventListener("mouseenter", enter);
+            el.removeEventListener("mouseleave", leave);
+          };
+        });
+
+        const buttons = gsap.utils.toArray(".btn-primary, .cta-form button");
+        buttons.forEach((el) => {
+          const enter = () => gsap.to(el, { scale: 1.04, duration: 0.25, ease: "power2.out" });
+          const leave = () => gsap.to(el, { scale: 1, duration: 0.3, ease: "power2.out" });
+          el.addEventListener("mouseenter", enter);
+          el.addEventListener("mouseleave", leave);
+          cleanups.push(() => {
+            el.removeEventListener("mouseenter", enter);
+            el.removeEventListener("mouseleave", leave);
+          });
+        });
+
+        return () => cleanups.forEach((fn) => fn());
+      });
+    },
+    { scope }
+  );
+
+  // Package cards load asynchronously and re-render on filter change, so they
+  // get their own reveal + hover pass that re-runs whenever the list changes.
+  useGSAP(
+    () => {
+      const cards = gsap.utils.toArray(".pkg-card");
+      if (!cards.length) return;
+
+      const mm = gsap.matchMedia();
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.set(cards, { autoAlpha: 0, y: 32 });
+        ScrollTrigger.batch(cards, {
+          start: "top 90%",
+          onEnter: (batch) =>
+            gsap.to(batch, {
+              autoAlpha: 1,
+              y: 0,
+              duration: 0.6,
+              ease: "power3.out",
+              stagger: 0.08,
+              overwrite: true,
+            }),
+        });
+        ScrollTrigger.refresh();
+      });
+
+      mm.add("(hover: hover) and (prefers-reduced-motion: no-preference)", () => {
+        const cleanups = cards.map((card) => {
+          const enter = () => gsap.to(card, { y: -8, scale: 1.015, duration: 0.35, ease: "power2.out" });
+          const leave = () => gsap.to(card, { y: 0, scale: 1, duration: 0.45, ease: "power2.out" });
+          card.addEventListener("mouseenter", enter);
+          card.addEventListener("mouseleave", leave);
+          return () => {
+            card.removeEventListener("mouseenter", enter);
+            card.removeEventListener("mouseleave", leave);
+          };
+        });
+        return () => cleanups.forEach((fn) => fn());
+      });
+    },
+    { scope, dependencies: [visiblePackages, packagesLoading] }
+  );
+
   return (
-    <main className="landing" dir={dir} lang={locale}>
+    <main className="landing" dir={dir} lang={locale} ref={scope}>
       <div id="hero-pattern" aria-hidden="true" />
 
       <nav className="top-nav" id="top">
@@ -165,11 +329,11 @@ export default function Landing() {
         </div>
         <div className="hero-photo-wrap">
           <div className="hero-photo">
-            {/* Drop the real photo at public/assets/images/hero-umrah.jpg — on 404 it
+            {/* Real photo lives at public/assets/images/haram.webp — on 404 it
                 hides itself and the decorative placeholder underneath shows through. */}
             <img
               className="hero-photo-img"
-              src="/assets/images/hero-umrah.jpg"
+              src="/assets/images/haram.webp"
               alt={t.heroPhotoAlt ?? "Kaaba, Makkah"}
               onError={(event) => { event.currentTarget.style.display = "none"; }}
             />

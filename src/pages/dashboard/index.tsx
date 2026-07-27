@@ -5,7 +5,6 @@ import "../../styles/trips.css";
 import "../../styles/portal-theme.css";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Activity,
   ArrowDownRight,
   AlertTriangle,
   ArrowRight,
@@ -24,18 +23,21 @@ import {
   ClipboardCheck,
   Clock3,
   CreditCard,
+  ChevronLeft,
+  Eye,
   FileCheck2,
   FileText,
   Filter,
   Headphones,
+  Hourglass,
   Languages,
   LayoutDashboard,
+  Lock,
   LogOut,
   Mail,
   MapPin,
   Menu,
   MessageSquareText,
-  MoreHorizontal,
   Plane,
   Plus,
   PhoneCall,
@@ -45,14 +47,13 @@ import {
   ShieldCheck,
   Star,
   TicketCheck,
-  TrendingUp,
   Upload,
   UserRound,
   WalletCards,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
@@ -60,7 +61,24 @@ import { dashboardTranslations } from "./translations.ts";
 
 type Role = "admin" | "agency";
 type RunAction = (id: string, action: () => any, success: string) => Promise<any>;
-type AskReason = (title: string) => Promise<string | null>;
+type AskReason = (title: string, options?: { optional?: boolean }) => Promise<string | null>;
+
+// Freeze background page scroll while a full-screen overlay (modal/drawer) is
+// mounted. Compensates for the scrollbar width so the page doesn't shift.
+function useScrollLock() {
+  useEffect(() => {
+    const { body, documentElement } = document;
+    const scrollbarWidth = window.innerWidth - documentElement.clientWidth;
+    const previousOverflow = body.style.overflow;
+    const previousPaddingRight = body.style.paddingRight;
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.paddingRight = previousPaddingRight;
+    };
+  }, []);
+}
 type PageId =
   | "overview"
   | "companies"
@@ -82,6 +100,9 @@ type Profile = {
 type Company = {
   id: string;
   owner_id: string;
+  // A branch is a company whose parent_company_id points at its head office.
+  // Null means this row is itself a head office (or a single-office agency).
+  parent_company_id: string | null;
   name: string;
   name_ar: string | null;
   name_en: string | null;
@@ -116,6 +137,12 @@ type Company = {
   created_at: string;
 };
 
+type CompanyOwner = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+};
+
 type Trip = {
   id: string;
   company_id: string;
@@ -128,6 +155,7 @@ type Trip = {
   image_url: string | null;
   lifecycle_status: string;
   review_reason: string | null;
+  rejection_reason?: string | null;
   departure_date: string | null;
   return_date: string | null;
   capacity: number | null;
@@ -158,14 +186,71 @@ type Booking = {
   id: string;
   package_id: string;
   company_id: string;
+  client_id: string;
   travellers: number;
   total_iqd: number;
   amount_paid_iqd: number;
+  amount_due_now_iqd: number;
+  // What the company actually keeps. Already selected by `select("*")` — it was
+  // simply never surfaced, so agencies read gross and did the subtraction
+  // themselves.
+  payout_iqd: number | null;
+  commission_iqd: number | null;
+  commission_rate: number | null;
   operational_stage: string;
+  status_reason: string | null;
   pay_method: string;
+  pay_status: string;
   departure_date: string | null;
   contact_phone: string | null;
+  note: string | null;
+  room_label: string | null;
+  room_occupancy: number | null;
+  room_count: number | null;
+  expires_at: string | null;
   created_at: string;
+};
+
+// booking_travellers has no company_id column; RLS ("read booking travellers")
+// scopes a bare select to the caller's own bookings + their company's bookings,
+// so we never filter these client-side by company.
+type BookingTraveller = {
+  id: string;
+  booking_id: string;
+  client_id: string;
+  full_name: string;
+  local_name: string | null;
+  passport_no: string | null;
+  date_of_birth: string | null;
+  phone: string | null;
+  gender: string | null;
+  nationality: string | null;
+  passport_expiry_date: string | null;
+  is_lead: boolean;
+  passport_image_path: string | null;
+  selfie_image_path: string | null;
+  document_status: string;
+  document_reason: string | null;
+  visa_status: string;
+  visa_reference: string | null;
+  visa_reason: string | null;
+  transport_seat: string | null;
+  created_at: string;
+};
+
+type TravellerDocument = {
+  id: string;
+  traveller_id: string;
+  booking_id: string;
+  company_id: string;
+  kind: string;
+  storage_path: string;
+  storage_bucket: string;
+  status: string;
+  rejection_reason: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type Commission = {
@@ -227,9 +312,12 @@ type Payout = {
 
 type PortalData = {
   companies: Company[];
+  companyOwners: CompanyOwner[];
   trips: Trip[];
   tripChangeRequests: TripChangeRequest[];
   bookings: Booking[];
+  bookingTravellers: BookingTraveller[];
+  travellerDocuments: TravellerDocument[];
   commissions: Commission[];
   payments: Payment[];
   support: SupportMessage[];
@@ -240,9 +328,12 @@ type PortalData = {
 
 const emptyData: PortalData = {
   companies: [],
+  companyOwners: [],
   trips: [],
   tripChangeRequests: [],
   bookings: [],
+  bookingTravellers: [],
+  travellerDocuments: [],
   commissions: [],
   payments: [],
   support: [],
@@ -258,7 +349,7 @@ const adminNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> = 
   { id: "bookings", label: "Bookings", icon: BookOpenCheck },
   { id: "finance", label: "Finance", icon: CircleDollarSign },
   { id: "support", label: "Support", icon: Headphones },
-  { id: "more", label: "More", icon: MoreHorizontal },
+  { id: "more", label: "Settings", icon: Settings },
 ];
 
 const companyNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> = [
@@ -269,6 +360,147 @@ const companyNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> 
   { id: "finance", label: "Money", icon: WalletCards },
   { id: "more", label: "Company profile", icon: Settings },
 ];
+
+// Which branch the operator is working inside. Persisted so a refresh does not
+// silently drop them back into the head office — acting on the wrong branch is
+// the main hazard of a multi-branch workspace.
+const ACTIVE_COMPANY_KEY = "tawaf-active-company";
+
+// Mirrors lib/utils/iraqi_cities.dart in the Flutter app. The app ranks trips by
+// the client's home city and has to alias-match free-text locations ("Erbil",
+// "erbil", "هەولێر", …) back to one key; picking from this list writes the
+// canonical English name so that matching always succeeds. Keep both lists in
+// step — adding a city here means adding it there too.
+const IRAQI_CITIES: Array<{ value: string; ku: string; ar: string; en: string }> = [
+  { value: "Erbil", ku: "هەولێر", ar: "أربيل", en: "Erbil" },
+  { value: "Sulaymaniyah", ku: "سلێمانی", ar: "السليمانية", en: "Sulaymaniyah" },
+  { value: "Duhok", ku: "دهۆک", ar: "دهوك", en: "Duhok" },
+  { value: "Halabja", ku: "هەڵەبجە", ar: "حلبجة", en: "Halabja" },
+  { value: "Kirkuk", ku: "کەرکووک", ar: "كركوك", en: "Kirkuk" },
+];
+
+const cityLabel = (city: (typeof IRAQI_CITIES)[number], locale: "ku" | "ar" | "en") =>
+  locale === "ku" ? city.ku : locale === "ar" ? city.ar : city.en;
+
+// Wording for a desktop notification. Mirrors the app's notification screen so
+// the same event reads the same on both surfaces.
+function notificationCopy(type: string, arg: string | null, locale: "ku" | "ar" | "en") {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const subject = arg || tr("گەشتێک", "رحلة", "a trip");
+  switch (type) {
+    case "bookingRequested": return { title: tr("داواکاری حیجزی نوێ", "طلب حجز جديد", "New booking request"), body: subject };
+    case "bookingConfirmed": return { title: tr("حیجز پشتڕاستکرایەوە", "تم تأكيد الحجز", "Booking confirmed"), body: subject };
+    case "bookingCancelled": return { title: tr("حیجز هەڵوەشێندرایەوە", "تم إلغاء الحجز", "Booking cancelled"), body: subject };
+    case "bookingReady": return { title: tr("گەشت ئامادەیە", "الرحلة جاهزة", "Trip is ready"), body: subject };
+    case "documentsUploaded": return { title: tr("بەڵگەنامە بارکرا", "تم رفع مستندات", "Documents uploaded"), body: subject };
+    case "documentsApproved": return { title: tr("بەڵگەنامەکان پەسەندکران", "تمت الموافقة على المستندات", "Documents approved"), body: subject };
+    case "documentsRejected": return { title: tr("بەڵگەنامەکان ڕەتکرانەوە", "تم رفض المستندات", "Documents rejected"), body: subject };
+    case "visaApproved": return { title: tr("ڤیزا پەسەندکرا", "تمت الموافقة على التأشيرة", "Visa approved"), body: subject };
+    case "visaRejected": return { title: tr("ڤیزا ڕەتکرایەوە", "تم رفض التأشيرة", "Visa rejected"), body: subject };
+    case "tripStarted": return { title: tr("گەشت دەستی پێکرد", "بدأت الرحلة", "Trip started"), body: subject };
+    case "tripCompleted": return { title: tr("گەشت تەواوبوو", "اكتملت الرحلة", "Trip completed"), body: subject };
+    case "announcement": return { title: tr("ڕاگەیاندنی تەواف", "إعلان من طواف", "Tawaf announcement"), body: subject };
+    case "companyReview": return { title: tr("پێداچوونەوەی کۆمپانیا", "مراجعة الشركة", "Company review"), body: subject };
+    case "packageSubmitted": return { title: tr("گەشتی نوێ بۆ پێداچوونەوە", "رحلة جديدة للمراجعة", "New trip to review"), body: subject };
+    case "packageReview": return { title: tr("پێداچوونەوەی گەشت", "مراجعة الرحلة", "Trip review"), body: subject };
+    default: return { title: "Tawaf", body: subject };
+  }
+}
+
+// Desktop notifications for the dashboard. The browser's Notification API needs
+// no keys or service worker as long as the tab is open, which pairs with the
+// realtime subscriptions: a row lands, the operator is told even if the tab is
+// in the background.
+//
+// Permission is requested once per browser. If it was denied we never ask again
+// (the browser blocks repeat prompts anyway) and the workspace simply carries on
+// showing the in-app badges.
+function useBrowserNotifications(enabled: boolean, userId: string | undefined, locale: "ku" | "ar" | "en") {
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+
+  useEffect(() => {
+    if (!enabled || !userId) return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+
+    let cancelled = false;
+    // Asked on open, as soon as we know who is signed in.
+    if (Notification.permission === "default") {
+      void Notification.requestPermission().catch(() => {});
+    }
+
+    const supabase = getSupabase();
+    const channel = supabase.channel(`tawaf-web:desktop-notify:${userId}`);
+    channel.on(
+      "postgres_changes" as any,
+      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` } as any,
+      (payload: any) => {
+        if (cancelled || Notification.permission !== "granted") return;
+        const row = payload?.new ?? {};
+        const { title, body } = notificationCopy(String(row.type ?? ""), row.arg ?? null, localeRef.current);
+        try {
+          // tag collapses duplicates if the same row arrives twice.
+          new Notification(title, { body, icon: "/brand/tawaf-icon.png", tag: String(row.id ?? "") });
+        } catch {
+          // Some browsers throw when constructing notifications outside a
+          // service worker; the in-app badge is the fallback.
+        }
+      },
+    );
+    channel.subscribe();
+
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+    };
+  }, [enabled, userId]);
+}
+
+type RealtimeWatch = { table: string; filter?: string };
+
+// Live workspace. Two operators (and the pilgrim app) act on the same rows, so
+// without this an admin approves a trip and the company keeps looking at a
+// stale card until they hit refresh — the "Live data" badge in the topbar was
+// decorative before this existed.
+//
+// The payload is deliberately ignored: we refetch through the normal loader,
+// which re-applies RLS for the signed-in role rather than trusting a pushed row.
+function useRealtimeSync(enabled: boolean, watches: RealtimeWatch[], onChange: () => void) {
+  const handler = useRef(onChange);
+  handler.current = onChange;
+  // Only re-subscribe when the watch set actually changes, not on every render.
+  const key = watches.map((item) => `${item.table}:${item.filter ?? ""}`).join("|");
+
+  useEffect(() => {
+    if (!enabled || !watches.length) return;
+    const supabase = getSupabase();
+    let timer: number | undefined;
+    // One action touches several rows (booking + notification + commission), so
+    // coalesce a burst into a single reload.
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => handler.current(), 400);
+    };
+
+    const channels = watches.map((item) => {
+      const channel = supabase.channel(`tawaf-web:${item.table}:${item.filter ?? "all"}`);
+      channel.on(
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: item.table, ...(item.filter ? { filter: item.filter } : {}) } as any,
+        schedule,
+      );
+      channel.subscribe();
+      return channel;
+    });
+
+    return () => {
+      window.clearTimeout(timer);
+      // Stale channels would otherwise leak events across accounts/branches.
+      channels.forEach((channel) => { void supabase.removeChannel(channel); });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key]);
+}
 
 const statusLabels: Record<string, string> = {
   pending_review: "Pending review",
@@ -309,6 +541,27 @@ function formatDate(value: string | null | undefined, includeYear = false) {
     month: "short",
     ...(includeYear ? { year: "numeric" } : {}),
   }).format(new Date(value));
+}
+
+/// Departure–return as one string. The year is printed once at the end when
+/// both dates fall in the same year, so "01 Aug – 12 Aug 2026" rather than the
+/// noisier "01 Aug 2026 – 12 Aug 2026".
+///
+/// `bookings` has no return date of its own; callers pass the one from the
+/// booking's package, which is where the trip's itinerary actually lives.
+function formatDateRange(from: string | null | undefined, to: string | null | undefined) {
+  if (!from) return formatDate(from, true);
+  if (!to) return formatDate(from, true);
+  const sameYear = new Date(from).getFullYear() === new Date(to).getFullYear();
+  return `${formatDate(from, !sameYear)} – ${formatDate(to, true)}`;
+}
+
+/// Nights between the two dates, or null when either is missing. Agencies price
+/// and staff trips by night count, so it is worth showing where there is room.
+function nightsBetween(from: string | null | undefined, to: string | null | undefined) {
+  if (!from || !to) return null;
+  const nights = Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000);
+  return nights > 0 ? nights : null;
 }
 
 function relativeTime(value: string | null | undefined) {
@@ -378,11 +631,57 @@ function statusTone(status: string) {
   return "neutral";
 }
 
+type CompanyVerificationState = "pending" | "needs_changes" | "approved" | "suspended" | "rejected";
+
+function companyVerificationState(company: Company): CompanyVerificationState {
+  if (company.verification_status === "rejected" || company.status === "rejected") return "rejected";
+  if (company.verification_status === "suspended" || company.status === "suspended" || !company.is_active) return "suspended";
+  if (company.verification_status === "needs_changes") return "needs_changes";
+  if (company.verification_status === "approved" && company.is_active) return "approved";
+  return "pending";
+}
+
+function companyProfileCompletion(company: Company) {
+  const fields = [
+    company.name,
+    company.license_number,
+    company.location,
+    company.office_address,
+    company.phone,
+    company.about,
+    company.logo_url,
+    company.banner_url,
+    company.office_hours,
+    company.accepted_payment_methods?.length,
+  ];
+  return Math.round((fields.filter(Boolean).length / fields.length) * 100);
+}
+
+function localizedCompanyStatus(status: string, locale?: "ku" | "ar" | "en") {
+  if (!locale) return titleCase(status);
+  const copy: Record<string, [string, string, string]> = {
+    pending: ["چاوەڕێی پێداچوونەوە", "بانتظار المراجعة", "Pending review"],
+    needs_changes: ["گۆڕانکاری پێویستە", "تعديلات مطلوبة", "Changes requested"],
+    approved: ["پەسەندکراو", "معتمدة", "Approved"],
+    suspended: ["ڕاگیراو", "معلقة", "Suspended"],
+    rejected: ["ڕەتکراوە", "مرفوضة", "Rejected"],
+  };
+  const value = copy[status];
+  return value ? value[locale === "ku" ? 0 : locale === "ar" ? 1 : 2] : titleCase(status);
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  // Every company this account may act for. More than one means the agency runs
+  // branches, and the workspace shows a switcher.
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [branchFormOpen, setBranchFormOpen] = useState(false);
+  const [branchName, setBranchName] = useState("");
+  const [branchLocation, setBranchLocation] = useState("");
   const [data, setData] = useState<PortalData>(emptyData);
   const [page, setPage] = useState<PageId>("overview");
   const [loading, setLoading] = useState(true);
@@ -394,14 +693,15 @@ export default function DashboardPage() {
   const [bellOpen, setBellOpen] = useState(false);
   const [reasonDialog, setReasonDialog] = useState<{
     title: string;
+    optional: boolean;
     resolve: (value: string | null) => void;
   } | null>(null);
 
   const [locale, setLocale] = useState<"ku" | "ar" | "en">("ku");
 
-  const askReason = useCallback((title: string) => {
+  const askReason = useCallback((title: string, options?: { optional?: boolean }) => {
     return new Promise<string | null>((resolve) => {
-      setReasonDialog({ title, resolve });
+      setReasonDialog({ title, optional: Boolean(options?.optional), resolve });
     });
   }, []);
 
@@ -511,6 +811,8 @@ export default function DashboardPage() {
             tripsResult,
             tripChangesResult,
             bookingsResult,
+            travellersResult,
+            documentsResult,
             commissionsResult,
             paymentsResult,
             supportResult,
@@ -519,6 +821,8 @@ export default function DashboardPage() {
             supabase.from("packages").select("*").order("created_at", { ascending: false }),
             supabase.from("trip_change_requests").select("*").order("created_at", { ascending: false }).limit(100),
             supabase.from("bookings").select("*").order("created_at", { ascending: false }),
+            supabase.from("booking_travellers").select("*").order("created_at", { ascending: true }),
+            supabase.from("traveller_documents").select("*").order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").order("created_at", { ascending: false }),
             supabase.from("payments").select("*").order("created_at", { ascending: false }),
             supabase.from("support_messages").select("*").order("created_at", { ascending: false }),
@@ -529,50 +833,82 @@ export default function DashboardPage() {
             tripsResult,
             tripChangesResult,
             bookingsResult,
+            travellersResult,
+            documentsResult,
             commissionsResult,
             paymentsResult,
             supportResult,
           ].find((result) => result.error)?.error;
           if (firstError) throw firstError;
 
+          const companyRows = (companiesResult.data ?? []) as Company[];
+          const ownerIds = Array.from(new Set(companyRows.map((item) => item.owner_id).filter(Boolean)));
+          // Admin-only lookup. RLS still decides which profile rows may be
+          // returned; a restrictive policy simply leaves the owner fallback ID.
+          // Batch IDs so a large marketplace never exceeds PostgREST URL limits.
+          const ownerChunks = Array.from({ length: Math.ceil(ownerIds.length / 100) }, (_, index) => ownerIds.slice(index * 100, (index + 1) * 100));
+          const ownerResults = await Promise.all(ownerChunks.map((ids) => supabase.from("profiles").select("id, full_name, phone").in("id", ids)));
+          const companyOwners = ownerResults.flatMap((result) => result.error ? [] : (result.data ?? [])) as CompanyOwner[];
+
           setCompany(null);
           setData({
             ...emptyData,
-            companies: (companiesResult.data ?? []) as Company[],
+            companies: companyRows,
+            companyOwners,
             trips: (tripsResult.data ?? []) as Trip[],
             tripChangeRequests: (tripChangesResult.data ?? []) as TripChangeRequest[],
             bookings: (bookingsResult.data ?? []) as Booking[],
+            bookingTravellers: (travellersResult.data ?? []) as BookingTraveller[],
+            travellerDocuments: (documentsResult.data ?? []) as TravellerDocument[],
             commissions: (commissionsResult.data ?? []) as Commission[],
             payments: (paymentsResult.data ?? []) as Payment[],
             support: (supportResult.data ?? []) as SupportMessage[],
           });
         } else {
-          let companyRow: Company | null = null;
-          const ownerResult = await supabase
-            .from("companies")
-            .select("*")
-            .eq("owner_id", currentProfile.id)
-            .maybeSingle();
-          if (ownerResult.error) throw ownerResult.error;
-          companyRow = ownerResult.data as Company | null;
-
-          if (!companyRow) {
-            const membershipResult = await supabase
+          // An owner can now hold a head office plus its branches, so this must
+          // never use .maybeSingle() — that throws the moment a second row
+          // exists. We gather every company this account can act for (owned,
+          // branches of an owned head office, and staff memberships), then work
+          // inside exactly one of them at a time.
+          const [ownedResult, membershipResult] = await Promise.all([
+            supabase.from("companies").select("*").eq("owner_id", currentProfile.id),
+            supabase
               .from("agency_staff")
-              .select("company_id, companies(*)")
+              .select("companies(*)")
               .eq("user_id", currentProfile.id)
-              .eq("status", "active")
-              .limit(1)
-              .maybeSingle();
-            if (membershipResult.error) throw membershipResult.error;
-            companyRow = (membershipResult.data?.companies ?? null) as Company | null;
+              .eq("status", "active"),
+          ]);
+          if (ownedResult.error) throw ownedResult.error;
+          if (membershipResult.error) throw membershipResult.error;
+
+          const owned = (ownedResult.data ?? []) as Company[];
+          const staffCompanies = ((membershipResult.data ?? []) as Array<{ companies: Company | null }>)
+            .map((row) => row.companies)
+            .filter(Boolean) as Company[];
+
+          // Branches of a head office this account owns. RLS already allows it
+          // (owns_company walks the parent), but they are not returned by the
+          // owner_id query when each branch has its own owner row.
+          const parentIds = owned.filter((item) => !item.parent_company_id).map((item) => item.id);
+          let branchRows: Company[] = [];
+          if (parentIds.length) {
+            const branchResult = await supabase.from("companies").select("*").in("parent_company_id", parentIds);
+            if (branchResult.error) throw branchResult.error;
+            branchRows = (branchResult.data ?? []) as Company[];
           }
 
-          if (!companyRow) {
-            setCompany(null);
-            setData(emptyData);
-            throw new Error("No company workspace is attached to this account.");
-          }
+          const byId = new Map<string, Company>();
+          [...owned, ...branchRows, ...staffCompanies].forEach((item) => byId.set(item.id, item));
+          const accessible = Array.from(byId.values()).sort((a, b) => {
+            // Head offices first, then branches alphabetically under them.
+            const aParent = a.parent_company_id ?? a.id;
+            const bParent = b.parent_company_id ?? b.id;
+            if (aParent !== bParent) return aParent.localeCompare(bParent);
+            if (!a.parent_company_id) return -1;
+            if (!b.parent_company_id) return 1;
+            return a.name.localeCompare(b.name);
+          });
+          setCompanies(accessible);
 
           // An unapproved company must not reach the workspace, however it got
           // here: fresh sign-in, a restored session, or a direct /dashboard link.
@@ -582,10 +918,28 @@ export default function DashboardPage() {
           // 'draft' and 'needs_changes' are deliberately allowed through: those
           // companies need to get in to complete their profile and use "Submit
           // for review" in the verification banner.
-          if (["pending", "rejected", "suspended"].includes(companyRow.verification_status)) {
-            await supabase.auth.signOut();
-            navigate("/sign-in", { replace: true, state: { blocked: companyRow.verification_status } });
-            return;
+          //
+          // With branches this must pick a USABLE company rather than simply the
+          // first one: a newly created branch enters as 'pending', and signing
+          // the owner out of their approved head office because of it would be
+          // wrong. We only fall through to the sign-out gate when nothing the
+          // account can reach is usable.
+          const blockedStatuses = ["pending", "rejected", "suspended"];
+          const usable = accessible.filter((item) => !blockedStatuses.includes(item.verification_status));
+          const storedId = localStorage.getItem(ACTIVE_COMPANY_KEY);
+          const companyRow: Company | null =
+            usable.find((item) => item.id === storedId) ?? usable[0] ?? null;
+
+          if (!companyRow) {
+            const blocked = accessible[0];
+            if (blocked) {
+              await supabase.auth.signOut();
+              navigate("/sign-in", { replace: true, state: { blocked: blocked.verification_status } });
+              return;
+            }
+            setCompany(null);
+            setData(emptyData);
+            throw new Error("No company workspace is attached to this account.");
           }
 
           setCompany(companyRow);
@@ -593,6 +947,8 @@ export default function DashboardPage() {
             tripsResult,
             tripChangesResult,
             bookingsResult,
+            travellersResult,
+            documentsResult,
             commissionsResult,
             paymentsResult,
             inquiriesResult,
@@ -602,6 +958,9 @@ export default function DashboardPage() {
             supabase.from("packages").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("trip_change_requests").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }).limit(100),
             supabase.from("bookings").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
+            // booking_travellers has no company_id; RLS scopes this to the company's bookings.
+            supabase.from("booking_travellers").select("*").order("created_at", { ascending: true }),
+            supabase.from("traveller_documents").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payments").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("inquiries").select("*, inquiry_messages(*)").eq("agency_id", companyRow.id).order("updated_at", { ascending: false }),
@@ -613,6 +972,8 @@ export default function DashboardPage() {
             tripsResult,
             tripChangesResult,
             bookingsResult,
+            travellersResult,
+            documentsResult,
             commissionsResult,
             paymentsResult,
             inquiriesResult,
@@ -627,6 +988,8 @@ export default function DashboardPage() {
             trips: (tripsResult.data ?? []) as Trip[],
             tripChangeRequests: (tripChangesResult.data ?? []) as TripChangeRequest[],
             bookings: (bookingsResult.data ?? []) as Booking[],
+            bookingTravellers: (travellersResult.data ?? []) as BookingTraveller[],
+            travellerDocuments: (documentsResult.data ?? []) as TravellerDocument[],
             commissions: (commissionsResult.data ?? []) as Commission[],
             payments: (paymentsResult.data ?? []) as Payment[],
             inquiries: (inquiriesResult.data ?? []) as Inquiry[],
@@ -655,6 +1018,72 @@ export default function DashboardPage() {
     const timer = window.setTimeout(() => setToast(""), 3200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  // What this workspace must react to. Admin oversees everything, so no row
+  // filter (RLS still decides what reaches them); a company only listens to its
+  // own rows so one busy agency does not wake every other workspace.
+  const realtimeWatches: RealtimeWatch[] = useMemo(() => {
+    if (!role) return [];
+    if (role === "admin") {
+      return [
+        { table: "companies" }, { table: "packages" }, { table: "trip_change_requests" },
+        { table: "bookings" }, { table: "booking_travellers" }, { table: "traveller_documents" },
+        { table: "payments" }, { table: "commissions" }, { table: "support_messages" },
+      ];
+    }
+    if (!company) return [];
+    const mine = `company_id=eq.${company.id}`;
+    return [
+      { table: "companies", filter: `id=eq.${company.id}` },
+      { table: "packages", filter: mine },
+      { table: "trip_change_requests", filter: mine },
+      { table: "bookings", filter: mine },
+      { table: "traveller_documents", filter: mine },
+      { table: "payments", filter: mine },
+      { table: "commissions", filter: mine },
+      { table: "inquiries", filter: `agency_id=eq.${company.id}` },
+      // These two carry no company column; the refetch applies the real scoping.
+      { table: "booking_travellers" },
+      { table: "inquiry_messages" },
+    ];
+  }, [role, company?.id]);
+
+  useRealtimeSync(!loading && Boolean(role), realtimeWatches, () => loadPortal(true));
+  // Every signed-in role gets desktop notifications for their own feed — the
+  // branch fan-out means a group owner is told about all their branches too.
+  useBrowserNotifications(!loading && Boolean(role), profile?.id, locale);
+
+  // Switching branch re-scopes the entire workspace, so it goes through the
+  // normal loader rather than filtering client-side — every query below is
+  // keyed on the active company id.
+  function switchCompany(id: string) {
+    if (id === company?.id) return;
+    localStorage.setItem(ACTIVE_COMPANY_KEY, id);
+    setPage("overview");
+    loadPortal(true);
+  }
+
+  // Opening a branch office. The row is an ordinary company with
+  // parent_company_id set, so it inherits nothing automatically: the insert
+  // trigger forces it to 'pending' and Tawaf verifies it on its own licence,
+  // exactly like a new agency. Only the head office may open one.
+  async function createBranch(name: string, location: string) {
+    const headOffice = companies.find((item) => !item.parent_company_id) ?? company;
+    if (!headOffice) return;
+    await runAction(
+      "branch-create",
+      () => getSupabase().from("companies").insert({
+        name: name.trim(),
+        location: location.trim() || null,
+        parent_company_id: headOffice.id,
+      }),
+      locale === "ku"
+        ? "لقەکە دروستکرا و نێردرا بۆ پشتڕاستکردنەوەی تەواف."
+        : locale === "ar"
+          ? "تم إنشاء الفرع وإرساله إلى طواف للتحقق."
+          : "Branch created and sent to Tawaf for verification.",
+    );
+  }
 
   async function runAction(id: string, action: () => any, success: string) {
     setBusy(id);
@@ -685,17 +1114,28 @@ export default function DashboardPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Only the head office may open branches, and only its owner. A branch cannot
+  // spawn sub-branches (the DB enforces one level regardless).
+  const canAddBranch = Boolean(
+    role === "agency" && company && !company.parent_company_id && company.owner_id === profile?.id,
+  );
+  const canSwitchBranch = companies.length > 1 || canAddBranch;
+
   const navigation = role === "admin" ? adminNavigation : companyNavigation;
   const badges: Partial<Record<PageId, number>> = role === "admin"
     ? {
-      companies: data.companies.filter((item) => ["pending", "needs_changes"].includes(item.verification_status)).length,
+      // "Changes requested" is waiting on the company, not on an admin.
+      companies: data.companies.filter((item) => companyVerificationState(item) === "pending").length,
       trips: data.trips.filter((item) => item.lifecycle_status === "pending_review").length
         + data.tripChangeRequests.filter((item) => item.status === "pending").length,
       bookings: data.bookings.filter((item) => item.operational_stage === "requested").length,
       support: data.support.filter((item) => !item.status || item.status === "open").length,
     }
     : {
-      bookings: data.bookings.filter((item) => item.operational_stage === "requested").length,
+      // The company's actionable inbox: new requests + travellers whose uploaded
+      // documents are still waiting for a verdict (the main daily queue).
+      bookings: data.bookings.filter((item) => item.operational_stage === "requested").length
+        + data.bookingTravellers.filter((item) => item.document_status === "under_review").length,
       messages: data.inquiries.filter((item) => item.status !== "closed").length,
     };
 
@@ -710,6 +1150,16 @@ export default function DashboardPage() {
       { page: "bookings", count: badges.bookings ?? 0, label: locale === "en" ? "New booking requests" : locale === "ar" ? "طلبات حجز جديدة" : "داواکاری حیجزی نوێ" },
       { page: "messages", count: badges.messages ?? 0, label: locale === "en" ? "Open conversations" : locale === "ar" ? "محادثات مفتوحة" : "گفتوگۆ کراوەکان" },
     ];
+
+  const attentionItems = notificationItems.filter((item) => item.count > 0);
+  const totalNotifications = attentionItems.reduce((sum, item) => sum + item.count, 0);
+  const pageIcons: Partial<Record<PageId, LucideIcon>> = {
+    companies: Building2,
+    trips: Plane,
+    bookings: BookOpenCheck,
+    support: Headphones,
+    messages: MessageSquareText,
+  };
 
   if (loading) {
     return (
@@ -739,22 +1189,108 @@ export default function DashboardPage() {
         </div>
 
         {role === "agency" && company && (
-          <div className="portal-company-card">
-            <div className="portal-company-avatar">
-              {company.logo_url ? (
-                <img src={company.logo_url} alt="" />
-              ) : (
-                company.name.slice(0, 2).toUpperCase()
-              )}
+          <div className="portal-branch-wrap">
+            {/* Only a multi-branch agency gets a switcher: a single-office
+                manager should not be given a dropdown of one. */}
+            <div
+              className={`portal-company-card${canSwitchBranch ? " is-switchable" : ""}`}
+              role={canSwitchBranch ? "button" : undefined}
+              tabIndex={canSwitchBranch ? 0 : undefined}
+              onClick={() => canSwitchBranch && setBranchMenuOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (canSwitchBranch && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  setBranchMenuOpen((open) => !open);
+                }
+              }}
+            >
+              <div className="portal-company-avatar">
+                {company.logo_url ? (
+                  <img src={company.logo_url} alt="" />
+                ) : (
+                  company.name.slice(0, 2).toUpperCase()
+                )}
+              </div>
+              <div>
+                <b>{company.name}</b>
+                <small>
+                  <span className={company.is_verified ? "online" : ""} />
+                  {company.parent_company_id
+                    ? (locale === "ku" ? "لق" : locale === "ar" ? "فرع" : "Branch")
+                    : companies.length > 1
+                      ? (locale === "ku" ? "نووسینگەی سەرەکی" : locale === "ar" ? "المكتب الرئيسي" : "Head office")
+                      : company.is_verified ? "Verified company" : titleCase(company.verification_status)}
+                </small>
+              </div>
+              {canSwitchBranch && <ChevronDown size={15} />}
             </div>
-            <div>
-              <b>{company.name}</b>
-              <small>
-                <span className={company.is_verified ? "online" : ""} />
-                {company.is_verified ? "Verified company" : titleCase(company.verification_status)}
-              </small>
-            </div>
-            <ChevronDown size={15} />
+
+            {branchMenuOpen && canSwitchBranch && (
+              <>
+                <button type="button" className="portal-branch-scrim" aria-label="Close" onClick={() => setBranchMenuOpen(false)} />
+                <div className="portal-branch-menu" role="listbox">
+                  <small>{locale === "ku" ? "گۆڕینی لق" : locale === "ar" ? "تبديل الفرع" : "Switch branch"}</small>
+                  {companies.map((item) => {
+                    // A branch awaiting Tawaf's verdict cannot be worked in yet,
+                    // so it is listed for visibility but not selectable.
+                    const blocked = ["pending", "rejected", "suspended"].includes(item.verification_status);
+                    return (
+                      <button
+                        type="button"
+                        key={item.id}
+                        role="option"
+                        aria-selected={item.id === company.id}
+                        disabled={blocked}
+                        className={`${item.id === company.id ? "is-active" : ""}${item.parent_company_id ? " is-branch" : ""}`}
+                        onClick={() => { setBranchMenuOpen(false); switchCompany(item.id); }}
+                      >
+                        <span>
+                          <b>{item.name}</b>
+                          <small>{item.parent_company_id
+                            ? (item.location || (locale === "ku" ? "لق" : locale === "ar" ? "فرع" : "Branch"))
+                            : (locale === "ku" ? "نووسینگەی سەرەکی" : locale === "ar" ? "المكتب الرئيسي" : "Head office")}</small>
+                        </span>
+                        {item.id === company.id && <Check size={14} />}
+                        {blocked && <i className="portal-branch-off">{titleCase(item.verification_status)}</i>}
+                      </button>
+                    );
+                  })}
+
+                  {canAddBranch && (
+                    branchFormOpen ? (
+                      <form
+                        className="portal-branch-form"
+                        onSubmit={async (event) => {
+                          event.preventDefault();
+                          if (!branchName.trim()) return;
+                          await createBranch(branchName, branchLocation);
+                          setBranchName(""); setBranchLocation("");
+                          setBranchFormOpen(false); setBranchMenuOpen(false);
+                        }}
+                      >
+                        <input autoFocus value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder={locale === "ku" ? "ناوی لق" : locale === "ar" ? "اسم الفرع" : "Branch name"} />
+                        <select value={branchLocation} onChange={(event) => setBranchLocation(event.target.value)}>
+                          <option value="">{locale === "ku" ? "شار هەڵبژێرە" : locale === "ar" ? "اختر المدينة" : "Select city"}</option>
+                          {IRAQI_CITIES.map((city) => (
+                            <option key={city.value} value={city.value}>{cityLabel(city, locale)}</option>
+                          ))}
+                        </select>
+                        <div>
+                          <button type="button" onClick={() => setBranchFormOpen(false)}>{locale === "ku" ? "پاشگەزبوونەوە" : locale === "ar" ? "إلغاء" : "Cancel"}</button>
+                          <button type="submit" className="primary" disabled={!branchName.trim() || !branchLocation || busy === "branch-create"}>
+                            {busy === "branch-create" ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {locale === "ku" ? "دروستکردن" : locale === "ar" ? "إنشاء" : "Create"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button type="button" className="portal-branch-add" onClick={() => setBranchFormOpen(true)}>
+                        <Plus size={14} /> {locale === "ku" ? "زیادکردنی لق" : locale === "ar" ? "إضافة فرع" : "Add branch"}
+                      </button>
+                    )
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -805,37 +1341,56 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="portal-topbar-actions">
-            <span className="portal-live">
-              <i /> {locale === "en" ? "Live data" : locale === "ar" ? "البيانات الحية" : "زانیاری ڕاستەوخۆ"}
-            </span>
             <button type="button" aria-label={locale === "en" ? "Refresh workspace" : locale === "ar" ? "تحديث مساحة العمل" : "نوێکردنەوەی شوێنی کار"} onClick={() => loadPortal(true)} disabled={refreshing}>
               <RefreshCw className={refreshing ? "spin" : ""} size={17} />
             </button>
             <div className="portal-bell-wrap">
-              <button type="button" aria-label={locale === "en" ? "Notifications" : locale === "ar" ? "الإشعارات" : "ئاگادارکردنەوەکان"} onClick={() => setBellOpen((open) => !open)}>
+              <button type="button" className={bellOpen ? "is-open" : ""} aria-label={locale === "en" ? "Notifications" : locale === "ar" ? "الإشعارات" : "ئاگادارکردنەوەکان"} onClick={() => setBellOpen((open) => !open)}>
                 <Bell size={17} />
-                {notificationItems.some((item) => item.count > 0) && <i />}
+                {totalNotifications > 0 && <i data-count={totalNotifications > 9 ? "9+" : totalNotifications}>{totalNotifications > 9 ? "9+" : totalNotifications}</i>}
               </button>
               {bellOpen && (
                 <>
                   <button type="button" className="portal-bell-scrim" aria-label="Close notifications" onClick={() => setBellOpen(false)} />
                   <div className="portal-bell-menu" role="menu">
-                    <b>{locale === "en" ? "Needs your attention" : locale === "ar" ? "بحاجة إلى انتباهك" : "پێویستی بە سەرنجی تۆیە"}</b>
-                    {notificationItems.filter((item) => item.count > 0).map((item) => (
-                      <button
-                        type="button"
-                        key={item.page}
-                        onClick={() => {
-                          setBellOpen(false);
-                          changePage(item.page);
-                        }}
-                      >
-                        <span>{item.label}</span>
-                        <i>{item.count}</i>
-                      </button>
-                    ))}
-                    {!notificationItems.some((item) => item.count > 0) && (
-                      <p>{locale === "en" ? "You're all caught up." : locale === "ar" ? "لقد اطلعت على كل شيء." : "هەموو شتێکت بینیوە."}</p>
+                    <header className="portal-bell-head">
+                      <span className="portal-bell-head-icon"><Bell size={15} /></span>
+                      <div className="portal-bell-head-text">
+                        <b>{locale === "en" ? "Notifications" : locale === "ar" ? "الإشعارات" : "ئاگادارکردنەوەکان"}</b>
+                        <small>
+                          {attentionItems.length
+                            ? (locale === "en" ? `${totalNotifications} need your attention` : locale === "ar" ? `${totalNotifications} بحاجة إلى انتباهك` : `${totalNotifications} پێویستیان بە سەرنجی تۆیە`)
+                            : (locale === "en" ? "You're all caught up" : locale === "ar" ? "لقد اطلعت على كل شيء" : "هەموو شتێکت بینیوە")}
+                        </small>
+                      </div>
+                    </header>
+                    {attentionItems.length ? (
+                      <div className="portal-bell-list">
+                        {attentionItems.map((item) => {
+                          const Icon = pageIcons[item.page] ?? Bell;
+                          return (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              key={item.page}
+                              onClick={() => {
+                                setBellOpen(false);
+                                changePage(item.page);
+                              }}
+                            >
+                              <span className="portal-bell-item-icon"><Icon size={16} /></span>
+                              <span className="portal-bell-item-label">{item.label}</span>
+                              <i className="portal-bell-item-count">{item.count}</i>
+                              <ArrowRight className="portal-bell-item-arrow" size={15} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="portal-bell-empty">
+                        <CheckCircle2 size={26} />
+                        <p>{locale === "en" ? "No new alerts right now." : locale === "ar" ? "لا توجد تنبيهات جديدة الآن." : "هیچ ئاگادارکردنەوەیەکی نوێ نییە."}</p>
+                      </div>
                     )}
                   </div>
                 </>
@@ -877,6 +1432,8 @@ export default function DashboardPage() {
               page={page}
               data={data}
               company={company}
+              companies={companies}
+              switchCompany={switchCompany}
               profile={profile}
               busy={busy}
               runAction={runAction}
@@ -906,6 +1463,7 @@ export default function DashboardPage() {
         <ReasonDialog
           title={reasonDialog.title}
           locale={locale}
+          optional={reasonDialog.optional}
           onCancel={() => closeReason(null)}
           onSubmit={(value) => closeReason(value)}
         />
@@ -917,26 +1475,38 @@ export default function DashboardPage() {
 function ReasonDialog({
   title,
   locale,
+  optional,
   onCancel,
   onSubmit,
 }: {
   title: string;
   locale: "ku" | "ar" | "en";
+  optional?: boolean;
   onCancel: () => void;
   onSubmit: (value: string) => void;
 }) {
   const [value, setValue] = useState("");
+  useScrollLock();
   return (
     <div className="portal-reason-scrim" onClick={onCancel}>
       <form
         className="portal-reason-dialog"
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reason-dialog-title"
         onSubmit={(event) => {
           event.preventDefault();
-          if (value.trim()) onSubmit(value.trim());
+          if (optional || value.trim()) onSubmit(value.trim());
         }}
       >
-        <h2>{title}</h2>
+        <h2 id="reason-dialog-title">{title}</h2>
         <textarea
           autoFocus
           rows={3}
@@ -948,8 +1518,10 @@ function ReasonDialog({
           <button type="button" className="portal-secondary-button" onClick={onCancel}>
             {locale === "en" ? "Cancel" : locale === "ar" ? "إلغاء" : "پاشگەزبوونەوە"}
           </button>
-          <button type="submit" className="portal-primary-button" disabled={!value.trim()}>
-            {locale === "en" ? "Confirm" : locale === "ar" ? "تأكيد" : "پشتڕاستکردنەوە"}
+          <button type="submit" className="portal-primary-button" disabled={!optional && !value.trim()}>
+            {optional && !value.trim()
+              ? (locale === "en" ? "Continue without note" : locale === "ar" ? "متابعة بدون ملاحظة" : "بەبێ تێبینی بەردەوام بە")
+              : (locale === "en" ? "Confirm" : locale === "ar" ? "تأكيد" : "پشتڕاستکردنەوە")}
           </button>
         </div>
       </form>
@@ -981,7 +1553,7 @@ function AdminPages({
   if (page === "bookings") return <BookingsPage role="admin" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "finance") return <FinancePage role="admin" data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "support") return <SupportPage data={data} busy={busy} runAction={runAction} locale={locale} />;
-  if (page === "more") return <AdminMore data={data} locale={locale} changeLocale={changeLocale} />;
+  if (page === "more") return <AdminMore locale={locale} changeLocale={changeLocale} busy={busy} runAction={runAction} />;
   return <AdminOverview data={data} goTo={goTo} locale={locale} />;
 }
 
@@ -989,6 +1561,8 @@ function CompanyPages({
   page,
   data,
   company,
+  companies,
+  switchCompany,
   profile,
   busy,
   runAction,
@@ -1000,6 +1574,8 @@ function CompanyPages({
   page: PageId;
   data: PortalData;
   company: Company;
+  companies: Company[];
+  switchCompany: (id: string) => void;
   profile: Profile;
   busy: string;
   runAction: RunAction;
@@ -1008,12 +1584,12 @@ function CompanyPages({
   locale: "ku" | "ar" | "en";
   changeLocale: (val: "ku" | "ar" | "en") => void;
 }) {
-  if (page === "trips") return <CompanyTripsWorkspace company={company} trips={data.trips} changeRequests={data.tripChangeRequests} bookings={data.bookings} commissions={data.commissions} payments={data.payments} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
+  if (page === "trips") return <CompanyTripsWorkspace company={company} trips={data.trips} changeRequests={data.tripChangeRequests} bookings={data.bookings} bookingTravellers={data.bookingTravellers} commissions={data.commissions} payments={data.payments} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "bookings") return <BookingsPage role="agency" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "messages") return <MessagesPage data={data} profile={profile} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "finance") return <FinancePage role="agency" data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "more") return <CompanyProfile company={company} profile={profile} busy={busy} runAction={runAction} locale={locale} changeLocale={changeLocale} />;
-  return <CompanyOverview data={data} company={company} goTo={goTo} locale={locale} busy={busy} runAction={runAction} />;
+  return <CompanyOverview data={data} company={company} companies={companies} switchCompany={switchCompany} goTo={goTo} locale={locale} busy={busy} runAction={runAction} />;
 }
 
 function PageHeading({
@@ -1065,23 +1641,19 @@ function MetricCard({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
-  return <span className={`portal-status ${statusTone(status)}`}><i />{titleCase(status)}</span>;
+function StatusPill({ status, locale }: { status: string; locale?: "ku" | "ar" | "en" }) {
+  return <span className={`portal-status ${statusTone(status)}`}><i />{localizedCompanyStatus(status, locale)}</span>;
 }
 
 function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en" }) {
   const t = dashboardTranslations[locale];
   const collected = data.commissions.filter((item) => item.status === "collected").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
   const owed = data.commissions.filter((item) => item.status === "owed").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const pendingCompanies = data.companies.filter((item) => ["pending", "needs_changes"].includes(item.verification_status));
+  const pendingCompanies = data.companies.filter((item) => companyVerificationState(item) === "pending");
   const pendingTrips = data.trips.filter((item) => item.lifecycle_status === "pending_review");
   const pendingChanges = data.tripChangeRequests.filter((item) => item.status === "pending");
   const requestedBookings = data.bookings.filter((item) => item.operational_stage === "requested");
   const openSupport = data.support.filter((item) => !item.status || item.status === "open");
-  const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
-  const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
-  const recentBookings = data.bookings.slice(0, 5);
-  const monthly = monthlyBookingCounts(data.bookings);
   const hour = new Date().getHours();
   const greeting = hour < 12
     ? (locale === "ku" ? "بەیانیت باش، بەڕێوەبەر." : locale === "ar" ? "صباح الخير، يا مسؤول." : "Good morning, Admin.")
@@ -1104,65 +1676,100 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
         <MetricCard icon={CircleDollarSign} label={t.collectedRevenue} value={formatIqd(collected, true)} detail={`${formatIqd(owed, true)} ${t.stillOwed}`} tone="sand" onClick={() => goTo("finance")} />
       </section>
 
-      <section className="portal-overview-grid">
-        <article className="portal-panel portal-chart-panel">
-          <PanelHeader title={t.bookingActivity} subtitle={t.requests6Months} action={<span className="portal-period">{locale === "ku" ? "٦ مانگی ڕابردوو" : locale === "ar" ? "آخر ٦ أشهر" : "Last 6 months"}</span>} />
-          <div className="portal-chart-summary">
-            <div><strong>{data.bookings.length}</strong><span>{t.totalBookingsLabel}</span></div>
-            <small><TrendingUp size={14} /> {t.liveMarketplace}</small>
-          </div>
-          <div className="portal-bar-chart">
-            {monthly.map((month) => {
-              const max = Math.max(...monthly.map((item) => item.value), 1);
-              return (
-                <div key={month.label}>
-                  <i style={{ height: `${Math.max(8, (month.value / max) * 100)}%` }}><span>{month.value}</span></i>
-                  <small>{month.label}</small>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-
-        <article className="portal-panel">
-          <PanelHeader title={t.needsAttention} subtitle={t.itemsWaitingAction} />
-          <div className="portal-attention-list">
-            <AttentionItem icon={Building2} tone="gold" count={pendingCompanies.length} title={t.companyApplications} text={t.reviewBusinessDetails} onClick={() => goTo("companies")} />
-            <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingTrips.length + pendingChanges.length} title={t.tripsForReview} text={locale === "ku" ? `${pendingTrips.length} گەشتی نوێ · ${pendingChanges.length} داواکاری گۆڕانکاری` : locale === "ar" ? `${pendingTrips.length} رحلات جديدة · ${pendingChanges.length} طلبات تغيير` : `${pendingTrips.length} new trips · ${pendingChanges.length} change requests`} onClick={() => goTo("trips")} />
-            <AttentionItem icon={BookOpenCheck} tone="sand" count={requestedBookings.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("bookings")} />
-            <AttentionItem icon={Headphones} tone="green" count={openSupport.length} title={t.supportMessages} text={t.unresolvedInInbox} onClick={() => goTo("support")} />
-          </div>
-        </article>
-      </section>
-
       <section className="portal-panel">
-        <PanelHeader title={t.recentBookings} subtitle={t.newestActivity} action={<button type="button" className="portal-text-button" onClick={() => goTo("bookings")}>{t.viewAll} <ArrowRight size={14} /></button>} />
-        {recentBookings.length ? (
-          <div className="portal-table-wrap">
-            <table className="portal-table">
-              <thead><tr><th>{t.booking}</th><th>{t.trip}</th><th>{t.company}</th><th>{t.travellers}</th><th>{t.value}</th><th>{t.status}</th><th>{t.created}</th></tr></thead>
-              <tbody>
-                {recentBookings.map((booking) => (
-                  <tr key={booking.id}>
-                    <td><b>#{booking.id.slice(0, 8).toUpperCase()}</b></td>
-                    <td>{tripMap.get(booking.package_id) ?? (locale === "ku" ? "گەشتی عومرە" : locale === "ar" ? "رحلة عمرة" : "Umrah trip")}</td>
-                    <td>{companyMap.get(booking.company_id) ?? "Company"}</td>
-                    <td>{booking.travellers}</td>
-                    <td>{formatIqd(booking.total_iqd)}</td>
-                    <td><StatusPill status={booking.operational_stage} /></td>
-                    <td>{relativeTime(booking.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <EmptyInline text={t.noBookingsYet} />}
+        <PanelHeader title={t.needsAttention} subtitle={t.itemsWaitingAction} />
+        <div className="portal-attention-list">
+          <AttentionItem icon={Building2} tone="gold" count={pendingCompanies.length} title={t.companyApplications} text={t.reviewBusinessDetails} onClick={() => goTo("companies")} />
+          <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingTrips.length + pendingChanges.length} title={t.tripsForReview} text={locale === "ku" ? `${pendingTrips.length} گەشتی نوێ · ${pendingChanges.length} داواکاری گۆڕانکاری` : locale === "ar" ? `${pendingTrips.length} رحلات جديدة · ${pendingChanges.length} طلبات تغيير` : `${pendingTrips.length} new trips · ${pendingChanges.length} change requests`} onClick={() => goTo("trips")} />
+          <AttentionItem icon={BookOpenCheck} tone="sand" count={requestedBookings.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("bookings")} />
+          <AttentionItem icon={Headphones} tone="green" count={openSupport.length} title={t.supportMessages} text={t.unresolvedInInbox} onClick={() => goTo("support")} />
+        </div>
       </section>
     </>
   );
 }
 
-function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { data: PortalData; company: Company; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en"; busy: string; runAction: RunAction }) {
+// Owner-only: the whole reason a chain joins the platform is seeing its offices
+// side by side. The workspace itself stays scoped to one branch — this is a
+// read-only summary that also acts as a fast switcher.
+function GroupRollupPanel({ companies, activeId, switchCompany, locale }: {
+  companies: Company[];
+  activeId: string;
+  switchCompany: (id: string) => void;
+  locale: "ku" | "ar" | "en";
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [rows, setRows] = useState<Record<string, { bookings: number; value: number; pending: number }>>({});
+  const [loading, setLoading] = useState(true);
+  const ids = companies.map((item) => item.id).join(",");
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      // RLS lets a group owner read every branch's bookings (owns_company walks
+      // the parent), so one query covers the whole group.
+      const { data } = await getSupabase()
+        .from("bookings")
+        .select("company_id, total_iqd, operational_stage")
+        .in("company_id", companies.map((item) => item.id));
+      if (!active) return;
+      const next: Record<string, { bookings: number; value: number; pending: number }> = {};
+      (data ?? []).forEach((row: any) => {
+        const entry = next[row.company_id] ?? { bookings: 0, value: 0, pending: 0 };
+        const dead = ["cancelled", "rejected", "expired"].includes(row.operational_stage);
+        entry.bookings += 1;
+        if (!dead) entry.value += Number(row.total_iqd) || 0;
+        if (row.operational_stage === "requested") entry.pending += 1;
+        next[row.company_id] = entry;
+      });
+      setRows(next);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [ids]);
+
+  return (
+    <section className="portal-panel" style={{ marginBottom: 15 }}>
+      <PanelHeader
+        title={tr("کۆی گروپ", "ملخص المجموعة", "Group overview")}
+        subtitle={tr("هەموو لقەکان پێکەوە — کرتە بکە بۆ گۆڕین", "كل الفروع معاً — انقر للتبديل", "All offices side by side — click to switch")}
+      />
+      {loading ? <div style={{ padding: 16 }}><TawafLoadingSpinner size={18} /></div> : (
+        <div className="portal-table-wrap">
+          <table className="portal-table">
+            <thead><tr>
+              <th>{tr("نووسینگە", "المكتب", "Office")}</th>
+              <th>{tr("حیجزەکان", "الحجوزات", "Bookings")}</th>
+              <th>{tr("داواکاری نوێ", "طلبات جديدة", "New requests")}</th>
+              <th>{tr("بەها", "القيمة", "Value")}</th>
+              <th>{tr("دۆخ", "الحالة", "Status")}</th>
+            </tr></thead>
+            <tbody>
+              {companies.map((item) => {
+                const row = rows[item.id] ?? { bookings: 0, value: 0, pending: 0 };
+                return (
+                  <tr key={item.id} className="portal-row-clickable" onClick={() => switchCompany(item.id)}>
+                    <td>
+                      <b>{item.name}{item.id === activeId && " ●"}</b>
+                      <small className="portal-cell-sub">{item.parent_company_id ? (item.location || tr("لق", "فرع", "Branch")) : tr("نووسینگەی سەرەکی", "المكتب الرئيسي", "Head office")}</small>
+                    </td>
+                    <td>{row.bookings}</td>
+                    <td>{row.pending || "—"}</td>
+                    <td>{formatIqd(row.value, true)}</td>
+                    <td><StatusPill status={item.is_active ? (item.verification_status || "approved") : "suspended"} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CompanyOverview({ data, company, companies, switchCompany, goTo, locale, busy, runAction }: { data: PortalData; company: Company; companies: Company[]; switchCompany: (id: string) => void; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en"; busy: string; runAction: RunAction }) {
   const t = dashboardTranslations[locale];
   const activeTrips = data.trips.filter((item) => ["published", "pending_review"].includes(item.lifecycle_status));
   const pending = data.bookings.filter((item) => item.operational_stage === "requested");
@@ -1170,7 +1777,6 @@ function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { dat
   const bookingValue = data.bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
   const received = data.payments.filter((item) => item.status === "succeeded").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
   const nextTrip = [...data.trips].filter((item) => item.departure_date && new Date(item.departure_date) >= new Date() && ["published", "pending_review", "paused"].includes(item.lifecycle_status)).sort((a, b) => String(a.departure_date).localeCompare(String(b.departure_date)))[0];
-  const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
   const tripsNeedingAction = data.trips.filter((item) => ["needs_changes", "rejected"].includes(item.lifecycle_status));
   const pendingChangeRequests = data.tripChangeRequests.filter((item) => item.status === "pending");
 
@@ -1236,6 +1842,10 @@ function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { dat
         </div>
       )}
 
+      {companies.length > 1 && (
+        <GroupRollupPanel companies={companies} activeId={company.id} switchCompany={switchCompany} locale={locale} />
+      )}
+
       <section className="portal-metric-grid">
         <MetricCard icon={Plane} label={t.activeTrips} value={`${activeTrips.length}`} detail={t.tripsTotal.replace("{count}", `${data.trips.length}`)} tone="green" onClick={() => goTo("trips")} />
         <MetricCard icon={Mail} label={t.newRequests} value={`${pending.length}`} detail={t.confirmedBookings.replace("{count}", `${confirmed.length}`)} tone="gold" onClick={() => goTo("bookings")} />
@@ -1274,26 +1884,10 @@ function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { dat
             <AttentionItem icon={FileCheck2} tone="teal" count={data.bookings.filter((item) => item.operational_stage === "needs_information").length} title={t.informationNeeded} text={t.travellersIncomplete} onClick={() => goTo("bookings")} />
             <AttentionItem icon={AlertTriangle} tone="sand" count={tripsNeedingAction.length} title={locale === "ku" ? "گەشتەکان پێویستیان بە چاککردنە" : locale === "ar" ? "رحلات تحتاج إلى تعديل" : "Trips needing fixes"} text={locale === "ku" ? "تەواف داوای گۆڕانکاری کردووە یان ڕەتی کردووەتەوە" : locale === "ar" ? "طلب طواف تعديلات أو رفض الرحلة" : "Tawaf requested changes or rejected the trip"} onClick={() => goTo("trips")} />
             <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingChangeRequests.length} title={locale === "ku" ? "داواکاری لە چاوەڕوانیدا" : locale === "ar" ? "طلبات بانتظار طواف" : "Requests awaiting Tawaf"} text={locale === "ku" ? "گۆڕانکارییەکانت لە چاوەڕوانی پەسەندکردنی بەڕێوەبەردان" : locale === "ar" ? "تغييراتك بانتظار موافقة المشرف" : "Your submitted changes are waiting for admin approval"} onClick={() => goTo("trips")} />
+            <AttentionItem icon={Plane} tone="teal" count={data.bookings.filter((item) => item.operational_stage === "in_progress").length} title={locale === "ku" ? "لە گەشتدان ئێستا" : locale === "ar" ? "في الرحلة الآن" : "Travelling now"} text={locale === "ku" ? "گەشتیارانی سەر زەوی — دوای گەڕانەوە خۆکارانە تەواو دەکرێن" : locale === "ar" ? "معتمرون على الأرض — تُغلق تلقائياً بعد العودة" : "Pilgrims on the ground — closed automatically after the return date"} onClick={() => goTo("bookings")} />
             <AttentionItem icon={MessageSquareText} tone="green" count={data.inquiries.filter((item) => item.status !== "closed").length} title={t.openConversations} text={t.pilgrimInquiriesReply} onClick={() => goTo("messages")} />
           </div>
         </article>
-      </section>
-
-      <section className="portal-panel">
-        <PanelHeader title={t.latestRequests} subtitle={t.recentBookingActivity} action={<button type="button" className="portal-text-button" onClick={() => goTo("bookings")}>{t.viewAll} <ArrowRight size={14} /></button>} />
-        {data.bookings.length ? (
-          <div className="portal-compact-list">
-            {data.bookings.slice(0, 5).map((booking) => (
-              <div key={booking.id}>
-                <span className="portal-row-icon"><BookOpenCheck size={17} /></span>
-                <div><b>{tripMap.get(booking.package_id) ?? (locale === "ku" ? "گەشتی عومرە" : locale === "ar" ? "رحلة عمرة" : "Umrah trip")}</b><small>#{booking.id.slice(0, 8).toUpperCase()} · {booking.travellers} {locale === "ku" ? "گەشتیار" : locale === "ar" ? "مسافرين" : "travellers"}</small></div>
-                <strong>{formatIqd(booking.total_iqd)}</strong>
-                <StatusPill status={booking.operational_stage} />
-                <small>{relativeTime(booking.created_at)}</small>
-              </div>
-            ))}
-          </div>
-        ) : <EmptyInline text={locale === "ku" ? "داواکارییە نوێیەکانی حیجز لێرەدا دەردەکەون." : locale === "ar" ? "ستظهر طلبات الحجز الجديدة هنا." : "New booking requests will appear here."} />}
       </section>
     </>
   );
@@ -1301,20 +1895,84 @@ function CompanyOverview({ data, company, goTo, locale, busy, runAction }: { dat
 
 function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: PortalData; busy: string; runAction: RunAction; askReason: AskReason; locale: "ku" | "ar" | "en" }) {
   const t = dashboardTranslations[locale];
-  const [filter, setFilter] = useState("all");
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [filter, setFilter] = useState<"all" | CompanyVerificationState>("all");
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("newest");
+  const [listPage, setListPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = data.companies.find((item) => item.id === selectedId) ?? null;
-  const pendingCount = data.companies.filter((item) => ["pending", "needs_changes"].includes(item.verification_status)).length;
-  const activeCount = data.companies.filter((item) => item.is_active && item.verification_status === "approved").length;
-  const suspendedCount = data.companies.filter((item) => item.verification_status === "suspended" || !item.is_active || item.status === "suspended").length;
+  const ownerById = useMemo(() => new Map(data.companyOwners.map((owner) => [owner.id, owner])), [data.companyOwners]);
+
+  const analytics = useMemo(() => {
+    const lastActivity = new Map<string, number>();
+    const bookingValue = new Map<string, number>();
+    data.companies.forEach((company) => lastActivity.set(company.id, new Date(company.created_at).getTime()));
+    const recordActivity = (companyId: string, createdAt: string) => {
+      const timestamp = new Date(createdAt).getTime();
+      if (Number.isFinite(timestamp)) lastActivity.set(companyId, Math.max(lastActivity.get(companyId) ?? 0, timestamp));
+    };
+    data.trips.forEach((item) => recordActivity(item.company_id, item.created_at));
+    data.bookings.forEach((item) => {
+      recordActivity(item.company_id, item.created_at);
+      if (!["cancelled", "rejected", "expired"].includes(item.operational_stage)) {
+        bookingValue.set(item.company_id, (bookingValue.get(item.company_id) ?? 0) + Number(item.total_iqd || 0));
+      }
+    });
+    data.payments.forEach((item) => recordActivity(item.company_id, item.created_at));
+    const tripCount = new Map<string, number>();
+    data.trips.forEach((item) => tripCount.set(item.company_id, (tripCount.get(item.company_id) ?? 0) + 1));
+    return { lastActivity, bookingValue, tripCount };
+  }, [data]);
+
+  const counts = useMemo(() => {
+    const result: Record<"all" | CompanyVerificationState, number> = {
+      all: data.companies.length,
+      pending: 0,
+      needs_changes: 0,
+      approved: 0,
+      suspended: 0,
+      rejected: 0,
+    };
+    data.companies.forEach((company) => { result[companyVerificationState(company)] += 1; });
+    return result;
+  }, [data.companies]);
+
+  const normalizedQuery = query.trim().toLocaleLowerCase();
   const companies = data.companies.filter((item) => {
-    const matchesQuery = `${item.name} ${item.location ?? ""}`.toLowerCase().includes(query.toLowerCase());
-    if (filter === "pending") return matchesQuery && ["pending", "needs_changes"].includes(item.verification_status);
-    if (filter === "active") return matchesQuery && item.is_active && item.verification_status === "approved";
-    if (filter === "suspended") return matchesQuery && (item.verification_status === "suspended" || !item.is_active || item.status === "suspended");
-    return matchesQuery;
+    const owner = ownerById.get(item.owner_id);
+    const searchable = [
+      item.name,
+      item.name_ar,
+      item.name_en,
+      item.location,
+      item.license_number,
+      item.phone,
+      item.whatsapp,
+      item.owner_id,
+      owner?.full_name,
+      owner?.phone,
+      item.id,
+    ].filter(Boolean).join(" ").toLocaleLowerCase();
+    return (!normalizedQuery || searchable.includes(normalizedQuery))
+      && (filter === "all" || companyVerificationState(item) === filter);
+  }).sort((a, b) => {
+    if (sort === "name") return a.name.localeCompare(b.name, locale);
+    if (sort === "rating") return Number(b.rating ?? 0) - Number(a.rating ?? 0);
+    if (sort === "activity") return (analytics.lastActivity.get(b.id) ?? 0) - (analytics.lastActivity.get(a.id) ?? 0);
+    if (sort === "booking_value") return (analytics.bookingValue.get(b.id) ?? 0) - (analytics.bookingValue.get(a.id) ?? 0);
+    if (sort === "completion") return companyProfileCompletion(b) - companyProfileCompletion(a);
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(companies.length / pageSize));
+  const safePage = Math.min(listPage, totalPages);
+  const visibleCompanies = companies.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  function changeFilter(next: "all" | CompanyVerificationState) {
+    setFilter(next);
+    setListPage(1);
+  }
 
   async function review(company: Company, decision: "approved" | "rejected" | "needs_changes" | "suspended") {
     let reason: string | null = null;
@@ -1332,56 +1990,151 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
   return (
     <>
       <PageHeading eyebrow={locale === "ku" ? "ڕێکخستنی بازاڕ" : locale === "ar" ? "حوكمة السوق" : "Marketplace governance"} title={t.adminCompaniesTitle} description={t.adminCompaniesDesc} />
-      <section className="portal-mini-metrics">
-        <div><span className="neutral"><Building2 size={17} /></span><p><b>{data.companies.length}</b><small>{locale === "ku" ? "هەموو کۆمپانیاکان" : locale === "ar" ? "جميع الشركات" : "All companies"}</small></p></div>
-        <div><span className="warning"><Clock3 size={17} /></span><p><b>{pendingCount}</b><small>{locale === "ku" ? "چاوەڕێی بڕیارن" : locale === "ar" ? "بانتظار قرار" : "Awaiting decision"}</small></p></div>
-        <div><span className="positive"><BadgeCheck size={17} /></span><p><b>{activeCount}</b><small>{locale === "ku" ? "چالاک و پەسەندکراو" : locale === "ar" ? "نشطة ومعتمدة" : "Active & approved"}</small></p></div>
-        <div><span className="gold"><AlertTriangle size={17} /></span><p><b>{suspendedCount}</b><small>{locale === "ku" ? "ڕاگیراو یان ڕەتکراوە" : locale === "ar" ? "معلقة أو مرفوضة" : "Suspended or rejected"}</small></p></div>
+      <section className="portal-company-metrics" aria-label={tr("پوختەی دۆخی کۆمپانیاکان", "ملخص حالات الشركات", "Company status summary")}>
+        {([
+          ["all", Building2, "neutral", tr("هەموو کۆمپانیاکان", "جميع الشركات", "All companies")],
+          ["pending", Clock3, "warning", tr("چاوەڕێی پێداچوونەوە", "بانتظار المراجعة", "Pending review")],
+          ["needs_changes", FileText, "gold", tr("گۆڕانکاری پێویستە", "تعديلات مطلوبة", "Changes requested")],
+          ["approved", BadgeCheck, "positive", tr("پەسەندکراو", "معتمدة", "Approved")],
+          ["suspended", AlertTriangle, "danger", tr("ڕاگیراو", "معلقة", "Suspended")],
+          ["rejected", X, "negative", tr("ڕەتکراوە", "مرفوضة", "Rejected")],
+        ] as Array<["all" | CompanyVerificationState, LucideIcon, string, string]>).map(([id, Icon, tone, label]) => (
+          <button key={id} type="button" className={filter === id ? "is-active" : ""} onClick={() => changeFilter(id)} aria-pressed={filter === id}>
+            <span className={tone}><Icon size={17} /></span>
+            <p><b>{counts[id]}</b><small>{label}</small></p>
+          </button>
+        ))}
       </section>
-      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ کۆمپانیا یان شار..." : locale === "ar" ? "البحث عن شركة أو مدينة..." : "Search company or city…"} filters={[["all", t.allAll || "All"], ["pending", t.pendingFilter], ["active", t.activeLabel], ["suspended", t.suspendedLabel]]} activeFilter={filter} setFilter={setFilter} />
-      <section className="portal-panel portal-table-panel">
+      <div className="portal-toolbar portal-company-toolbar">
+        <label>
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setListPage(1); }}
+            placeholder={tr("گەڕان بە ناو، خاوەن، مۆڵەت، تەلەفۆن یان شار...", "البحث بالاسم أو المالك أو الترخيص أو الهاتف أو المدينة...", "Search name, owner, licence, phone or city…")}
+            aria-label={tr("گەڕان بۆ کۆمپانیا", "البحث عن شركة", "Search companies")}
+          />
+        </label>
+        <div className="portal-filter-row" aria-label={tr("فلتەری دۆخ", "تصفية الحالة", "Status filter")}>
+          <Filter size={15} />
+          {([
+            ["all", tr("هەموو", "الكل", "All")],
+            ["pending", tr("چاوەڕێ", "قيد المراجعة", "Pending")],
+            ["needs_changes", tr("گۆڕانکاری", "تعديلات", "Changes")],
+            ["approved", tr("پەسەندکراو", "معتمدة", "Approved")],
+            ["suspended", tr("ڕاگیراو", "معلقة", "Suspended")],
+            ["rejected", tr("ڕەتکراوە", "مرفوضة", "Rejected")],
+          ] as Array<["all" | CompanyVerificationState, string]>).map(([id, label]) => (
+            <button type="button" key={id} className={filter === id ? "active" : ""} onClick={() => changeFilter(id)}>{label}</button>
+          ))}
+        </div>
+        <label className="portal-sort-control">
+          <span>{tr("ڕیزکردن", "ترتيب", "Sort")}</span>
+          <select value={sort} onChange={(event) => { setSort(event.target.value); setListPage(1); }} aria-label={tr("ڕیزکردنی کۆمپانیاکان", "ترتيب الشركات", "Sort companies")}>
+            <option value="newest">{tr("نوێترین", "الأحدث", "Newest")}</option>
+            <option value="activity">{tr("دوایین چالاکی", "آخر نشاط", "Last activity")}</option>
+            <option value="completion">{tr("تەواوی پڕۆفایل", "اكتمال الملف", "Profile completion")}</option>
+            <option value="booking_value">{tr("بەهای حیجز", "قيمة الحجوزات", "Booking value")}</option>
+            <option value="rating">{tr("هەڵسەنگاندن", "التقييم", "Rating")}</option>
+            <option value="name">{tr("ناو", "الاسم", "Name")}</option>
+          </select>
+        </label>
+      </div>
+      <section className="portal-panel portal-collection-panel">
         <PanelHeader title={`${companies.length} ${locale === "ku" ? "کۆمپانیا" : locale === "ar" ? "شركات" : "companies"}`} subtitle={locale === "ku" ? "دۆخی پشتڕاستکردنەوە و بازاڕی کۆمپانیا" : locale === "ar" ? "التحقق المباشر من الشركة وحالة السوق" : "Live company verification and marketplace status"} />
         {companies.length ? (
-          <div className="portal-table-wrap">
-            <table className="portal-table">
-              <thead><tr><th>{t.company}</th><th>{locale === "ku" ? "شوێن" : locale === "ar" ? "الموقع" : "Location"}</th><th>{locale === "ku" ? "هەڵسەنگاندن" : locale === "ar" ? "التقييم" : "Rating"}</th><th>{locale === "ku" ? "پشتڕاستکردنەوە" : locale === "ar" ? "التحقق" : "Verification"}</th><th>{locale === "ku" ? "تۆماربووە" : locale === "ar" ? "انضم في" : "Joined"}</th><th className="right">{locale === "ku" ? "کردارەکان" : locale === "ar" ? "الإجراءات" : "Actions"}</th></tr></thead>
-              <tbody>
-                {companies.map((company) => (
-                  <tr key={company.id} className="clickable" onClick={() => setSelectedId(company.id)}>
-                    <td><EntityName name={company.name} image={company.logo_url} fallback={Building2} detail={company.phone ?? "No phone added"} /></td>
-                    <td>{company.location || (locale === "ku" ? "دابین نەکراوە" : locale === "ar" ? "غير متوفر" : "Not provided")}</td>
-                    <td><span className="portal-rating"><Star size={13} fill="currentColor" /> {Number(company.rating ?? 0).toFixed(1)} <small>({company.reviews ?? 0})</small></span></td>
-                    <td><StatusPill status={company.verification_status || company.status} /></td>
-                    <td>{formatDate(company.created_at, true)}</td>
-                    <td className="right" onClick={(event) => event.stopPropagation()}>
-                      {["pending", "needs_changes"].includes(company.verification_status) ? (
-                        <div className="portal-row-actions">
-                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {t.accept}</button>
-                          <button type="button" onClick={() => review(company, "needs_changes")} disabled={busy.startsWith(`company-${company.id}`)}>{locale === "ku" ? "گۆڕانکاری" : locale === "ar" ? "تعديلات" : "Changes"}</button>
-                          <button type="button" className="danger" onClick={() => review(company, "rejected")} disabled={busy.startsWith(`company-${company.id}`)}>{t.reject}</button>
-                        </div>
-                      ) : (company.verification_status === "suspended" || !company.is_active) ? (
-                        <div className="portal-row-actions">
-                          <button type="button" className="approve" onClick={() => review(company, "approved")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
-                        </div>
-                      ) : (
-                        <div className="portal-row-actions">
-                          <button type="button" className="danger" onClick={() => review(company, "suspended")} disabled={busy.startsWith(`company-${company.id}`)}>{busy === `company-${company.id}-suspended` ? <TawafLoadingSpinner size={14} /> : <X size={14} />} {locale === "ku" ? "ڕاگرتنی کۆمپانیا" : locale === "ar" ? "تعليق الشركة" : "Suspend company"}</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <EmptyState icon={Building2} title={t.noCompaniesFound} text={locale === "ku" ? "گەڕانێکی تر تاقی بکەرەوە یان فلتەرەکە بگۆڕە." : locale === "ar" ? "حاول البحث بكلمات أخرى أو تغيير الفلاتر." : "Try another search or filter."} compact />}
+          <>
+            {/* One grid for every width, replacing the desktop table plus the
+                separate .portal-company-mobile-list that duplicated all of this
+                markup with a different subset of the same fields. */}
+            <div className="portal-company-grid">
+              {visibleCompanies.map((company) => {
+                const state = companyVerificationState(company);
+                const completion = companyProfileCompletion(company);
+                const owner = ownerById.get(company.owner_id);
+                const parent = company.parent_company_id
+                  ? data.companies.find((item) => item.id === company.parent_company_id)?.name ?? "—"
+                  : null;
+                const lastActivity = new Date(analytics.lastActivity.get(company.id) ?? new Date(company.created_at).getTime()).toISOString();
+                // Pending and needs_changes are the admin's actual queue, so
+                // they carry the accent. Everything else is reference.
+                const needsReview = state === "pending" || state === "needs_changes";
+                return (
+                  <article
+                    className={`portal-company-tile${needsReview ? " needs-review" : ""}`}
+                    key={company.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedId(company.id)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(company.id); } }}
+                  >
+                    <header className="portal-company-tile-head">
+                      <span className={`portal-company-logo${company.logo_url ? " has-image" : ""}`}>
+                        <Building2 size={18} />
+                        {company.logo_url && <img src={company.logo_url} alt="" loading="lazy" onError={(event) => { event.currentTarget.closest(".portal-company-logo")?.classList.remove("has-image"); }} />}
+                      </span>
+                      <div>
+                        <b>{company.name}</b>
+                        <small>
+                          <MapPin size={11} /> {company.location || tr("شوێن دیاری نەکراوە", "الموقع غير محدد", "Location not set")}
+                          {parent && <> · {tr("لقی", "فرع", "Branch of")} {parent}</>}
+                        </small>
+                      </div>
+                    </header>
+
+                    <div className="portal-company-badges">
+                      <StatusPill status={state} locale={locale} />
+                      {company.is_promoted && <span className="portal-company-promoted"><Star size={11} fill="currentColor" /> {tr("پرۆمۆت", "مروّجة", "Promoted")}</span>}
+                    </div>
+
+                    {/* Completion is the thing an admin acts on for a pending
+                        application, so it gets a full-width bar rather than the
+                        94px chip the table cell used. */}
+                    <div className="portal-company-completion">
+                      <span>{tr("تەواوی پڕۆفایل", "اكتمال الملف", "Profile completion")}</span>
+                      <small>{completion}%</small>
+                      <i><b className={completion < 70 ? "is-low" : undefined} style={{ width: `${completion}%` }} /></i>
+                    </div>
+
+                    <div className="portal-company-stats">
+                      <div><small>{tr("گەشتەکان", "الرحلات", "Trips")}</small><b>{analytics.tripCount.get(company.id) ?? 0}</b></div>
+                      <div><small>{tr("بەهای حیجز", "قيمة الحجوزات", "Booking value")}</small><b dir="ltr">{formatIqd(analytics.bookingValue.get(company.id) ?? 0, true)}</b></div>
+                      <div><small>{tr("هەڵسەنگاندن", "التقييم", "Rating")}</small><b>{company.rating ? `${Number(company.rating).toFixed(1)} (${company.reviews ?? 0})` : "—"}</b></div>
+                    </div>
+
+                    <ul className="portal-company-meta">
+                      <li><UserRound size={12} /> {owner?.full_name || tr("خاوەن دیاری نەکراوە", "المالك غير محدد", "Owner not set")}{company.phone && <em dir="ltr">{company.phone}</em>}</li>
+                      <li><ShieldCheck size={12} /> {company.license_number ? `${tr("مۆڵەت", "ترخيص", "Licence")} ${company.license_number}` : tr("ژمارەی مۆڵەت نییە", "لا يوجد رقم ترخيص", "No licence number")}</li>
+                      <li><Clock3 size={12} /> {tr("دوایین چالاکی", "آخر نشاط", "Last activity")} {formatDate(lastActivity, true)}</li>
+                    </ul>
+
+                    <div className="portal-card-actions" onClick={(event) => event.stopPropagation()}>
+                      <button type="button" className="portal-review-button" onClick={() => setSelectedId(company.id)}>
+                        <ClipboardCheck size={14} /> {state === "pending" ? tr("پێداچوونەوەی داواکاری", "مراجعة الطلب", "Review application") : tr("کردنەوەی پڕۆفایل", "فتح الملف", "Open profile")}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {totalPages > 1 && (
+              <nav className="portal-pagination" aria-label={tr("لاپەڕەکانی کۆمپانیا", "صفحات الشركات", "Company pages")}>
+                <span>{tr(`لاپەڕەی ${safePage} لە ${totalPages}`, `الصفحة ${safePage} من ${totalPages}`, `Page ${safePage} of ${totalPages}`)}</span>
+                <div>
+                  <button type="button" onClick={() => setListPage((value) => Math.max(1, value - 1))} disabled={safePage === 1} aria-label={tr("لاپەڕەی پێشوو", "الصفحة السابقة", "Previous page")}><ChevronLeft size={15} /></button>
+                  <button type="button" onClick={() => setListPage((value) => Math.min(totalPages, value + 1))} disabled={safePage === totalPages} aria-label={tr("لاپەڕەی دواتر", "الصفحة التالية", "Next page")}><ArrowRight size={15} /></button>
+                </div>
+              </nav>
+            )}
+          </>
+        ) : <EmptyState icon={Building2} title={t.noCompaniesFound} text={tr("گەڕانێکی تر تاقی بکەرەوە یان فلتەرەکە بگۆڕە.", "حاول البحث بكلمات أخرى أو تغيير الفلاتر.", "Try another search or filter.")} compact />}
       </section>
       {selected && (
         <CompanyDetailDrawer
           company={selected}
           data={data}
           busy={busy}
+          runAction={runAction}
           locale={locale}
           onClose={() => setSelectedId(null)}
           onReview={(decision) => review(selected, decision)}
@@ -1398,10 +2151,121 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
   );
 }
 
+// Admin-only. resolve_commission_rate() already resolves offer override ->
+// agency override -> 5% platform default, but until now the agency tier could
+// only be changed with raw SQL. This is the missing control surface, plus the
+// audit trail for this company so a rate change is never unexplained.
+function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }: {
+  company: Company;
+  busy: string;
+  runAction: RunAction;
+  locale: "ku" | "ar" | "en";
+  activeTab: "overview" | "verification" | "commercial" | "activity";
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [tier, setTier] = useState("standard");
+  const [percent, setPercent] = useState("5");
+  const [loaded, setLoaded] = useState(false);
+  const [activity, setActivity] = useState<Array<{ id: string; action: string; reason: string | null; created_at: string; actor_role: string | null }>>([]);
+  const savingKey = `commercial-${company.id}`;
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = getSupabase();
+      const [settings, logs] = await Promise.all([
+        supabase.from("agency_commercial_settings").select("commission_tier, commission_rate").eq("agency_id", company.id).maybeSingle(),
+        supabase.from("audit_logs").select("id, action, reason, created_at, actor_role").eq("entity_id", company.id).order("created_at", { ascending: false }).limit(8),
+      ]);
+      if (!active) return;
+      if (settings.data) {
+        setTier(settings.data.commission_tier ?? "standard");
+        setPercent(((Number(settings.data.commission_rate) || 0) * 100).toFixed(2).replace(/\.?0+$/, ""));
+      }
+      setActivity((logs.data ?? []) as typeof activity);
+      setLoaded(true);
+    })();
+    return () => { active = false; };
+  }, [company.id]);
+
+  async function save() {
+    const rate = Number(percent) / 100;
+    if (!Number.isFinite(rate) || rate < 0 || rate > 1) return;
+    const { data: auth } = await getSupabase().auth.getUser();
+    await runAction(
+      savingKey,
+      () => getSupabase().from("agency_commercial_settings").upsert({
+        agency_id: company.id,
+        commission_tier: tier,
+        commission_rate: rate,
+        updated_by: auth.user?.id ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "agency_id" }),
+      tr("ڕێژەی کۆمسیۆن نوێکرایەوە.", "تم تحديث نسبة العمولة.", "Commission rate updated."),
+    );
+  }
+
+  return (
+    <>
+      {activeTab === "commercial" && <section>
+        <h3>{tr("ڕێککەوتنی بازرگانی", "الإعدادات التجارية", "Commercial terms")}</h3>
+        {!loaded ? <TawafLoadingSpinner size={16} /> : (
+          <>
+            <div className="portal-commercial-row">
+              <label>
+                <small>{tr("پلە", "الفئة", "Tier")}</small>
+                <select value={tier} onChange={(event) => setTier(event.target.value)}>
+                  <option value="standard">{tr("ئاسایی", "قياسي", "Standard")}</option>
+                  <option value="preferred">{tr("تایبەت", "مفضّل", "Preferred")}</option>
+                  <option value="custom">{tr("دەستنیشانکراو", "مخصص", "Custom")}</option>
+                </select>
+              </label>
+              <label>
+                <small>{tr("ڕێژە %", "النسبة %", "Rate %")}</small>
+                <input type="number" min={0} max={100} step={0.25} value={percent} onChange={(event) => setPercent(event.target.value)} />
+              </label>
+              <button type="button" className="portal-secondary-button" onClick={save} disabled={busy === savingKey}>
+                {busy === savingKey ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {tr("پاشەکەوت", "حفظ", "Save")}
+              </button>
+            </div>
+            <p className="portal-commercial-note">
+              {tr(
+                "بەبێ ڕێککەوتنی تایبەت، ٥٪ی بنەڕەتیی پلاتفۆرم جێبەجێ دەکرێت. ڕێژەی هەر گەشتێک لەسەرەوەی ئەمە دەبێت.",
+                "بدون إعداد خاص تُطبَّق نسبة المنصة الافتراضية ٥٪. تجاوز الرحلة المفردة له الأولوية على هذا.",
+                "Without an override the 5% platform default applies. A per-trip override still takes precedence over this.",
+              )}
+            </p>
+          </>
+        )}
+      </section>}
+
+      {activeTab === "activity" && (
+        <section>
+          <h3>{tr("چالاکی", "السجل", "Activity")}</h3>
+          {!loaded ? <TawafLoadingSpinner size={16} /> : activity.length ? (
+            <ul className="portal-activity-list">
+              {activity.map((row) => (
+                <li key={row.id}>
+                  <b>{titleCase(row.action)}</b>
+                  <small>{row.actor_role ? `${titleCase(row.actor_role)} · ` : ""}{relativeTime(row.created_at)}</small>
+                  {row.reason && <p>{row.reason}</p>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="portal-commercial-note">{tr("هێشتا هیچ چالاکییەک تۆمار نەکراوە.", "لم يتم تسجيل أي نشاط بعد.", "No activity has been recorded yet.")}</p>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
 function CompanyDetailDrawer({
   company,
   data,
   busy,
+  runAction,
   locale,
   onClose,
   onReview,
@@ -1410,94 +2274,244 @@ function CompanyDetailDrawer({
   company: Company;
   data: PortalData;
   busy: string;
+  runAction: RunAction;
   locale: "ku" | "ar" | "en";
   onClose: () => void;
   onReview: (decision: "approved" | "rejected" | "needs_changes" | "suspended") => void;
   onTogglePromoted: () => void;
 }) {
+  useScrollLock();
   const t = dashboardTranslations[locale];
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const state = companyVerificationState(company);
+  const [activeTab, setActiveTab] = useState<"overview" | "verification" | "commercial" | "activity">(state === "pending" ? "verification" : "overview");
+  const [confirmingApproval, setConfirmingApproval] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const trips = data.trips.filter((item) => item.company_id === company.id);
   const bookings = data.bookings.filter((item) => item.company_id === company.id);
+  const owner = data.companyOwners.find((item) => item.id === company.owner_id);
   const bookingValue = bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
   const commissionOwed = data.commissions.filter((item) => item.company_id === company.id && item.status === "owed").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const isPending = ["pending", "needs_changes"].includes(company.verification_status);
-  const isSuspended = company.verification_status === "suspended" || !company.is_active;
+  const completion = companyProfileCompletion(company);
+  const isPending = ["pending", "needs_changes"].includes(state);
+  const isRejected = state === "rejected";
+  const isSuspended = state === "suspended";
+  // Promotion only affects the marketplace for companies the app actually
+  // surfaces (approved + active). Anything else can't be promoted meaningfully,
+  // so we don't offer the toggle there — it would be a no-op for clients.
+  const canPromote = state === "approved";
   const rowBusy = busy.startsWith(`company-${company.id}`);
-  const notProvided = locale === "ku" ? "دابین نەکراوە" : locale === "ar" ? "غير متوفر" : "Not provided";
+  const notProvided = tr("دابین نەکراوە", "غير متوفر", "Not provided");
+  const duplicateLicence = Boolean(company.license_number && data.companies.some((item) => item.id !== company.id && item.license_number?.trim().toLocaleLowerCase() === company.license_number?.trim().toLocaleLowerCase()));
+  const duplicatePhone = Boolean(company.phone && data.companies.some((item) => item.id !== company.id && item.phone?.replace(/\D/g, "") === company.phone?.replace(/\D/g, "")));
+  const reviewSignals = [
+    !company.license_number ? tr("ژمارەی مۆڵەت دابین نەکراوە.", "رقم الترخيص غير متوفر.", "No licence number was provided.") : "",
+    duplicateLicence ? tr("هەمان ژمارەی مۆڵەت لە کۆمپانیایەکی تردا بەکارهاتووە.", "رقم الترخيص مستخدم لدى شركة أخرى.", "This licence number is also used by another company.") : "",
+    duplicatePhone ? tr("هەمان ژمارەی تەلەفۆن لە کۆمپانیایەکی تردا بەکارهاتووە.", "رقم الهاتف مستخدم لدى شركة أخرى.", "This phone number is also used by another company.") : "",
+    completion < 70 ? tr("پڕۆفایلی کۆمپانیا لە ٧٠٪ کەمتر تەواوە.", "اكتمال ملف الشركة أقل من ٧٠٪.", "The company profile is less than 70% complete.") : "",
+  ].filter(Boolean);
+  const checklist = [
+    {
+      label: tr("ناسنامەی بازرگانی", "الهوية التجارية", "Business identity"),
+      complete: Boolean(company.name && company.license_number),
+      detail: tr("ناوی بازرگانی و ژمارەی مۆڵەت", "الاسم التجاري ورقم الترخيص", "Trading name and licence number"),
+    },
+    {
+      label: tr("زانیاری پەیوەندی", "معلومات الاتصال", "Contact information"),
+      complete: Boolean(company.phone && company.location && company.office_address),
+      detail: tr("تەلەفۆن، شار و ناونیشانی نووسینگە", "الهاتف والمدينة وعنوان المكتب", "Phone, city and office address"),
+    },
+    {
+      label: tr("پڕۆفایلی بازاڕ", "ملف السوق", "Marketplace profile"),
+      complete: Boolean(company.about && company.logo_url && company.banner_url),
+      detail: tr("پێناسە، لۆگۆ و وێنەی غلاف", "الوصف والشعار وصورة الغلاف", "Description, logo and cover image"),
+    },
+    {
+      label: tr("زانیاری کارکردن", "معلومات التشغيل", "Operating information"),
+      complete: Boolean(company.office_hours && company.accepted_payment_methods?.length),
+      detail: tr("کاتەکانی کار و شێوازی پارەدان", "ساعات العمل وطرق الدفع", "Office hours and payment methods"),
+    },
+  ];
+
+  useEffect(() => {
+    closeRef.current?.focus();
+  }, []);
+
+  function handleDrawerKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab" || !drawerRef.current) return;
+    const focusable = Array.from(drawerRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]"))
+      .filter((element) => !element.hasAttribute("hidden"));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function confirmApproval() {
+    setConfirmingApproval(false);
+    onReview("approved");
+  }
 
   return (
     <div className="portal-drawer-scrim" onClick={onClose}>
-      <aside className="portal-drawer" onClick={(event) => event.stopPropagation()} aria-label={company.name}>
+      <aside
+        ref={drawerRef}
+        className="portal-drawer"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleDrawerKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`company-drawer-title-${company.id}`}
+      >
         <header className="portal-drawer-head" style={company.banner_url ? { backgroundImage: `linear-gradient(rgba(5,45,36,.55), rgba(5,45,36,.75)), url("${company.banner_url}")` } : undefined}>
-          <button type="button" className="portal-drawer-close" onClick={onClose} aria-label="Close details"><X size={17} /></button>
+          <button ref={closeRef} type="button" className="portal-drawer-close" onClick={onClose} aria-label={tr("داخستنی وردەکاری", "إغلاق التفاصيل", "Close details")}><X size={17} /></button>
           <div className="portal-company-avatar large">
             {company.logo_url ? <img src={company.logo_url} alt="" /> : company.name.slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <h2>{company.name}</h2>
+            <h2 id={`company-drawer-title-${company.id}`}>{company.name}</h2>
             <p>{company.location || notProvided} · {locale === "ku" ? "بەشداربووە" : locale === "ar" ? "انضمت في" : "Joined"} {formatDate(company.created_at, true)}</p>
           </div>
           <div className="portal-drawer-badges">
-            <StatusPill status={company.verification_status || company.status} />
+            <StatusPill status={state} locale={locale} />
             {company.is_promoted && <span className="portal-status positive"><i />{locale === "ku" ? "پرۆمۆتکراو" : locale === "ar" ? "مروَّجة" : "Promoted"}</span>}
           </div>
         </header>
+
+        <nav className="portal-drawer-tabs" role="tablist" aria-label={tr("بەشەکانی پڕۆفایلی کۆمپانیا", "أقسام ملف الشركة", "Company profile sections")}>
+          {([
+            ["overview", tr("پوختە", "نظرة عامة", "Overview")],
+            ["verification", tr("پشتڕاستکردنەوە", "التحقق", "Verification")],
+            ["commercial", tr("بازرگانی", "تجاري", "Commercial")],
+            ["activity", tr("چالاکی", "النشاط", "Activity")],
+          ] as Array<[typeof activeTab, string]>).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={activeTab === id} className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>{label}</button>
+          ))}
+        </nav>
 
         <div className="portal-drawer-body">
           {company.verification_reason && (
             <p className="portal-drawer-reason"><AlertTriangle size={14} /> {company.verification_reason}</p>
           )}
 
-          <div className="portal-drawer-stats">
-            <div><b>{trips.length}</b><small>{locale === "ku" ? "گەشتەکان" : locale === "ar" ? "الرحلات" : "Trips"}</small></div>
-            <div><b>{bookings.length}</b><small>{locale === "ku" ? "حیجزەکان" : locale === "ar" ? "الحجوزات" : "Bookings"}</small></div>
-            <div><b>{formatIqd(bookingValue, true)}</b><small>{t.bookingValue}</small></div>
-            <div><b>{formatIqd(commissionOwed, true)}</b><small>{locale === "ku" ? "کۆمسیۆنی ماوە" : locale === "ar" ? "عمولة مستحقة" : "Commission owed"}</small></div>
-          </div>
+          {activeTab === "overview" && (
+            <>
+              <div className="portal-drawer-stats">
+                <div><b>{trips.length}</b><small>{tr("گەشتەکان", "الرحلات", "Trips")}</small></div>
+                <div><b>{bookings.length}</b><small>{tr("حیجزەکان", "الحجوزات", "Bookings")}</small></div>
+                <div><b>{formatIqd(bookingValue, true)}</b><small>{t.bookingValue}</small></div>
+                <div><b>{formatIqd(commissionOwed, true)}</b><small>{tr("کۆمسیۆنی ماوە", "عمولة مستحقة", "Commission owed")}</small></div>
+              </div>
 
-          <section>
-            <h3>{locale === "ku" ? "زانیاری پەیوەندی" : locale === "ar" ? "معلومات الاتصال" : "Contact information"}</h3>
-            <ul className="portal-drawer-facts">
-              <li><PhoneCall size={14} /><span>{company.phone || notProvided}</span></li>
-              <li><MessageSquareText size={14} /><span>{company.whatsapp || notProvided} (WhatsApp)</span></li>
-              <li><MapPin size={14} /><span>{company.office_address || notProvided}</span></li>
-              <li><Clock3 size={14} /><span>{company.office_hours || notProvided}</span></li>
-            </ul>
-          </section>
+              <section>
+                <h3>{tr("زانیاری پەیوەندی", "معلومات الاتصال", "Contact information")}</h3>
+                <ul className="portal-drawer-facts">
+                  <li><PhoneCall size={14} /><span>{company.phone || notProvided}</span></li>
+                  <li><MessageSquareText size={14} /><span>{company.whatsapp || notProvided} (WhatsApp)</span></li>
+                  <li><MapPin size={14} /><span>{company.office_address || notProvided}</span></li>
+                  <li><Clock3 size={14} /><span>{company.office_hours || notProvided}</span></li>
+                </ul>
+              </section>
 
-          <section>
-            <h3>{locale === "ku" ? "زانیاری بازرگانی" : locale === "ar" ? "معلومات العمل" : "Business details"}</h3>
-            <ul className="portal-drawer-facts">
-              <li><FileCheck2 size={14} /><span>{locale === "ku" ? "ژمارەی مۆڵەت:" : locale === "ar" ? "رقم الترخيص:" : "License:"} {company.license_number || notProvided}</span></li>
-              <li><CalendarDays size={14} /><span>{locale === "ku" ? "دامەزراوە لە" : locale === "ar" ? "تأسست في" : "Established"} {company.since ?? notProvided}</span></li>
-              <li><Star size={14} /><span>{Number(company.rating ?? 0).toFixed(1)} · {company.reviews ?? 0} {locale === "ku" ? "هەڵسەنگاندن" : locale === "ar" ? "تقييمات" : "reviews"}</span></li>
-              <li><CreditCard size={14} /><span>{(company.accepted_payment_methods ?? []).map(titleCase).join(", ") || notProvided}</span></li>
-            </ul>
-            {(company.tags ?? []).length > 0 && (
-              <div className="portal-drawer-tags">{(company.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}</div>
-            )}
-          </section>
+              <section>
+                <h3>{tr("زانیاری بازرگانی", "معلومات العمل", "Business details")}</h3>
+                <ul className="portal-drawer-facts">
+                  <li><FileCheck2 size={14} /><span>{tr("ژمارەی مۆڵەت:", "رقم الترخيص:", "Licence:")} {company.license_number || notProvided}</span></li>
+                  <li><CalendarDays size={14} /><span>{tr("دامەزراوە لە", "تأسست في", "Established")} {company.since ?? notProvided}</span></li>
+                  <li><Star size={14} /><span>{Number(company.rating ?? 0).toFixed(1)} · {company.reviews ?? 0} {tr("هەڵسەنگاندن", "تقييمات", "reviews")}</span></li>
+                  <li><CreditCard size={14} /><span>{(company.accepted_payment_methods ?? []).map(titleCase).join(", ") || notProvided}</span></li>
+                </ul>
+                {(company.tags ?? []).length > 0 && (
+                  <div className="portal-drawer-tags">{(company.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}</div>
+                )}
+              </section>
 
-          {company.about && (
+              {company.about && (
+                <section>
+                  <h3>{tr("دەربارە", "نبذة", "About")}</h3>
+                  <p className="portal-drawer-about">{company.about}</p>
+                </section>
+              )}
+            </>
+          )}
+
+          {activeTab === "verification" && (
             <section>
-              <h3>{locale === "ku" ? "دەربارە" : locale === "ar" ? "نبذة" : "About"}</h3>
-              <p className="portal-drawer-about">{company.about}</p>
+              <div className="portal-verification-score">
+                <div><b>{completion}%</b><small>{tr("تەواوی پڕۆفایل", "اكتمال الملف", "Profile completion")}</small></div>
+                <span><i style={{ width: `${completion}%` }} /></span>
+              </div>
+              <h3>{tr("لیستی پێداچوونەوە", "قائمة التحقق", "Review checklist")}</h3>
+              <ul className="portal-verification-list">
+                {checklist.map((item) => (
+                  <li key={item.label} className={item.complete ? "complete" : ""}>
+                    <span>{item.complete ? <Check size={14} /> : <AlertTriangle size={14} />}</span>
+                    <div><b>{item.label}</b><small>{item.detail}</small></div>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="portal-verification-record">
+                <h3>{tr("تۆماری داواکاری", "سجل الطلب", "Application record")}</h3>
+                <dl>
+                  <div><dt>{tr("خاوەنی کۆمپانیا", "مالك الشركة", "Company owner")}</dt><dd>{owner?.full_name || company.owner_id}</dd></div>
+                  {owner?.phone && <div><dt>{tr("تەلەفۆنی خاوەن", "هاتف المالك", "Owner phone")}</dt><dd>{owner.phone}</dd></div>}
+                  {owner?.full_name && <div><dt>{tr("ناسنامەی خاوەن", "معرف المالك", "Owner ID")}</dt><dd>{company.owner_id}</dd></div>}
+                  <div><dt>{tr("بەرواری تۆمارکردن", "تاريخ التسجيل", "Submitted")}</dt><dd>{formatDate(company.created_at, true)}</dd></div>
+                  <div><dt>{tr("ژمارەی مۆڵەت", "رقم الترخيص", "Licence number")}</dt><dd>{company.license_number || notProvided}</dd></div>
+                </dl>
+              </div>
+
+              <div className={`portal-review-signals ${reviewSignals.length ? "warning" : "clear"}`}>
+                <h3>{reviewSignals.length ? tr("ئاگادارییەکانی پێداچوونەوە", "إشارات المراجعة", "Review signals") : tr("هیچ ئاگادارییەک نەدۆزرایەوە", "لم يتم العثور على إشارات", "No review signals found")}</h3>
+                {reviewSignals.length ? <ul>{reviewSignals.map((signal) => <li key={signal}>{signal}</li>)}</ul> : <p>{tr("هیچ دووبارەبوونەوە یان کەموکوڕییەکی دیار نەدۆزرایەوە.", "لم يتم اكتشاف تكرار أو نقص واضح.", "No obvious duplicate or missing-data signals were detected.")}</p>}
+              </div>
+
+              <p className="portal-verification-note"><ShieldCheck size={15} /> {tr(
+                "ئەم لیستە تەنها تەواوی زانیارییە نێردراوەکان دەسەلمێنێت. پێش پەسەندکردن، ژمارەی مۆڵەت لەگەڵ بەڵگەی فەرمی بەراورد بکە.",
+                "تتحقق هذه القائمة من اكتمال البيانات المقدمة فقط. قارن رقم الترخيص مع المستند الرسمي قبل الاعتماد.",
+                "This checklist verifies submitted data completeness only. Compare the licence number with official evidence before approval.",
+              )}</p>
             </section>
           )}
+
+          <CompanyCommercialPanel company={company} busy={busy} runAction={runAction} locale={locale} activeTab={activeTab} />
         </div>
 
         <footer className="portal-drawer-actions">
-          {isPending ? (
+          {confirmingApproval ? (
+            <div className="portal-approval-confirm">
+              <div><AlertTriangle size={17} /><span><b>{isSuspended ? tr("چالاککردنەوەی کۆمپانیا؟", "إعادة تفعيل الشركة؟", "Reactivate company?") : tr("پەسەندکردنی کۆمپانیا؟", "اعتماد الشركة؟", "Approve company?")}</b><small>{tr("ئەم کارە دەستگەیشتنی کۆمپانیا بۆ بازاڕ چالاک دەکات.", "سيؤدي هذا إلى تفعيل وصول الشركة إلى السوق.", "This activates the company’s marketplace access.")}</small></span></div>
+              <div>
+                <button type="button" className="portal-secondary-button" onClick={() => setConfirmingApproval(false)}>{tr("پاشگەزبوونەوە", "إلغاء", "Cancel")}</button>
+                <button type="button" className="portal-primary-button" onClick={confirmApproval} disabled={rowBusy}>{rowBusy ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {tr("پشتڕاستکردنەوە", "تأكيد", "Confirm")}</button>
+              </div>
+            </div>
+          ) : isPending ? (
             <>
-              <button type="button" className="portal-primary-button" onClick={() => onReview("approved")} disabled={rowBusy}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {t.accept}</button>
+              <button type="button" className="portal-primary-button" onClick={() => { setActiveTab("verification"); setConfirmingApproval(true); }} disabled={rowBusy}><Check size={14} /> {t.accept}</button>
               <button type="button" className="portal-secondary-button" onClick={() => onReview("needs_changes")} disabled={rowBusy}>{locale === "ku" ? "داوای گۆڕانکاری" : locale === "ar" ? "طلب تعديلات" : "Request changes"}</button>
               <button type="button" className="portal-secondary-button danger" onClick={() => onReview("rejected")} disabled={rowBusy}>{t.reject}</button>
             </>
+          ) : isRejected ? (
+            <button type="button" className="portal-primary-button" onClick={() => { setActiveTab("verification"); setConfirmingApproval(true); }} disabled={rowBusy}><Check size={14} /> {locale === "ku" ? "پەسەندکردنی کۆمپانیا" : locale === "ar" ? "الموافقة على الشركة" : "Approve company"}</button>
           ) : isSuspended ? (
-            <button type="button" className="portal-primary-button" onClick={() => onReview("approved")} disabled={rowBusy}>{busy === `company-${company.id}-approved` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
+            <button type="button" className="portal-primary-button" onClick={() => setConfirmingApproval(true)} disabled={rowBusy}><Check size={14} /> {locale === "ku" ? "چالاککردنەوەی کۆمپانیا" : locale === "ar" ? "إعادة تفعيل الشركة" : "Reactivate company"}</button>
           ) : (
             <>
-              <button type="button" className="portal-secondary-button" onClick={onTogglePromoted} disabled={rowBusy}>{busy === `company-${company.id}-promote` ? <TawafLoadingSpinner size={14} /> : <Star size={14} />} {company.is_promoted ? (locale === "ku" ? "لابردنی پرۆمۆشن" : locale === "ar" ? "إزالة الترويج" : "Remove promotion") : (locale === "ku" ? "پرۆمۆتکردنی کۆمپانیا" : locale === "ar" ? "ترويج الشركة" : "Promote company")}</button>
+              {canPromote && <button type="button" className="portal-secondary-button" onClick={onTogglePromoted} disabled={rowBusy}>{busy === `company-${company.id}-promote` ? <TawafLoadingSpinner size={14} /> : <Star size={14} />} {company.is_promoted ? (locale === "ku" ? "لابردنی پرۆمۆشن" : locale === "ar" ? "إزالة الترويج" : "Remove promotion") : (locale === "ku" ? "پرۆمۆتکردنی کۆمپانیا" : locale === "ar" ? "ترويج الشركة" : "Promote company")}</button>}
               <button type="button" className="portal-secondary-button danger" onClick={() => onReview("suspended")} disabled={rowBusy}>{busy === `company-${company.id}-suspended` ? <TawafLoadingSpinner size={14} /> : <X size={14} />} {locale === "ku" ? "ڕاگرتنی کۆمپانیا" : locale === "ar" ? "تعليق الشركة" : "Suspend company"}</button>
             </>
           )}
@@ -1515,7 +2529,7 @@ type TripDetailData = {
 };
 
 // Read-only detail sheet the admin opens by clicking a trip card, so every field the
-// company submitted can be reviewed before the approve/reject decision. Pulls the child
+// company submitted can be reviewed before the review decision. Pulls the child
 // tables (itinerary/pricing/hotels/inclusions) on open — admin RLS (is_admin) already
 // allows reading these for pending trips, so no server change is needed.
 function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onClose }: {
@@ -1524,7 +2538,7 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
   locale: "ku" | "ar" | "en";
   role: Role;
   busy: string;
-  onReview: (decision: "published" | "rejected") => Promise<void>;
+  onReview: (decision: "published" | "needs_changes" | "rejected") => Promise<boolean>;
   onClose: () => void;
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
@@ -1532,6 +2546,8 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const rowBusy = busy === `trip-review-${trip.id}`;
+
+  useScrollLock();
 
   useEffect(() => {
     let active = true;
@@ -1600,7 +2616,7 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
             {trip.image_url && <img src={trip.image_url} alt="" onError={(event) => { event.currentTarget.closest(".portal-trip-modal-cover")?.classList.remove("has-image"); }} />}
           </div>
           <div className="portal-trip-modal-title">
-            {role === "admin" && <small>{companyName}</small>}
+            {role === "admin" && <small>{tr("پێشبینینی زیارەتکار · ", "معاينة المعتمر · ", "Client preview · ")}{companyName}</small>}
             <h2>{trip.title}</h2>
             <StatusPill status={trip.lifecycle_status} />
           </div>
@@ -1608,8 +2624,13 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
         </header>
 
         <div className="portal-trip-modal-body">
-          {trip.review_reason && (
-            <p className="portal-review-note">{trip.review_reason}</p>
+          {(trip.rejection_reason || trip.review_reason) && (
+            <p className={`portal-review-note${trip.rejection_reason ? " is-rejection" : ""}`}>
+              <b>{trip.rejection_reason
+                ? tr("هۆکاری ڕەتکردنەوە: ", "سبب الرفض: ", "Rejection reason: ")
+                : tr("تێبینی گۆڕانکاری: ", "ملاحظة التعديل: ", "Changes note: ")}</b>
+              {trip.rejection_reason || trip.review_reason}
+            </p>
           )}
 
           {trip.overview && (
@@ -1656,7 +2677,7 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
                           <b className="portal-trip-hotel-name">{hotel.hotels?.name ?? tr("هۆتێل دیارینەکراوە", "فندق غير محدد", "Hotel not set")}</b>
                           <div className="portal-trip-hotel-meta">
                             <span>{hotel.nights} {tr("شەو", "ليالٍ", "nights")}</span>
-                            {hotel.distance_from_haram_m != null && <span>{hotel.distance_from_haram_m}{tr("م لە حەرەم", "م من الحرم", "m from Haram")}</span>}
+                            {hotel.distance_from_haram_m != null && <span>{hotel.distance_from_haram_m}{hotel.city === "makkah" ? tr("م لە حەرەم", "م من الحرم", "m from Haram") : tr("م لە مزگەوتی نەبەوی", "م من المسجد النبوي", "m from Prophet's Mosque")}</span>}
                           </div>
                           {hotel.hotels?.description && <p className="portal-trip-modal-text muted">{hotel.hotels.description}</p>}
                         </div>
@@ -1717,10 +2738,13 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
 
         {role === "admin" && trip.lifecycle_status === "pending_review" && (
           <footer className="portal-trip-modal-actions">
-            <button type="button" className="approve" onClick={async () => { await onReview("published"); onClose(); }} disabled={rowBusy}>
+            <button type="button" className="approve" onClick={async () => { if (await onReview("published")) onClose(); }} disabled={rowBusy}>
               {rowBusy ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {tr("پەسەندکردن", "قبول", "Approve trip")}
             </button>
-            <button type="button" className="danger" onClick={async () => { await onReview("rejected"); onClose(); }} disabled={rowBusy}>
+            <button type="button" className="changes" onClick={async () => { if (await onReview("needs_changes")) onClose(); }} disabled={rowBusy}>
+              <FileText size={14} /> {tr("داوای گۆڕانکاری", "طلب تعديلات", "Request changes")}
+            </button>
+            <button type="button" className="danger" onClick={async () => { if (await onReview("rejected")) onClose(); }} disabled={rowBusy}>
               <X size={14} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
             </button>
           </footer>
@@ -1743,14 +2767,26 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
   const pendingChanges = data.tripChangeRequests.filter((item) => item.status === "pending");
   const countByStatus = (status: string) => data.trips.filter((item) => item.lifecycle_status === status).length;
 
-  async function reviewTrip(trip: Trip, decision: "published" | "rejected") {
-    const reason = decision === "rejected" ? await askReason(locale === "ku" ? "بۆچی ئەم گەشتە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذه الرحلة؟" : "Why is this trip being rejected?") : null;
-    if (decision === "rejected" && !reason) return;
-    await runAction(
+  async function reviewTrip(trip: Trip, decision: "published" | "needs_changes" | "rejected") {
+    const reason = decision === "rejected"
+      ? await askReason(locale === "ku" ? "بۆچی ئەم گەشتە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذه الرحلة؟" : "Why is this trip being rejected?")
+      : decision === "needs_changes"
+        ? await askReason(
+            locale === "ku" ? "چی دەبێت کۆمپانیاکە بگۆڕێت؟ (ئارەزوومەندانە)" : locale === "ar" ? "ما الذي يجب على الشركة تغييره؟ (اختياري)" : "What should the company change? (optional)",
+            { optional: true },
+          )
+        : null;
+    if (decision !== "published" && reason === null) return false;
+    const result = await runAction(
       `trip-review-${trip.id}`,
       () => getSupabase().rpc("review_package", { p_package_id: trip.id, p_decision: decision, p_reason: reason }),
-      decision === "published" ? (locale === "ku" ? `${trip.title} ئێستا چالاکە.` : locale === "ar" ? `${trip.title} نشطة الآن.` : `${trip.title} is now live.`) : (locale === "ku" ? `تێبینییەکان نێردران بۆ ${trip.title}.` : locale === "ar" ? `تم إرسال الملاحظات لـ ${trip.title}.` : `Feedback sent for ${trip.title}.`),
+      decision === "published"
+        ? (locale === "ku" ? `${trip.title} ئێستا چالاکە.` : locale === "ar" ? `${trip.title} نشطة الآن.` : `${trip.title} is now live.`)
+        : decision === "needs_changes"
+          ? (locale === "ku" ? `${trip.title} گەڕێندرایەوە بۆ ڕەشنووس.` : locale === "ar" ? `أُعيدت ${trip.title} إلى المسودة.` : `${trip.title} returned to draft for changes.`)
+          : (locale === "ku" ? `${trip.title} ڕەتکرایەوە.` : locale === "ar" ? `تم رفض ${trip.title}.` : `${trip.title} was rejected.`),
     );
+    return Boolean(result);
   }
 
   async function toggleFeatured(trip: Trip) {
@@ -1932,8 +2968,12 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                   <span><Star size={14} /> {trip.acc_stars} {locale === "ku" ? "ئەستێرە" : locale === "ar" ? "نجوم" : "star"}</span>
                   <span><Plane size={14} /> {locale === "ku" ? (trip.transport === "plane" ? "فڕۆکە" : "پاس") : locale === "ar" ? (trip.transport === "plane" ? "طائرة" : "حافلة") : titleCase(trip.transport)}</span>
                 </div>
-                <div className="portal-trip-dates">
+                {/* Three columns rather than two: a departure with no return
+                    beside it makes an admin open the trip to answer "how long
+                    is this one". */}
+                <div className="portal-trip-dates is-three">
                   <div><small>{t.departure}</small><b className={departed ? "is-past" : undefined}>{formatDate(trip.departure_date, true)}</b></div>
+                  <div><small>{locale === "ku" ? "گەڕانەوە" : locale === "ar" ? "العودة" : "Return"}</small><b>{formatDate(trip.return_date, true)}</b></div>
                   <div><small>{locale === "ku" ? "نرخ / بۆ هەر کەسێک" : locale === "ar" ? "السعر / للمعتمر" : "Price / pilgrim"}</small><b>{formatIqd(trip.price_iqd)}</b></div>
                 </div>
                 <div className="portal-capacity">
@@ -1942,11 +2982,20 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                   <i><b style={{ width: `${fill}%` }} /></i>
                 </div>
                 {departed && <p className="portal-departed-note"><AlertTriangle size={12} /> {locale === "ku" ? "بەرواری ڕۆیشتن تێپەڕیوە — پێویستە نوێ بکرێتەوە پێش بڵاوکردنەوە." : locale === "ar" ? "تاريخ المغادرة قد مضى — يجب تحديثه قبل النشر." : "Departure date has passed — it must be updated before this trip can be published again."}</p>}
-                {trip.review_reason && <p className="portal-review-note">{trip.review_reason}</p>}
+                {(trip.rejection_reason || trip.review_reason) && (
+                  <p className={`portal-review-note${trip.rejection_reason ? " is-rejection" : ""}`}>
+                    <b>{trip.rejection_reason
+                      ? (locale === "ku" ? "هۆکاری ڕەتکردنەوە: " : locale === "ar" ? "سبب الرفض: " : "Rejection reason: ")
+                      : (locale === "ku" ? "تێبینی گۆڕانکاری: " : locale === "ar" ? "ملاحظة التعديل: " : "Changes note: ")}</b>
+                    {trip.rejection_reason || trip.review_reason}
+                  </p>
+                )}
                 <div className="portal-card-actions" onClick={(event) => event.stopPropagation()}>
                   {role === "admin" && trip.lifecycle_status === "pending_review" ? (
                     <>
+                      <button type="button" onClick={() => setDetailTrip(trip)}><Eye size={14} /> {locale === "ku" ? "وردەکاری" : locale === "ar" ? "عرض التفاصيل" : "View details"}</button>
                       <button type="button" className="approve" onClick={() => reviewTrip(trip, "published")} disabled={busy === `trip-review-${trip.id}`}><Check size={14} /> {t.accept}</button>
+                      <button type="button" className="changes" onClick={() => reviewTrip(trip, "needs_changes")} disabled={busy === `trip-review-${trip.id}`}><FileText size={14} /> {locale === "ku" ? "گۆڕانکاری" : locale === "ar" ? "طلب تعديل" : "Request changes"}</button>
                       <button type="button" className="danger" onClick={() => reviewTrip(trip, "rejected")} disabled={busy === `trip-review-${trip.id}`}><X size={14} /> {t.reject}</button>
                     </>
                   ) : role === "admin" && trip.lifecycle_status === "published" ? (
@@ -1982,16 +3031,741 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
   );
 }
 
+// ---------- Booking detail + document/visa review ----------
+
+const PASSPORT_BUCKET = "booking-passports";
+const isImagePath = (path: string | null | undefined) => /\.(jpe?g|png|webp|gif|heic|avif)$/i.test(path ?? "");
+
+type LightboxImage = { url: string; label: string };
+
+// Full-screen zoomable viewer. Reviewers flip between a traveller's passport /
+// selfie / document scans while zoomed in to check faces and passport numbers.
+function ImageLightbox({ images, index, onClose }: { images: LightboxImage[]; index: number; onClose: () => void }) {
+  const [current, setCurrent] = useState(index);
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => { setCurrent(index); setZoom(1); }, [index]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowRight") { setCurrent((c) => Math.min(images.length - 1, c + 1)); setZoom(1); }
+      if (event.key === "ArrowLeft") { setCurrent((c) => Math.max(0, c - 1)); setZoom(1); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [images.length, onClose]);
+  const image = images[current];
+  if (!image) return null;
+  return (
+    <div className="booking-lightbox" onClick={onClose}>
+      <div className="booking-lightbox-bar" onClick={(event) => event.stopPropagation()}>
+        <span>{image.label}{images.length > 1 ? ` · ${current + 1}/${images.length}` : ""}</span>
+        <div className="booking-lightbox-tools">
+          <button type="button" onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(1)))} aria-label="Zoom out">−</button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button type="button" onClick={() => setZoom((z) => Math.min(4, +(z + 0.5).toFixed(1)))} aria-label="Zoom in">+</button>
+          <button type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+      </div>
+      <div className="booking-lightbox-stage" onClick={(event) => event.stopPropagation()}>
+        {images.length > 1 && current > 0 && <button type="button" className="booking-lightbox-nav prev" onClick={() => { setCurrent((c) => c - 1); setZoom(1); }}>‹</button>}
+        <img src={image.url} alt={image.label} style={{ transform: `scale(${zoom})` }} onWheel={(event) => { event.preventDefault(); setZoom((z) => Math.min(4, Math.max(1, +(z - Math.sign(event.deltaY) * 0.25).toFixed(2)))); }} />
+        {images.length > 1 && current < images.length - 1 && <button type="button" className="booking-lightbox-nav next" onClick={() => { setCurrent((c) => c + 1); setZoom(1); }}>›</button>}
+      </div>
+    </div>
+  );
+}
+
+const VISA_STEPS = ["not_started", "submitted", "under_review", "approved", "rejected"] as const;
+
+function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, askReason, locale, rooms, assignments, onAssignRoom, onOpenImages }: {
+  traveller: BookingTraveller;
+  docs: TravellerDocument[];
+  booking: Booking;
+  role: Role;
+  busy: string;
+  runAction: RunAction;
+  askReason: AskReason;
+  locale: "ku" | "ar" | "en";
+  rooms: Array<{ id: string; city: string; label: string; capacity: number; gender_policy: string }>;
+  assignments: Array<{ room_id: string; traveller_id: string }>;
+  onAssignRoom: (roomId: string, travellerId: string) => void;
+  onOpenImages: (images: LightboxImage[], index: number) => void;
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const canReview = role === "agency"; // admin is read-only for document/visa verdicts
+  const rowBusy = busy === `traveller-${traveller.id}`;
+  const [signed, setSigned] = useState<Record<string, string>>({});
+  const [visaRef, setVisaRef] = useState(traveller.visa_reference ?? "");
+  const [seat, setSeat] = useState(traveller.transport_seat ?? "");
+
+  // The app writes an upload to BOTH booking_travellers.passport_image_path /
+  // .selfie_image_path AND a traveller_documents row pointing at the very same
+  // object, so listing the two sources naively showed every file twice — two
+  // uploads rendered as four tiles. traveller_documents wins because it is the
+  // richer record (id, kind, review status); the legacy columns only fill in for
+  // travellers uploaded before that table existed.
+  const seenPaths = new Set(docs.map((d) => `${d.storage_bucket}:${d.storage_path}`));
+  const legacy = (path: string | null, key: string, label: string) =>
+    path && !seenPaths.has(`${PASSPORT_BUCKET}:${path}`)
+      ? { key, bucket: PASSPORT_BUCKET, path, label, image: true }
+      : null;
+
+  const docLabel = (kind: string) => {
+    if (kind === "passport") return tr("پاسپۆرت", "جواز السفر", "Passport");
+    if (kind === "personal_photo" || kind === "selfie") return tr("وێنەی کەسی", "صورة شخصية", "Personal photo");
+    return titleCase(kind);
+  };
+
+  // Passport first: it is the document a reviewer checks first and the one a
+  // visa decision hangs on. traveller_documents arrives newest-first, which put
+  // whichever file happened to be uploaded last in front.
+  const kindRank = (kind: string) => (kind === "passport" ? 0 : kind === "personal_photo" || kind === "selfie" ? 1 : 2);
+
+  const sources = [
+    ...[...docs]
+      .sort((a, b) => kindRank(a.kind) - kindRank(b.kind))
+      .map((d) => ({ key: d.id, bucket: d.storage_bucket, path: d.storage_path, label: docLabel(d.kind), image: isImagePath(d.storage_path) })),
+    legacy(traveller.passport_image_path, "passport", tr("پاسپۆرت", "جواز السفر", "Passport")),
+    legacy(traveller.selfie_image_path, "selfie", tr("وێنەی کەسی", "صورة شخصية", "Personal photo")),
+  ].filter(Boolean) as Array<{ key: string; bucket: string; path: string; label: string; image: boolean }>;
+  const signKey = sources.map((s) => `${s.bucket}:${s.path}`).join("|");
+
+  useEffect(() => {
+    setVisaRef(traveller.visa_reference ?? "");
+    setSeat(traveller.transport_seat ?? "");
+  }, [traveller.visa_reference, traveller.transport_seat]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = getSupabase();
+      const entries = await Promise.all(sources.map(async (s) => {
+        const { data } = await supabase.storage.from(s.bucket).createSignedUrl(s.path, 3600);
+        return [s.key, data?.signedUrl ?? ""] as const;
+      }));
+      if (active) setSigned(Object.fromEntries(entries.filter(([, url]) => url)));
+    })();
+    return () => { active = false; };
+  }, [signKey]);
+
+  // The name travels into the lightbox too — a full-screen passport with only
+  // "Passport" on it tells a reviewer nothing about whose it is.
+  const visible = sources.filter((s) => s.image && signed[s.key]);
+  const galleryImages: LightboxImage[] = visible.map((s) => ({ url: signed[s.key], label: `${traveller.full_name} · ${s.label}` }));
+  const openImage = (key: string) => {
+    // Matched on the source key rather than the label, which is no longer
+    // unique once two travellers each have a "Passport".
+    const idx = visible.findIndex((s) => s.key === key);
+    if (idx >= 0) onOpenImages(galleryImages, idx);
+  };
+
+  async function approveDocuments() {
+    await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
+  }
+  async function rejectDocuments() {
+    const reason = await askReason(tr("بۆچی بەڵگەنامەکان ڕەتدەکرێنەوە؟ (زیارەتکار ئەمە دەبینێت)", "لماذا ترفض المستندات؟ (يراها المعتمر)", "Why are the documents rejected? (the pilgrim sees this)"));
+    if (!reason) return;
+    await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە و زیارەتکار ئاگادار کرایەوە.", "تم رفض المستندات وإبلاغ المعتمر.", "Documents rejected — the pilgrim was notified."));
+  }
+  async function setVisa(status: string) {
+    let reason: string | null = null;
+    if (status === "rejected") {
+      reason = await askReason(tr("هۆکاری ڕەتکردنەوەی ڤیزا:", "سبب رفض التأشيرة:", "Reason the visa was rejected:"));
+      if (!reason) return;
+    }
+    await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_visa_status: status, p_visa_reference: visaRef || null, p_visa_reason: reason }), tr("دۆخی ڤیزا نوێکرایەوە.", "تم تحديث حالة التأشيرة.", "Visa status updated."));
+  }
+  async function saveSeat() {
+    await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_transport_seat: seat || null }), tr("کورسی گواستنەوە پاشەکەوتکرا.", "تم حفظ مقعد النقل.", "Transport seat saved."));
+  }
+
+  const currentRoomByCity = new Map<string, string>();
+  assignments.filter((a) => a.traveller_id === traveller.id).forEach((a) => {
+    const room = rooms.find((r) => r.id === a.room_id);
+    if (room) currentRoomByCity.set(room.city, room.id);
+  });
+  const cities = Array.from(new Set(rooms.map((r) => r.city)));
+
+  return (
+    <article className="booking-traveller">
+      <header className="booking-traveller-head">
+        <div className="booking-traveller-id">
+          <span className="booking-traveller-avatar"><UserRound size={16} /></span>
+          <div>
+            <b>{traveller.full_name}{traveller.is_lead && <i className="booking-lead-chip">{tr("سەرۆک", "قائد", "Lead")}</i>}</b>
+            <small>{[traveller.passport_no && `${tr("پاسپۆرت", "جواز", "Passport")} ${traveller.passport_no}`, traveller.nationality, traveller.gender && titleCase(traveller.gender), traveller.date_of_birth && formatDate(traveller.date_of_birth, true)].filter(Boolean).join(" · ") || tr("زانیاری کەسی کەمە", "بيانات شخصية ناقصة", "No identity details")}</small>
+          </div>
+        </div>
+        <div className="booking-traveller-pills">
+          <span className="booking-pill-label">{tr("بەڵگەنامە", "المستندات", "Documents")}</span>
+          <StatusPill status={traveller.document_status} />
+          <span className="booking-pill-label">{tr("ڤیزا", "التأشيرة", "Visa")}</span>
+          <StatusPill status={traveller.visa_status} />
+        </div>
+      </header>
+
+      {traveller.document_reason && <p className="booking-reason-note"><AlertTriangle size={12} /> {tr("هۆکاری ڕەتکردنەوە", "سبب الرفض", "Rejection note")}: {traveller.document_reason}</p>}
+
+      {/* Says whose documents these are. On a family booking the tiles for four
+          people otherwise run together as one undifferentiated wall of
+          passports with nothing tying a photo to a person. */}
+      <div className="booking-doc-owner">
+        <span>{tr("بەڵگەنامەکانی", "مستندات", "Documents of")} <b>{traveller.full_name}</b></span>
+        {sources.length > 0 && <small>{sources.length}</small>}
+      </div>
+
+      <div className="booking-doc-row">
+        {sources.length === 0 && <div className="booking-doc-empty"><Camera size={14} /> {tr("هێشتا هیچ بەڵگەنامەیەک بارنەکراوە", "لم يتم رفع أي مستند بعد", "No documents uploaded yet")}</div>}
+        {sources.map((s) => {
+          const url = signed[s.key];
+          if (s.image) {
+            return (
+              <button type="button" key={s.key} className="booking-doc-thumb" onClick={() => openImage(s.key)} disabled={!url}>
+                {url ? <img src={url} alt={s.label} loading="lazy" /> : <span className="booking-doc-loading"><TawafLoadingSpinner size={14} /></span>}
+                <small>{s.label}</small>
+              </button>
+            );
+          }
+          return (
+            <a key={s.key} className="booking-doc-file" href={url || undefined} target="_blank" rel="noreferrer">
+              <FileText size={16} /><small>{s.label}</small>
+            </a>
+          );
+        })}
+      </div>
+
+      {canReview && (
+        <div className="booking-review-actions">
+          <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || traveller.document_status === "approved" || traveller.document_status === "missing"}>
+            {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
+          </button>
+          <button type="button" className="danger" onClick={rejectDocuments} disabled={rowBusy || traveller.document_status === "missing"}>
+            <X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
+          </button>
+        </div>
+      )}
+
+      {canReview && (
+        <div className="booking-ops-grid">
+          <div className="booking-ops-block">
+            <label>{tr("قۆناغی ڤیزا", "مرحلة التأشيرة", "Visa stage")}</label>
+            <div className="booking-visa-steps">
+              {VISA_STEPS.filter((s) => s !== "not_started").map((s) => (
+                <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={rowBusy}>{titleCase(s)}</button>
+              ))}
+            </div>
+            <div className="booking-inline-field">
+              <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} />
+            </div>
+            {traveller.visa_reason && <small className="booking-inline-note">{traveller.visa_reason}</small>}
+          </div>
+          <div className="booking-ops-block">
+            <label>{tr("کورسی گواستنەوە", "مقعد النقل", "Transport seat")}</label>
+            <div className="booking-inline-field">
+              <input value={seat} onChange={(event) => setSeat(event.target.value)} placeholder={tr("وەک B12", "مثل B12", "e.g. B12")} />
+              <button type="button" onClick={saveSeat} disabled={rowBusy || seat === (traveller.transport_seat ?? "")}>{tr("پاشەکەوت", "حفظ", "Save")}</button>
+            </div>
+            {cities.length > 0 && (
+              <>
+                <label style={{ marginTop: 10 }}>{tr("ژوور", "الغرفة", "Room")}</label>
+                {cities.map((city) => (
+                  <div className="booking-inline-field" key={city}>
+                    <select value={currentRoomByCity.get(city) ?? ""} onChange={(event) => event.target.value && onAssignRoom(event.target.value, traveller.id)} disabled={rowBusy}>
+                      <option value="">{titleCase(city)} — {tr("ژوور هەڵبژێرە", "اختر غرفة", "select room")}</option>
+                      {rooms.filter((r) => r.city === city).map((r) => (
+                        <option key={r.id} value={r.id}>{r.label} ({r.capacity} · {titleCase(r.gender_policy)})</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+// Mirrors the Flutter client's getClientBookingProgress (client_booking_progress.dart)
+// so the agency sees the exact same four-stage journey the pilgrim sees. Stage 0 = a
+// terminal state (cancelled/rejected/expired). Returns 1..4 otherwise.
+//   1 Booked · 2 Documents · 3 Visa · 4 Ready
+function bookingJourneyStage(stage: string, docs: string[], visas: string[]): number {
+  if (["ready", "in_progress", "completed"].includes(stage)) return 4;
+  if (["cancelled", "rejected", "expired"].includes(stage)) return 0;
+  if (stage === "awaiting_payment" || stage === "requested") return 1;
+  // confirmed / needs_information → derived from traveller statuses, same precedence as the app
+  if (visas.includes("rejected")) return 3;
+  if (visas.includes("submitted") || visas.includes("under_review")) return 3;
+  if (visas.length > 0 && visas.every((v) => v === "approved")) return 3;
+  if (docs.includes("rejected") || stage === "needs_information") return 2;
+  const submitted = new Set(["uploaded", "under_review", "approved"]);
+  if (docs.length === 0 || docs.some((d) => !submitted.has(d))) return 2;
+  if (docs.includes("uploaded") || docs.includes("under_review")) return 2;
+  return 3; // every document approved → advance to the visa stage
+}
+
+function BookingJourney({ booking, travellers, locale }: { booking: Booking; travellers: BookingTraveller[]; locale: "ku" | "ar" | "en" }) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const docs = travellers.map((t) => t.document_status);
+  const visas = travellers.map((t) => t.visa_status);
+  const current = bookingJourneyStage(booking.operational_stage, docs, visas);
+  // Mirrors the app: once the trip departs the final step stops being a promise
+  // ("Ready") and becomes a state ("Travelling"), then "Completed" at the end.
+  const travelling = booking.operational_stage === "in_progress";
+  const finished = booking.operational_stage === "completed";
+  const steps = [
+    tr("حیجزکراو", "محجوز", "Booked"),
+    tr("بەڵگەنامە", "المستندات", "Documents"),
+    tr("ڤیزا", "التأشيرة", "Visa"),
+    travelling
+      ? tr("لە گەشتدا", "في الرحلة", "Travelling")
+      : finished
+        ? tr("تەواوبوو", "مكتملة", "Completed")
+        : tr("ئامادە", "جاهز", "Ready"),
+  ];
+  if (current === 0) {
+    return (
+      <div className="booking-journey terminal">
+        <span className="booking-journey-terminal-dot"><X size={13} /></span>
+        {tr("ئەم حیجزە کۆتایی هاتووە", "انتهى هذا الحجز", "This booking has ended")} · <StatusPill status={booking.operational_stage} />
+      </div>
+    );
+  }
+  return (
+    <div className="booking-journey" role="group" aria-label="Booking progress">
+      {steps.map((label, index) => {
+        const step = index + 1;
+        // A completed trip has no "current" step left — every dot is a tick.
+        const state = step < current ? "done" : step === current ? (finished ? "done" : "active") : "todo";
+        return (
+          <div key={label} className={`booking-journey-step ${state}`}>
+            <span className="booking-journey-dot">{state === "done" ? <Check size={13} /> : step}</span>
+            <small>{label}</small>
+            {index < steps.length - 1 && <i className="booking-journey-line" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason, locale, onClose }: {
+  bookingId: string;
+  data: PortalData;
+  role: Role;
+  busy: string;
+  runAction: RunAction;
+  askReason: AskReason;
+  locale: "ku" | "ar" | "en";
+  onClose: () => void;
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const booking = data.bookings.find((b) => b.id === bookingId);
+  const travellers = data.bookingTravellers.filter((t) => t.booking_id === bookingId);
+  const tripTitle = data.trips.find((t) => t.id === booking?.package_id)?.title ?? tr("گەشتی عومرە", "رحلة عمرة", "Umrah trip");
+  const companyName = data.companies.find((c) => c.id === booking?.company_id)?.name;
+  const payment = data.payments.find((p) => p.booking_id === bookingId && p.status === "succeeded");
+  const [rooms, setRooms] = useState<Array<{ id: string; city: string; label: string; capacity: number; gender_policy: string }>>([]);
+  const [assignments, setAssignments] = useState<Array<{ room_id: string; traveller_id: string }>>([]);
+  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+
+  useScrollLock();
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !lightbox) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, lightbox]);
+
+  const loadRooms = useCallback(async () => {
+    if (!booking) return;
+    const supabase = getSupabase();
+    const roomsResult = await supabase.from("trip_rooms").select("id, city, label, capacity, gender_policy").eq("package_id", booking.package_id);
+    const roomList = (roomsResult.data ?? []) as typeof rooms;
+    setRooms(roomList);
+    if (roomList.length) {
+      const assignResult = await supabase.from("trip_room_assignments").select("room_id, traveller_id").in("room_id", roomList.map((r) => r.id));
+      setAssignments((assignResult.data ?? []) as typeof assignments);
+    } else {
+      setAssignments([]);
+    }
+  }, [booking?.package_id]);
+
+  useEffect(() => { loadRooms(); }, [loadRooms]);
+
+  async function assignRoom(roomId: string, travellerId: string) {
+    await runAction(`traveller-${travellerId}`, () => getSupabase().rpc("assign_traveller_room", { p_room_id: roomId, p_traveller_id: travellerId }), tr("ژوور دیاریکرا.", "تم تعيين الغرفة.", "Room assigned."));
+    await loadRooms();
+  }
+
+  async function transition(action: string) {
+    let reason: string | null = null;
+    if (["reject", "request_information", "cancel"].includes(action)) {
+      reason = await askReason(action === "request_information" ? tr("چی زانیارییەک کەمە؟", "ما هي المعلومات الناقصة؟", "What information is missing?") : tr("تکایە هۆکارێک زیاد بکە:", "يرجى إضافة سبب:", "Please add a reason:"));
+      if (!reason) return;
+    }
+    await runAction(`booking-${bookingId}`, () => getSupabase().rpc("transition_booking", { p_booking_id: bookingId, p_action: action, p_reason: reason }), tr("دۆخی حیجز نوێکرایەوە.", "تم تحديث حالة الحجز.", "Booking updated."));
+  }
+
+  async function confirmCash() {
+    await runAction(`booking-${bookingId}`, () => getSupabase().rpc("confirm_cash_received", { p_booking_id: bookingId, p_amount_iqd: null }), tr("پارەی نەختینە پشتڕاستکرایەوە.", "تم تأكيد الدفع النقدي.", "Cash payment confirmed."));
+  }
+
+  if (!booking) return null;
+  const bookingBusy = busy === `booking-${bookingId}`;
+  const remaining = Math.max(0, Number(booking.total_iqd) - Number(booking.amount_paid_iqd));
+  const awaitingReview = travellers.filter((t) => t.document_status === "under_review").length;
+  const allVisasApproved = travellers.length > 0 && travellers.every((t) => t.visa_status === "approved");
+  const canManage = role === "agency";
+  const expirySoon = booking.expires_at && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage);
+  // The booking row has no return date, so it is read off the package.
+  const bookingReturnDate = data.trips.find((item) => item.id === booking.package_id)?.return_date ?? null;
+  const bookingNights = nightsBetween(booking.departure_date, bookingReturnDate);
+
+  return (
+    <div className="booking-modal-scrim" onClick={onClose}>
+      <div className="booking-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <header className="booking-modal-head">
+          <div>
+            <small>#{booking.id.slice(0, 8).toUpperCase()} · {tripTitle}{role === "admin" && companyName ? ` · ${companyName}` : ""}</small>
+            <h2>{booking.travellers} {tr("زیارەتکار", "معتمر", "pilgrims")} · {formatIqd(booking.total_iqd)}</h2>
+            <div className="booking-modal-tags">
+              <StatusPill status={booking.operational_stage} />
+              {awaitingReview > 0 && <span className="booking-tag warning">{awaitingReview} {tr("چاوەڕێی پێداچوونەوە", "بانتظار المراجعة", "awaiting review")}</span>}
+            </div>
+          </div>
+          <button type="button" className="booking-modal-close" onClick={onClose} aria-label={tr("داخستن", "إغلاق", "Close")}><X size={18} /></button>
+        </header>
+
+        <div className="booking-modal-body">
+          <BookingJourney booking={booking} travellers={travellers} locale={locale} />
+          <section className="booking-summary-grid">
+            <div><small>{tr("شێوازی پارەدان", "طريقة الدفع", "Payment")}</small><b>{titleCase(booking.pay_method)} · {titleCase(booking.pay_status)}</b></div>
+            <div><small>{tr("دراوە / کۆ", "المدفوع / الإجمالي", "Paid / total")}</small><b>{formatIqd(booking.amount_paid_iqd)} / {formatIqd(booking.total_iqd)}</b></div>
+            <div><small>{tr("ماوە", "المتبقي", "Remaining")}</small><b>{remaining ? formatIqd(remaining) : tr("هیچ", "لا شيء", "None")}</b></div>
+            <div><small>{tr("ژوور", "الغرفة", "Room")}</small><b>{booking.room_label ?? (booking.room_occupancy ? `${booking.room_occupancy}-${tr("کەسی", "أشخاص", "bed")}` : "—")}</b></div>
+            <div><small>{tr("تەلەفۆن", "الهاتف", "Phone")}</small><b dir="ltr">{booking.contact_phone ?? "—"}</b></div>
+            <div><small>{tr("بەرواری ڕۆیشتن", "المغادرة", "Departure")}</small><b>{formatDate(booking.departure_date, true)}</b></div>
+            {/* Return comes off the package: bookings have no return column. */}
+            <div><small>{tr("بەرواری گەڕانەوە", "العودة", "Return")}</small><b>{formatDate(bookingReturnDate, true)}{bookingNights ? <em className="booking-nights"> · {bookingNights} {tr("شەو", "ليلة", bookingNights === 1 ? "night" : "nights")}</em> : null}</b></div>
+            {expirySoon && <div><small>{tr("کۆتایی داواکاری", "انتهاء الطلب", "Request expires")}</small><b className={booking.expires_at && new Date(booking.expires_at) < new Date() ? "is-past" : undefined}>{relativeTime(booking.expires_at!)}</b></div>}
+          </section>
+          {booking.note && <p className="booking-note"><FileText size={12} /> {booking.note}</p>}
+
+          <div className="booking-section-title"><UserRound size={14} /> {tr("زیارەتکاران و بەڵگەنامەکان", "المعتمرون والمستندات", "Pilgrims & documents")}{canManage && awaitingReview > 0 && <span className="booking-queue-badge">{awaitingReview}</span>}</div>
+          {travellers.length === 0 && <p className="booking-empty">{tr("هیچ زیارەتکارێک تۆمار نەکراوە.", "لا يوجد معتمرون مسجلون.", "No travellers recorded.")}</p>}
+          {travellers.map((traveller) => (
+            <TravellerReviewCard
+              key={traveller.id}
+              traveller={traveller}
+              docs={data.travellerDocuments.filter((d) => d.traveller_id === traveller.id)}
+              booking={booking}
+              role={role}
+              busy={busy}
+              runAction={runAction}
+              askReason={askReason}
+              locale={locale}
+              rooms={rooms}
+              assignments={assignments}
+              onAssignRoom={assignRoom}
+              onOpenImages={(images, index) => setLightbox({ images, index })}
+            />
+          ))}
+        </div>
+
+        <footer className="booking-modal-actions">
+          {canManage && booking.pay_method === "cash" && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && (
+            <button type="button" className="approve" onClick={confirmCash} disabled={bookingBusy}><Banknote size={14} /> {tr("پشتڕاستکردنی پارەی نەختینە", "تأكيد الدفع النقدي", "Confirm cash received")}</button>
+          )}
+          {booking.pay_method === "fib" && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && (
+            <span className="booking-readonly-note"><CreditCard size={14} /> {tr("پارەدانی FIB خۆکارانە پشتڕاست دەکرێتەوە", "دفع FIB يُؤكَّد تلقائياً", "FIB payment confirms automatically")}</span>
+          )}
+          {canManage && ["requested", "needs_information"].includes(booking.operational_stage) && (
+            <button type="button" onClick={() => transition("request_information")} disabled={bookingBusy}>{tr("داوای زانیاری", "طلب معلومات", "Request info")}</button>
+          )}
+          {canManage && booking.operational_stage === "confirmed" && (
+            <button type="button" className="approve" onClick={() => transition("ready")} disabled={bookingBusy || !allVisasApproved} title={allVisasApproved ? undefined : tr("هەموو ڤیزاکان دەبێت پەسەند بکرێن", "يجب اعتماد كل التأشيرات", "All visas must be approved first")}><ClipboardCheck size={14} /> {tr("ئامادەکردن", "جاهز", "Mark ready")}</button>
+          )}
+          {canManage && booking.operational_stage === "ready" && (
+            <button type="button" className="approve" onClick={() => transition("start")} disabled={bookingBusy}><Plane size={14} /> {tr("دەستپێکردنی گەشت", "بدء الرحلة", "Start trip")}</button>
+          )}
+          {canManage && booking.operational_stage === "in_progress" && (
+            <button type="button" className="approve" onClick={() => transition("complete")} disabled={bookingBusy}><Check size={14} /> {tr("تەواوکردن", "إكمال", "Complete")}</button>
+          )}
+          {canManage && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && (
+            <button type="button" className="danger" onClick={() => transition("reject")} disabled={bookingBusy}><X size={14} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}</button>
+          )}
+          {canManage && ["confirmed", "ready"].includes(booking.operational_stage) && (
+            <button type="button" className="danger" onClick={() => transition("cancel")} disabled={bookingBusy}>{tr("هەڵوەشاندنەوە", "إلغاء", "Cancel")}</button>
+          )}
+          {/* The nightly safety net moves these on its own, so say so rather than
+              letting a stage change look like it happened by magic. */}
+          {["confirmed", "ready"].includes(booking.operational_stage) && booking.departure_date && booking.departure_date <= new Date().toISOString().slice(0, 10) && (
+            <span className="booking-readonly-note"><Clock3 size={14} /> {tr("بەرواری ڕۆیشتن هاتووە — ئەمشەو خۆکارانە دەست پێدەکات ئەگەر دەستی پێنەکەیت", "حان موعد المغادرة — ستبدأ تلقائياً الليلة إن لم تبدأها", "Departure has arrived — this starts automatically tonight if you don't")}</span>
+          )}
+          {booking.operational_stage === "in_progress" && (
+            <span className="booking-readonly-note"><Clock3 size={14} /> {tr("ڕۆژێک دوای گەڕانەوە خۆکارانە تەواو دەبێت", "تُكمل تلقائياً بعد يوم من العودة", "Completes automatically a day after the return date")}</span>
+          )}
+          {role === "admin" && <span className="booking-readonly-note"><ShieldCheck size={14} /> {tr("چاودێری تەنها-خوێندنەوە", "إشراف للقراءة فقط", "Read-only oversight")}</span>}
+        </footer>
+      </div>
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} />}
+    </div>
+  );
+}
+
+// Admin-only oversight: how quickly each agency turns an uploaded document into a
+// verdict. Derived from traveller_documents (created_at = upload, reviewed_at =
+// verdict) so slow agencies surface without any write access.
+function DocumentSlaPanel({ data, companyMap, locale }: { data: PortalData; companyMap: Map<string, string>; locale: "ku" | "ar" | "en" }) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const reviewed = data.travellerDocuments.filter((d) => d.reviewed_at);
+  const pending = data.travellerDocuments.filter((d) => d.status === "under_review");
+  const hours = (a: string, b: string) => (new Date(a).getTime() - new Date(b).getTime()) / 3.6e6;
+  const byCompany = new Map<string, { total: number; sum: number; pending: number; oldest: number }>();
+  reviewed.forEach((d) => {
+    const row = byCompany.get(d.company_id) ?? { total: 0, sum: 0, pending: 0, oldest: 0 };
+    row.total += 1; row.sum += hours(d.reviewed_at!, d.created_at);
+    byCompany.set(d.company_id, row);
+  });
+  pending.forEach((d) => {
+    const row = byCompany.get(d.company_id) ?? { total: 0, sum: 0, pending: 0, oldest: 0 };
+    row.pending += 1; row.oldest = Math.max(row.oldest, hours(new Date().toISOString(), d.created_at));
+    byCompany.set(d.company_id, row);
+  });
+  const rows = Array.from(byCompany.entries())
+    .map(([id, r]) => ({ id, name: companyMap.get(id) ?? "Company", avg: r.total ? r.sum / r.total : null, total: r.total, pending: r.pending, oldest: r.oldest }))
+    .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));
+  const overallAvg = reviewed.length ? reviewed.reduce((s, d) => s + hours(d.reviewed_at!, d.created_at), 0) / reviewed.length : null;
+  const fmtH = (h: number | null) => (h == null ? "—" : h < 1 ? `${Math.round(h * 60)}m` : `${h.toFixed(1)}h`);
+  if (!rows.length) return null;
+  return (
+    <section className="portal-panel portal-table-panel" style={{ marginTop: 16 }}>
+      <PanelHeader title={tr("خێرایی پێداچوونەوەی بەڵگەنامە", "سرعة مراجعة المستندات", "Document review SLA")} subtitle={tr(`ناوەندی کاتی بڕیاردان: ${fmtH(overallAvg)} · ${pending.length} چاوەڕێن`, `متوسط زمن القرار: ${fmtH(overallAvg)} · ${pending.length} قيد الانتظار`, `Avg verdict time: ${fmtH(overallAvg)} · ${pending.length} pending`)} />
+      <div className="portal-table-wrap">
+        <table className="portal-table">
+          <thead><tr><th>{tr("کۆمپانیا", "الشركة", "Agency")}</th><th>{tr("ناوەندی کات", "متوسط الزمن", "Avg time")}</th><th>{tr("پێداچووەوە", "تمت المراجعة", "Reviewed")}</th><th>{tr("چاوەڕێ", "قيد الانتظار", "Pending")}</th><th>{tr("کۆنترین چاوەڕێ", "أقدم انتظار", "Oldest waiting")}</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td><b>{r.name}</b></td>
+                <td className={r.avg != null && r.avg > 48 ? "" : undefined}><b style={r.avg != null && r.avg > 48 ? { color: "#9c493e" } : undefined}>{fmtH(r.avg)}</b></td>
+                <td>{r.total}</td>
+                <td>{r.pending > 0 ? <StatusPill status="under_review" /> : "0"} {r.pending > 0 ? r.pending : ""}</td>
+                <td>{r.pending > 0 ? fmtH(r.oldest) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ── Booking card state model ────────────────────────────────────────────────
+// `operational_stage` carries ten values; a card only needs five weights. The
+// mapping is explicit rather than a default-else so a stage added later shows
+// up here as a compile-visible gap instead of silently rendering as "settled".
+//
+// Note `in_progress` means the pilgrims are ON THE GROUND — it is not a
+// documents-in-progress state. Document and visa work happens inside
+// `confirmed`, which is why blockers promote that stage rather than a stage of
+// their own.
+type BookingTier = "urgent" | "blocked" | "settled" | "journey" | "inert";
+
+const PENDING_STAGES = ["requested", "needs_information", "awaiting_payment"];
+const INERT_STAGES = ["expired", "cancelled", "rejected"];
+const JOURNEY_STAGES = ["in_progress", "completed"];
+
+function bookingTier(stage: string, blockerCount: number): BookingTier {
+  if (INERT_STAGES.includes(stage)) return "inert";
+  if (PENDING_STAGES.includes(stage)) return "urgent";
+  if (JOURNEY_STAGES.includes(stage)) return "journey";
+  if (blockerCount > 0) return "blocked";
+  return "settled"; // confirmed (clean) and ready
+}
+
+const TIER_ORDER: Record<BookingTier, number> = {
+  urgent: 0,
+  blocked: 1,
+  settled: 2,
+  journey: 3,
+  inert: 4,
+};
+
+type DecoratedBooking = { booking: Booking; blockers: ReturnType<typeof bookingBlockers>; tier: BookingTier };
+
+/// Orders the grid by what needs a human, not by when the row was written. The
+/// old table sorted on created_at, which is how a month-old expired request
+/// ended up above a payment window closing in nine minutes.
+function compareBookingCards(a: DecoratedBooking, b: DecoratedBooking) {
+  const byTier = TIER_ORDER[a.tier] - TIER_ORDER[b.tier];
+  if (byTier !== 0) return byTier;
+  // Inside the urgent tier the tightest deadline wins. A request with no expiry
+  // set cannot be the most urgent thing on screen, so it sorts last.
+  if (a.tier === "urgent") {
+    const at = a.booking.expires_at ? new Date(a.booking.expires_at).getTime() : Infinity;
+    const bt = b.booking.expires_at ? new Date(b.booking.expires_at).getTime() : Infinity;
+    if (at !== bt) return at - bt;
+  }
+  return new Date(b.booking.created_at).getTime() - new Date(a.booking.created_at).getTime();
+}
+
+// What is stopping this booking from reaching 'ready'. Returned as counts so
+// the card can say "1 of 3 passports rejected" instead of a bare status word.
+function bookingBlockers(travellers: BookingTraveller[]) {
+  const docsRejected = travellers.filter((t) => t.document_status === "rejected").length;
+  const docsMissing = travellers.filter((t) => t.document_status === "missing").length;
+  const docsReview = travellers.filter((t) => t.document_status === "under_review").length;
+  const visaRejected = travellers.filter((t) => t.visa_status === "rejected").length;
+  const visaPending = travellers.filter((t) => !["approved", "rejected"].includes(t.visa_status)).length;
+  return {
+    total: travellers.length,
+    docsRejected,
+    docsMissing,
+    docsReview,
+    visaRejected,
+    visaPending,
+    // Only things the agency must act on count as blockers. Visas merely
+    // pending sit with the embassy, so they describe the stage without
+    // promoting the card into the "needs attention" tier.
+    count: docsRejected + docsMissing + docsReview + visaRejected,
+  };
+}
+
+function blockerLabel(b: ReturnType<typeof bookingBlockers>, locale: "ku" | "ar" | "en"): string | null {
+  const of = (n: number) => (locale === "ku" ? `${n} لە ${b.total}` : locale === "ar" ? `${n} من ${b.total}` : `${n} of ${b.total}`);
+  if (b.docsRejected) return locale === "ku" ? `${of(b.docsRejected)} پاسپۆرت ڕەتکراوەتەوە` : locale === "ar" ? `${of(b.docsRejected)} جوازات مرفوضة` : `${of(b.docsRejected)} passports rejected`;
+  if (b.visaRejected) return locale === "ku" ? `${of(b.visaRejected)} ڤیزا ڕەتکراوەتەوە` : locale === "ar" ? `${of(b.visaRejected)} تأشيرات مرفوضة` : `${of(b.visaRejected)} visas rejected`;
+  if (b.docsReview) return locale === "ku" ? `${of(b.docsReview)} بەڵگەنامە چاوەڕێی پێداچوونەوەیە` : locale === "ar" ? `${of(b.docsReview)} مستندات بانتظار المراجعة` : `${of(b.docsReview)} awaiting your review`;
+  if (b.docsMissing) return locale === "ku" ? `${of(b.docsMissing)} بەڵگەنامە نەنێردراوە` : locale === "ar" ? `${of(b.docsMissing)} مستندات لم تُرفع` : `${of(b.docsMissing)} documents not uploaded`;
+  if (b.visaPending) return locale === "ku" ? `${of(b.visaPending)} ڤیزا لەلای باڵیۆزخانەیە` : locale === "ar" ? `${of(b.visaPending)} تأشيرات لدى السفارة` : `${of(b.visaPending)} visas with the embassy`;
+  return null;
+}
+
+/// Whole days until departure. Negative once it has gone.
+function daysUntil(date: string | null): number | null {
+  if (!date) return null;
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  return Math.round((new Date(`${date}T00:00:00`).getTime() - midnight.getTime()) / 86400000);
+}
+
+function proximityLabel(days: number | null, locale: "ku" | "ar" | "en"): string | null {
+  if (days == null) return null;
+  if (days < 0) return locale === "ku" ? `${Math.abs(days)} ڕۆژ لەمەوپێش` : locale === "ar" ? `قبل ${Math.abs(days)} يوم` : `${Math.abs(days)} days ago`;
+  if (days === 0) return locale === "ku" ? "ئەمڕۆ" : locale === "ar" ? "اليوم" : "Today";
+  if (days === 1) return locale === "ku" ? "سبەینێ" : locale === "ar" ? "غداً" : "Tomorrow";
+  return locale === "ku" ? `دوای ${days} ڕۆژ` : locale === "ar" ? `بعد ${days} يوم` : `in ${days} days`;
+}
+
+type CountdownLevel = "calm" | "warning" | "critical" | "lapsed";
+
+function countdownLevel(msLeft: number): CountdownLevel {
+  if (msLeft <= 0) return "lapsed";
+  if (msLeft < 3600_000) return "critical"; // under an hour
+  if (msLeft < 6 * 3600_000) return "warning";
+  return "calm";
+}
+
+/// Digits only — the caller wraps this in an LTR island. Kurdish and Arabic run
+/// right-to-left, and an un-isolated "2:05:44" renders with its segments in the
+/// wrong order.
+function countdownText(msLeft: number, locale: "ku" | "ar" | "en"): string {
+  if (msLeft <= 0) return locale === "ku" ? "بەسەرچوو" : locale === "ar" ? "انتهت" : "Lapsed";
+  const totalSeconds = Math.floor(msLeft / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  // Precision tracks urgency. A twenty-hour deadline rendered as a ticking
+  // 19:59:50 reads like an emergency and buries the two cards that are actually
+  // minutes from lapsing, so seconds only appear once seconds matter.
+  if (days >= 1) {
+    return locale === "ku" ? `${days} ڕۆژ ${hours} کاتژمێر` : locale === "ar" ? `${days} يوم ${hours} ساعة` : `${days}d ${hours}h`;
+  }
+  if (totalSeconds >= 6 * 3600) {
+    return locale === "ku" ? `${hours} کاتژمێر ${minutes} خولەک` : locale === "ar" ? `${hours} ساعة ${minutes} دقيقة` : `${hours}h ${minutes}m`;
+  }
+  return hours >= 1 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role: Role; data: PortalData; busy: string; runAction: RunAction; askReason: AskReason; locale: "ku" | "ar" | "en" }) {
   const t = dashboardTranslations[locale];
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"priority" | "newest" | "departure" | "payout">("priority");
+  const [detailId, setDetailId] = useState<string | null>(null);
   const tripMap = new Map(data.trips.map((item) => [item.id, item.title]));
+  // A booking stores only its departure date, so the return has to come from
+  // the package it was made against — that is where the itinerary lives.
+  const tripReturnMap = new Map(data.trips.map((item) => [item.id, item.return_date]));
   const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
-  const bookings = data.bookings.filter((item) => {
-    const haystack = `${item.id} ${tripMap.get(item.package_id) ?? ""} ${companyMap.get(item.company_id) ?? ""} ${item.contact_phone ?? ""}`.toLowerCase();
-    return haystack.includes(query.toLowerCase()) && (filter === "all" || item.operational_stage === filter);
+  // Client name comes from the booking's lead traveller (falling back to the
+  // first traveller on file). booking_travellers is already loaded and RLS-scoped,
+  // so no extra query or schema change is needed here.
+  const clientNameByBooking = new Map<string, string>();
+  data.bookingTravellers.forEach((tr) => {
+    const name = (tr.full_name || tr.local_name || "").trim();
+    if (!name) return;
+    if (tr.is_lead || !clientNameByBooking.has(tr.booking_id)) clientNameByBooking.set(tr.booking_id, name);
   });
+  const travellersByBooking = new Map<string, BookingTraveller[]>();
+  data.bookingTravellers.forEach((tr) => {
+    const list = travellersByBooking.get(tr.booking_id);
+    if (list) list.push(tr); else travellersByBooking.set(tr.booking_id, [tr]);
+  });
+  const awaitingByBooking = new Map<string, number>();
+  data.bookingTravellers.forEach((tr) => {
+    if (tr.document_status === "under_review") awaitingByBooking.set(tr.booking_id, (awaitingByBooking.get(tr.booking_id) ?? 0) + 1);
+  });
+  const docsAwaiting = data.bookingTravellers.filter((item) => item.document_status === "under_review").length;
+
+  const allCards: DecoratedBooking[] = data.bookings.map((booking) => {
+      const travellers = travellersByBooking.get(booking.id) ?? [];
+      const blockers = bookingBlockers(travellers);
+      return { booking, blockers, tier: bookingTier(booking.operational_stage, blockers.count) };
+    });
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const cards = allCards
+    .filter(({ booking, blockers, tier }) => {
+      const haystack = `${booking.id} ${tripMap.get(booking.package_id) ?? ""} ${clientNameByBooking.get(booking.id) ?? ""} ${companyMap.get(booking.company_id) ?? ""} ${booking.contact_phone ?? ""}`.toLowerCase();
+      if (!haystack.includes(normalizedQuery)) return false;
+      if (filter === "all") return true;
+      if (filter === "attention") return tier === "urgent" || tier === "blocked";
+      if (filter === "docs_review") return (awaitingByBooking.get(booking.id) ?? 0) > 0;
+      return booking.operational_stage === filter;
+    })
+    .sort((a, b) => {
+      if (sortBy === "newest") return new Date(b.booking.created_at).getTime() - new Date(a.booking.created_at).getTime();
+      if (sortBy === "departure") {
+        const aDate = a.booking.departure_date ? new Date(`${a.booking.departure_date}T00:00:00`).getTime() : Infinity;
+        const bDate = b.booking.departure_date ? new Date(`${b.booking.departure_date}T00:00:00`).getTime() : Infinity;
+        return aDate - bDate;
+      }
+      if (sortBy === "payout") {
+        const payout = (item: Booking) => Number(item.payout_iqd ?? 0) || Math.max(0, Number(item.total_iqd) - Number(item.commission_iqd ?? 0));
+        return payout(b.booking) - payout(a.booking);
+      }
+      return compareBookingCards(a, b);
+    });
+  const bookings = cards.map(({ booking }) => booking);
+
+  // One interval for the whole page rather than one per card, and only while a
+  // countdown is actually on screen — an agency leaving this tab open on a list
+  // of completed trips should not repaint every second.
+  const [now, setNow] = useState(() => Date.now());
+  const hasLiveCountdown = cards.some((c) => c.tier === "urgent" && c.booking.expires_at);
+  useEffect(() => {
+    if (!hasLiveCountdown) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [hasLiveCountdown]);
 
   async function transition(booking: Booking, action: string) {
     let reason: string | null = null;
@@ -2007,10 +3781,11 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
   }
 
   function exportCsv() {
-    const header = ["Booking", "Trip", "Company", "Travellers", "Total IQD", "Paid IQD", "Stage", "Pay method", "Phone", "Departure", "Created"];
+    const header = ["Booking", "Trip", "Client", "Company", "Travellers", "Total IQD", "Paid IQD", "Stage", "Pay method", "Phone", "Departure", "Return", "Nights", "Created"];
     const rows = bookings.map((booking) => [
       booking.id.slice(0, 8).toUpperCase(),
       tripMap.get(booking.package_id) ?? "Umrah trip",
+      clientNameByBooking.get(booking.id) ?? "",
       companyMap.get(booking.company_id) ?? "Company",
       booking.travellers,
       booking.total_iqd,
@@ -2019,6 +3794,8 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
       booking.pay_method,
       booking.contact_phone ?? "",
       booking.departure_date ?? "",
+      tripReturnMap.get(booking.package_id) ?? "",
+      nightsBetween(booking.departure_date, tripReturnMap.get(booking.package_id) ?? null) ?? "",
       booking.created_at,
     ]);
     const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
@@ -2030,50 +3807,292 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
   }
 
   const activeValue = data.bookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage)).reduce((sum, item) => sum + Number(item.total_iqd), 0);
+  const attentionCount = allCards.filter(({ tier }) => tier === "urgent" || tier === "blocked").length;
+  const travellingCount = data.bookings.filter((item) => item.operational_stage === "in_progress").length;
+  const filterOptions: Array<[string, string]> = [
+    ["all", t.allAll || "All"],
+    ["attention", locale === "ku" ? "پێویستی بە کردارە" : locale === "ar" ? "يتطلب إجراء" : "Needs action"],
+    ["docs_review", locale === "ku" ? "پێداچوونەوەی بەڵگە" : locale === "ar" ? "مراجعة المستندات" : "Doc review"],
+    ["requested", locale === "ku" ? "داواکراو" : locale === "ar" ? "مطلوب" : "Requested"],
+    ["awaiting_payment", locale === "ku" ? "چاوەڕێی پارە" : locale === "ar" ? "في انتظار الدفع" : "Awaiting payment"],
+    ["confirmed", locale === "ku" ? "پشتڕاستکراو" : locale === "ar" ? "مؤكد" : "Confirmed"],
+    ["ready", locale === "ku" ? "ئامادە" : locale === "ar" ? "جاهز" : "Ready"],
+    ["in_progress", locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"],
+    ["completed", locale === "ku" ? "تەواوبوو" : locale === "ar" ? "مكتمل" : "Completed"],
+    ["cancelled", locale === "ku" ? "هەڵوەشاوە" : locale === "ar" ? "ملغي" : "Cancelled"],
+  ];
+  const countForFilter = (id: string) => {
+    if (id === "all") return data.bookings.length;
+    if (id === "attention") return attentionCount;
+    if (id === "docs_review") return data.bookings.filter((item) => (awaitingByBooking.get(item.id) ?? 0) > 0).length;
+    return data.bookings.filter((item) => item.operational_stage === id).length;
+  };
 
   return (
-    <>
+    <div className="booking-workspace">
       <PageHeading eyebrow={locale === "ku" ? "ئۆپەراسیۆنی گەشتیاران" : locale === "ar" ? "عمليات المسافرين" : "Traveller operations"} title={locale === "ku" ? "حیجزەکان" : locale === "ar" ? "الحجوزات" : "Bookings"} description={role === "admin" ? (locale === "ku" ? "چاودێری چالاکییەکانی حیجزکردن بکە لە سەرانسەری بازاڕی تەوافدا." : locale === "ar" ? "راقب نشاط الحجز عبر سوق طواف بالكامل." : "Monitor booking activity across the entire Tawaf marketplace.") : (locale === "ku" ? "داواکارییەکان بپشکنە، پارەدانەکان پشتڕاست بکەرەوە، و گەشتیاران ڕێکبخە لە هەر قۆناغێکی گەشتەکەدا." : locale === "ar" ? "راجع الطلبات، وأكد المدفوعات، وتابع المسافرين خلال كل مرحلة من الرحلة." : "Review requests, confirm payments and move travellers through every trip stage.")} action={<button className="portal-secondary-button" type="button" onClick={exportCsv} disabled={!bookings.length}><FileText size={15} /> {locale === "ku" ? "هەناردەکردنی CSV" : locale === "ar" ? "تصدير CSV" : "Export CSV"}</button>} />
-      <section className="portal-mini-metrics">
-        <div><span className="warning"><Clock3 size={17} /></span><p><b>{data.bookings.filter((item) => item.operational_stage === "requested").length}</b><small>{t.newRequests}</small></p></div>
-        <div><span className="positive"><BadgeCheck size={17} /></span><p><b>{data.bookings.filter((item) => ["confirmed", "ready"].includes(item.operational_stage)).length}</b><small>{locale === "ku" ? "پشتڕاستکراوە" : locale === "ar" ? "مؤكد" : "Confirmed"}</small></p></div>
-        <div><span className="neutral"><Activity size={17} /></span><p><b>{data.bookings.filter((item) => item.operational_stage === "in_progress").length}</b><small>{locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"}</small></p></div>
-        <div><span className="gold"><CircleDollarSign size={17} /></span><p><b>{formatIqd(activeValue, true)}</b><small>{locale === "ku" ? "بەهای حیجزە چالاکەکان" : locale === "ar" ? "قيمة الحجوزات النشطة" : "Active booking value"}</small></p></div>
+
+      <section className="booking-overview" aria-label={locale === "ku" ? "پوختەی حیجزەکان" : locale === "ar" ? "ملخص الحجوزات" : "Booking summary"}>
+        <button type="button" className={filter === "attention" ? "is-active attention" : "attention"} onClick={() => setFilter("attention")}>
+          <span><AlertTriangle size={18} /></span><p><small>{locale === "ku" ? "پێویستی بە کردارە" : locale === "ar" ? "يتطلب إجراء" : "Needs action"}</small><b>{attentionCount}</b></p><ArrowRight size={16} />
+        </button>
+        <button type="button" className={filter === "docs_review" ? "is-active documents" : "documents"} onClick={() => setFilter("docs_review")}>
+          <span><FileCheck2 size={18} /></span><p><small>{locale === "ku" ? "بەڵگە چاوەڕێیە" : locale === "ar" ? "مستندات للمراجعة" : "Docs to review"}</small><b>{docsAwaiting}</b></p><ArrowRight size={16} />
+        </button>
+        <button type="button" className={filter === "in_progress" ? "is-active travelling" : "travelling"} onClick={() => setFilter("in_progress")}>
+          <span><Plane size={18} /></span><p><small>{locale === "ku" ? "لە گەشتدان" : locale === "ar" ? "في الرحلة الآن" : "Travelling now"}</small><b>{travellingCount}</b></p><ArrowRight size={16} />
+        </button>
+        <div className="booking-overview-value">
+          <span><CircleDollarSign size={18} /></span><p><small>{locale === "ku" ? "بەهای حیجزە چالاکەکان" : locale === "ar" ? "قيمة الحجوزات النشطة" : "Active booking value"}</small><b dir="ltr">{formatIqd(activeValue, true)}</b></p>
+        </div>
       </section>
-      <Toolbar query={query} setQuery={setQuery} placeholder={locale === "ku" ? "گەڕان بۆ حیجز، گەشت یان ژمارە..." : locale === "ar" ? "البحث عن حجز أو رحلة أو هاتف..." : "Search booking, trip or phone…"} filters={[["all", t.allAll || "All"], ["requested", locale === "ku" ? "داواکراو" : locale === "ar" ? "مطلوب" : "Requested"], ["awaiting_payment", locale === "ku" ? "چاوەڕێی پارە" : locale === "ar" ? "في انتظار الدفع" : "Awaiting payment"], ["confirmed", locale === "ku" ? "پشتڕاستکراو" : locale === "ar" ? "مؤكد" : "Confirmed"], ["ready", locale === "ku" ? "ئامادە" : locale === "ar" ? "جاهز" : "Ready"], ["in_progress", locale === "ku" ? "لە گەشتدایە" : locale === "ar" ? "قيد التنفيذ" : "In progress"], ["completed", locale === "ku" ? "تەواوبوو" : locale === "ar" ? "مكتمل" : "Completed"], ["cancelled", locale === "ku" ? "هەڵوەشاوە" : locale === "ar" ? "ملغي" : "Cancelled"]]} activeFilter={filter} setFilter={setFilter} />
-      <section className="portal-panel portal-table-panel">
-        <PanelHeader title={`${bookings.length} ${locale === "ku" ? "حیجز" : locale === "ar" ? "حجوزات" : "bookings"}`} subtitle={locale === "ku" ? "زانیارییە پارێزراوەکانی حیجز لە تەواف" : locale === "ar" ? "بيانات الحجز المؤمنة من طواف" : "Role-secured booking data from Tawaf"} />
-        {bookings.length ? (
-          <div className="portal-table-wrap">
-            <table className="portal-table">
-              <thead><tr><th>{t.booking}</th><th>{t.trip}</th>{role === "admin" && <th>{t.company}</th>}<th>{t.travellers}</th><th>{locale === "ku" ? "پارەدان" : locale === "ar" ? "الدفع" : "Payment"}</th><th>{t.status}</th><th className="right">{locale === "ku" ? "کردارەکان" : locale === "ar" ? "الإجراءات" : "Action"}</th></tr></thead>
-              <tbody>
-                {bookings.map((booking) => {
-                  const remaining = Math.max(0, Number(booking.total_iqd) - Number(booking.amount_paid_iqd));
-                  return (
-                    <tr key={booking.id}>
-                      <td><b>#{booking.id.slice(0, 8).toUpperCase()}</b><small className="portal-cell-sub">{relativeTime(booking.created_at)}</small></td>
-                      <td>{tripMap.get(booking.package_id) ?? "Umrah trip"}<small className="portal-cell-sub">{formatDate(booking.departure_date, true)}</small></td>
-                      {role === "admin" && <td>{companyMap.get(booking.company_id) ?? "Company"}</td>}
-                      <td>{booking.travellers}{booking.contact_phone && <small className="portal-cell-sub" dir="ltr">{booking.contact_phone}</small>}</td>
-                      <td><b>{formatIqd(booking.total_iqd)}</b><small className="portal-cell-sub">{titleCase(booking.pay_method)} · {remaining ? (locale === "ku" ? `${formatIqd(remaining)} ماوە` : locale === "ar" ? `متبقي ${formatIqd(remaining)}` : `${formatIqd(remaining)} due`) : (locale === "ku" ? "دراوە" : locale === "ar" ? "مدفوع" : "Paid")}</small></td>
-                      <td><StatusPill status={booking.operational_stage} /></td>
-                      <td className="right">
-                        <BookingActions booking={booking} busy={busy === `booking-${booking.id}`} transition={(action) => transition(booking, action)} role={role} runAction={runAction} locale={locale} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+      <section className="booking-controls">
+        <label className="booking-search">
+          <Search size={17} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={locale === "ku" ? "گەڕان بە ناو، گەشت، ژمارە یان کۆدی حیجز..." : locale === "ar" ? "ابحث بالاسم أو الرحلة أو الهاتف أو رقم الحجز..." : "Search name, trip, phone or booking ID…"} />
+          {query && <button type="button" onClick={() => setQuery("")} aria-label={locale === "ku" ? "سڕینەوەی گەڕان" : locale === "ar" ? "مسح البحث" : "Clear search"}><X size={15} /></button>}
+        </label>
+        <label className="booking-sort">
+          <span>{locale === "ku" ? "ڕیزکردن" : locale === "ar" ? "ترتيب" : "Sort"}</span>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}>
+            <option value="priority">{locale === "ku" ? "پێشینەی کردار" : locale === "ar" ? "أولوية الإجراء" : "Action priority"}</option>
+            <option value="newest">{locale === "ku" ? "نوێترین" : locale === "ar" ? "الأحدث" : "Newest first"}</option>
+            <option value="departure">{locale === "ku" ? "نزیکترین بەرواری ڕۆیشتن" : locale === "ar" ? "أقرب مغادرة" : "Departure soonest"}</option>
+            <option value="payout">{locale === "ku" ? "زۆرترین داهات" : locale === "ar" ? "أعلى مستحق" : "Highest payout"}</option>
+          </select>
+          <ChevronDown size={15} />
+        </label>
+        <div className="booking-filter-row">
+          {filterOptions.map(([id, label]) => (
+            <button type="button" key={id} className={filter === id ? "active" : undefined} onClick={() => setFilter(id)}>
+              {label}<span>{countForFilter(id)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="booking-results">
+        <header className="booking-results-head">
+          <div>
+            <h2>{locale === "ku" ? "ڕیزی حیجزەکان" : locale === "ar" ? "قائمة الحجوزات" : "Booking queue"}</h2>
+            <p>{bookings.length} {locale === "ku" ? "حیجز لە ئەنجامەکاندا" : locale === "ar" ? "حجز في النتائج" : bookings.length === 1 ? "booking in view" : "bookings in view"}</p>
+          </div>
+          <span><ShieldCheck size={14} /> {locale === "ku" ? "پارێزراو بەپێی ڕۆڵ" : locale === "ar" ? "محمي حسب الصلاحية" : "Role-secured"}</span>
+        </header>
+        {cards.length ? (
+          <div className="portal-booking-grid">
+            {cards.map(({ booking, blockers, tier }) => (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                blockers={blockers}
+                tier={tier}
+                now={now}
+                role={role}
+                busy={busy}
+                locale={locale}
+                clientName={clientNameByBooking.get(booking.id) ?? null}
+                tripTitle={tripMap.get(booking.package_id) ?? "Umrah trip"}
+                returnDate={tripReturnMap.get(booking.package_id) ?? null}
+                companyName={companyMap.get(booking.company_id) ?? "Company"}
+                visasReady={visasReadyByBooking(data.bookingTravellers, booking.id)}
+                onOpen={() => setDetailId(booking.id)}
+                transition={(action) => transition(booking, action)}
+                runAction={runAction}
+              />
+            ))}
           </div>
         ) : <EmptyState icon={BookOpenCheck} title={t.noBookingsFound} text={locale === "ku" ? "گەڕانێکی تر تاقی بکەرەوە یان فلتەرەکە بگۆڕە." : locale === "ar" ? "حاول البحث بكلمات أخرى أو تغيير الفلاتر." : "Try another search or status filter."} compact />}
       </section>
-    </>
+      {role === "admin" && <DocumentSlaPanel data={data} companyMap={companyMap} locale={locale} />}
+      {detailId && (
+        <BookingDetailModal
+          bookingId={detailId}
+          data={data}
+          role={role}
+          busy={busy}
+          runAction={runAction}
+          askReason={askReason}
+          locale={locale}
+          onClose={() => setDetailId(null)}
+        />
+      )}
+    </div>
   );
 }
 
-function BookingActions({ booking, busy, transition, role, runAction, locale }: { booking: Booking; busy: boolean; transition: (action: string) => void; role: Role; runAction: RunAction; locale: "ku" | "ar" | "en" }) {
+function BookingCard({
+  booking, blockers, tier, now, role, busy, locale,
+  clientName, tripTitle, returnDate, companyName, visasReady, onOpen, transition, runAction,
+}: {
+  booking: Booking;
+  blockers: ReturnType<typeof bookingBlockers>;
+  tier: BookingTier;
+  now: number;
+  role: Role;
+  busy: string;
+  locale: "ku" | "ar" | "en";
+  clientName: string | null;
+  tripTitle: string;
+  /// From the booking's package — see tripReturnMap.
+  returnDate: string | null;
+  companyName: string;
+  visasReady: boolean;
+  onOpen: () => void;
+  transition: (action: string) => void;
+  runAction: RunAction;
+}) {
+  const t = dashboardTranslations[locale];
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  // Deliberately local and deliberately cosmetic: the number is already in the
+  // response, and RLS is what actually decides who may read it. This only stops
+  // a full grid of client numbers being readable over someone's shoulder.
+  const [phoneShown, setPhoneShown] = useState(false);
+
+  const total = Number(booking.total_iqd);
+  const paid = Number(booking.amount_paid_iqd);
+  const commission = Number(booking.commission_iqd ?? 0);
+  // payout_iqd is the stored truth; the subtraction is a fallback for rows
+  // written before the column was populated.
+  const payout = Number(booking.payout_iqd ?? 0) || Math.max(0, total - commission);
+  const partiallyPaid = paid > 0 && paid < total;
+
+  const msLeft = booking.expires_at ? new Date(booking.expires_at).getTime() - now : null;
+  const level = msLeft == null ? null : countdownLevel(msLeft);
+  const showCountdown = tier === "urgent" && msLeft != null;
+  const awaitingClient = tier === "urgent" && booking.pay_method !== "cash";
+
+  const days = daysUntil(booking.departure_date);
+  const proximity = proximityLabel(days, locale);
+  const nights = nightsBetween(booking.departure_date, returnDate);
+  const blocker = blockerLabel(blockers, locale);
+  const inert = tier === "inert";
+  const PayIcon = booking.pay_method === "cash" ? Banknote : booking.pay_method === "card" ? CreditCard : WalletCards;
+
+  return (
+    <article
+      className={`portal-booking-card is-${tier}${showCountdown ? ` has-countdown is-${level}` : ""}`}
+      data-booking-status={booking.operational_stage}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}
+    >
+      {/* The single most decision-relevant thing on a pending card, so it sits
+          above the reference rather than beside it. */}
+      {showCountdown && (
+        <div className="portal-booking-countdown">
+          <Clock3 size={14} />
+          {/* "auto", not "ltr": a bare clock like 07:06 has no strong character
+              so it falls back to LTR and stays readable, while the Kurdish and
+              Arabic long forms ("19 کاتژمێر 59 خولەک") keep their own word order
+              instead of being reversed into nonsense by a forced LTR run. */}
+          <b dir="auto">{countdownText(msLeft!, locale)}</b>
+          <small>{msLeft! <= 0 ? tr("ماوەی پارەدان بەسەرچووە", "انتهت مهلة الدفع", "Payment window closed") : tr("ماوە بۆ پارەدان", "متبقٍ للدفع", "left to pay")}</small>
+        </div>
+      )}
+
+      <header className="portal-booking-head">
+        <div>
+          <b>#{booking.id.slice(0, 8).toUpperCase()}</b>
+          <small>{relativeTime(booking.created_at)}</small>
+        </div>
+        <StatusPill status={booking.operational_stage} />
+      </header>
+
+      {/* Net first: it is the number an agency is actually deciding on. Gross
+          and commission stay available but stop competing with it.
+          An expired or cancelled booking pays nothing, so labelling its figure
+          "your payout" would state something false — it becomes what was lost
+          instead, which is the thing worth knowing about a dead request. */}
+      <div className="portal-booking-money">
+        <small>{inert ? tr("داهاتی لەدەستچوو", "إيراد ضائع", "Payout lost") : tr("داهاتی تۆ", "صافي مستحقك", "Your payout")}</small>
+        <b dir="ltr">{formatIqd(payout)}</b>
+        <span>{tr(`${formatIqd(total)} کۆی گشتی · ${formatIqd(commission)} کۆمیشن`, `${formatIqd(total)} إجمالي · ${formatIqd(commission)} عمولة`, `${formatIqd(total)} gross · ${formatIqd(commission)} commission`)}</span>
+      </div>
+
+      <div className="portal-booking-client">
+        <span><UserRound size={15} /></span>
+        <div>
+          <b>{clientName ?? tr("ناوی گەشتیار نییە", "لا يوجد اسم مسافر", "No traveller name")}</b>
+          <small>{booking.travellers} {tr("گەشتیار", "مسافر", booking.travellers === 1 ? "traveller" : "travellers")}</small>
+        </div>
+        {booking.contact_phone && (
+          phoneShown || (!PENDING_STAGES.includes(booking.operational_stage) && !inert) ? (
+            <a className="portal-booking-phone" href={`tel:${booking.contact_phone}`} dir="ltr" onClick={(event) => event.stopPropagation()}>{booking.contact_phone}</a>
+          ) : (
+            <button
+              type="button"
+              className="portal-booking-phone is-locked"
+              onClick={(event) => { event.stopPropagation(); setPhoneShown(true); }}
+              title={tr("پیشاندانی ژمارە", "إظهار الرقم", "Reveal number")}
+            >
+              <Lock size={12} /> {tr("ژمارە", "الرقم", "Number")}
+            </button>
+          )
+        )}
+      </div>
+
+      <div className="portal-booking-trip">
+        <Plane size={13} />
+        <div>
+          <b>{tripTitle}</b>
+          <small>
+            {/* Departure–return, so the card answers "how long are they away"
+                without opening anything. Isolated LTR: formatDateRange always
+                returns Latin-script dates, and an un-isolated "01 Aug – 12 Aug
+                2026" reorders its segments inside a Kurdish or Arabic line. */}
+            <span dir="ltr">{formatDateRange(booking.departure_date, returnDate)}</span>
+            {nights && <> · {nights} {tr("شەو", "ليلة", nights === 1 ? "night" : "nights")}</>}
+            {proximity && <em className={days != null && days >= 0 && days <= 7 ? "is-imminent" : undefined}>{proximity}</em>}
+            {role === "admin" ? ` · ${companyName}` : ""}
+          </small>
+        </div>
+      </div>
+
+      <div className="portal-booking-strip">
+        <span className="portal-booking-method"><PayIcon size={13} /> {titleCase(booking.pay_method)}</span>
+        {awaitingClient && <span className="portal-booking-waiting"><Hourglass size={12} /> {tr("چاوەڕێی پارەدانی کڕیار", "بانتظار دفع العميل", "Waiting on client")}</span>}
+      </div>
+
+      {/* Only drawn where a part-payment genuinely exists. A 0% bar on an
+          expired card was pure noise. */}
+      {partiallyPaid && (
+        <div className="portal-booking-pay">
+          <span>{tr(`${formatIqd(total - paid)} ماوە`, `متبقي ${formatIqd(total - paid)}`, `${formatIqd(total - paid)} due`)}</span>
+          <small>{Math.round((paid / total) * 100)}%</small>
+          <i><b style={{ width: `${Math.min(100, (paid / total) * 100)}%` }} /></i>
+        </div>
+      )}
+
+      {tier === "blocked" && blocker && <p className="portal-booking-alert is-blocking"><AlertTriangle size={12} /> {blocker}</p>}
+      {tier === "settled" && blocker && <p className="portal-booking-alert"><FileCheck2 size={12} /> {blocker}</p>}
+      {inert && booking.status_reason && <p className="portal-booking-reason">{booking.status_reason}</p>}
+
+      {/* An inert card gets no primary action at all — it is a record, not work.
+          Opening it is still possible by clicking the card. */}
+      {!inert && (
+        <div className="portal-card-actions" onClick={(event) => event.stopPropagation()}>
+          <button type="button" className="portal-action-button" onClick={onOpen}>
+            {tier === "blocked" ? <><FileCheck2 size={14} /> {tr("بەڵگەنامەکان", "المستندات", "Documents")}</> : <><FileText size={14} /> {tr("پێداچوونەوە", "مراجعة", "Review")}</>}
+          </button>
+          <BookingActions booking={booking} busy={busy === `booking-${booking.id}`} transition={transition} role={role} runAction={runAction} locale={locale} visasReady={visasReady} />
+        </div>
+      )}
+    </article>
+  );
+}
+
+// The client app's tracker jumps to its final "Ready to travel" stage the moment
+// operational_stage becomes 'ready' (see the app's client_booking_progress.dart),
+// so "Mark ready" must stay locked until every traveller's visa is approved.
+function visasReadyByBooking(travellers: BookingTraveller[], bookingId: string) {
+  const rows = travellers.filter((item) => item.booking_id === bookingId);
+  return rows.length > 0 && rows.every((item) => item.visa_status === "approved");
+}
+
+function BookingActions({ booking, busy, transition, role, runAction, locale, visasReady }: { booking: Booking; busy: boolean; transition: (action: string) => void; role: Role; runAction: RunAction; locale: "ku" | "ar" | "en"; visasReady: boolean }) {
   const t = dashboardTranslations[locale];
   if (busy) return <TawafLoadingSpinner size={16} />;
   if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage)) {
@@ -2090,7 +4109,7 @@ function BookingActions({ booking, busy, transition, role, runAction, locale }: 
   if (booking.operational_stage === "confirmed") {
     return (
       <div className="portal-row-actions">
-        <button type="button" className="approve" onClick={() => transition("ready")}><ClipboardCheck size={14} /> {t.markReady}</button>
+        <button type="button" className="approve" onClick={() => transition("ready")} disabled={!visasReady} title={visasReady ? undefined : (locale === "ku" ? "هەموو ڤیزاکان دەبێت پەسەند بکرێن پێش ئامادەکردن" : locale === "ar" ? "يجب اعتماد كل التأشيرات قبل التجهيز" : "All traveller visas must be approved first")}><ClipboardCheck size={14} /> {t.markReady}</button>
         <button type="button" className="danger" onClick={() => transition("cancel")}>{locale === "ku" ? "هەڵوەشاندنەوە" : locale === "ar" ? "إلغاء" : "Cancel"}</button>
       </div>
     );
@@ -2429,7 +4448,21 @@ function CompanyProfile({
           <div className="portal-profile-section">
             <header><span><PhoneCall size={18} /></span><div><b>{locale === "ku" ? "ناونیشان و ئۆفیس" : locale === "ar" ? "الاتصال والمكتب" : "Contact and office"}</b><small>{locale === "ku" ? "پەیوەندیکردن بۆ زیارەتکاران ئاسان بکە" : locale === "ar" ? "سهل الوصول إلى فريقك بالنسبة للمعتمرين" : "Make it easy for pilgrims to reach your team"}</small></div></header>
             <div className="portal-form-grid">
-              <label><span>{locale === "ku" ? "شار یان ناوچە" : locale === "ar" ? "المدينة أو المنطقة" : "City or region"}</span><input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Erbil, Kurdistan Region" disabled={!canEdit} /></label>
+              {/* A picker, not free text: the app matches this value to rank
+                  trips by the client's home city, and typos silently break that.
+                  An existing non-canonical value is kept as an extra option so
+                  saving the form never quietly rewrites it. */}
+              <label><span>{locale === "ku" ? "شار" : locale === "ar" ? "المدينة" : "City"}</span>
+                <select value={location} onChange={(event) => setLocation(event.target.value)} disabled={!canEdit}>
+                  <option value="">{locale === "ku" ? "شار هەڵبژێرە" : locale === "ar" ? "اختر المدينة" : "Select city"}</option>
+                  {IRAQI_CITIES.map((city) => (
+                    <option key={city.value} value={city.value}>{cityLabel(city, locale)}</option>
+                  ))}
+                  {location && !IRAQI_CITIES.some((city) => city.value === location) && (
+                    <option value={location}>{location}</option>
+                  )}
+                </select>
+              </label>
               <label><span>{locale === "ku" ? "ژمارەی تەلەفۆن" : locale === "ar" ? "رقم الهاتف" : "Phone number"}</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+964…" disabled={!canEdit} /></label>
               <label><span>{locale === "ku" ? "ژمارەی WhatsApp" : locale === "ar" ? "رقم الواتساب" : "WhatsApp number"}</span><input type="tel" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} placeholder="+964…" disabled={!canEdit} /></label>
               <label><span>{locale === "ku" ? "کاتەکانی دەوام" : locale === "ar" ? "ساعات العمل" : "Office hours"}</span><input value={officeHours} onChange={(event) => setOfficeHours(event.target.value)} placeholder="Sat–Thu, 9:00–17:00" disabled={!canEdit} /></label>
@@ -2497,43 +4530,86 @@ function SupportPage({ data, busy, runAction, locale }: { data: PortalData; busy
   );
 }
 
-function AdminMore({ data, locale, changeLocale }: { data: PortalData; locale: "ku" | "ar" | "en"; changeLocale: (val: "ku" | "ar" | "en") => void }) {
-  const items = [
-    { icon: ShieldCheck, title: locale === "ku" ? "پاراستنی بازاڕ" : locale === "ar" ? "أمان السوق" : "Marketplace security", text: locale === "ku" ? "دەسەڵاتەکانی ڕۆڵ و دەستگەیشتنی ڕیزەکان چالاکن." : locale === "ar" ? "صلاحيات الأدوار والوصول على مستوى الصفوف نشطة." : "Role permissions and row-level access are active.", status: "Healthy" },
-    { icon: Activity, title: locale === "ku" ? "چالاکییە ڕاستەوخۆکان" : locale === "ar" ? "العمليات المباشرة" : "Live operations", text: locale === "ku" ? `${data.companies.length} کۆمپانیا و ${data.trips.length} گەشت پەیوەستکراون.` : locale === "ar" ? `تم ربط ${data.companies.length} شركة و ${data.trips.length} رحلة.` : `${data.companies.length} companies and ${data.trips.length} trips connected.`, status: "Online" },
-    { icon: Bell, title: locale === "ku" ? "ئاگادارکردنەوەکان" : locale === "ar" ? "الإشعارات" : "Notifications", text: locale === "ku" ? "ڕووداوەکانی حیجزکردن و پێداچوونەوە لە ئەپی مۆبایل نوێ دەبنەوە." : locale === "ar" ? "تحديث أحداث الحجز والمراجعة في تطبيق الهاتف." : "Booking and review events update the mobile app.", status: "Active" },
-    { icon: Settings, title: locale === "ku" ? "ڕێکخستنە بازرگانییەکان" : locale === "ar" ? "الإعدادات التجارية" : "Commercial settings", text: locale === "ku" ? "کۆنترۆڵی کۆمسیۆن و پرۆمۆشنی کۆمپانیا." : locale === "ar" ? "عناصر التحكم في عمولة الشركة والترويج." : "Company commission and promotion controls.", status: "Configured" },
-  ];
+function AdminMore({ locale, changeLocale, busy, runAction }: { locale: "ku" | "ar" | "en"; changeLocale: (val: "ku" | "ar" | "en") => void; busy: string; runAction: RunAction }) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [message, setMessage] = useState("");
+  const [audience, setAudience] = useState("all");
+
+  // One notification row per recipient, so an announcement lands in the same
+  // list, badge, realtime feed and banner as every other notification.
+  async function broadcast() {
+    const body = message.trim();
+    if (!body) return;
+    if (!window.confirm(tr(
+      "ئەم پەیامە بۆ هەموو وەرگرانی هەڵبژێردراو دەنێردرێت. دڵنیایت؟",
+      "سيتم إرسال هذه الرسالة إلى كل المستلمين المحددين. هل أنت متأكد؟",
+      "This message will be sent to every selected recipient. Are you sure?",
+    ))) return;
+    const result = await runAction(
+      "broadcast",
+      () => getSupabase().rpc("admin_broadcast_notification", { p_message: body, p_audience: audience }),
+      tr("پەیامەکە نێردرا.", "تم إرسال الرسالة.", "Announcement sent."),
+    );
+    if (result) setMessage("");
+  }
+
   return (
     <>
-      <PageHeading eyebrow={locale === "ku" ? "ئۆپەراسیۆنەکانی پلاتفۆرم" : locale === "ar" ? "عمليات المنصة" : "Platform operations"} title={locale === "ku" ? "زیاتر" : locale === "ar" ? "المزيد" : "More"} description={locale === "ku" ? "پاراستن، ئامرازەکانی بازاڕ و کورتکراوەکانی بەڕێوەبەر." : locale === "ar" ? "الأمان وأدوات السوق واختصارات المسؤول." : "Security, marketplace tools and administrator shortcuts."} />
-
-      {/* Platform language card */}
-      <section className="portal-panel" style={{ padding: "20px", marginBottom: "20px", borderRadius: "20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
-          <span style={{ display: "grid", placeItems: "center", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(15,92,77,0.08)", color: "var(--green)" }}><Languages size={15} /></span>
+      <section className="portal-panel" style={{ padding: "22px", marginBottom: 15 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+          <span style={{ display: "grid", placeItems: "center", width: "34px", height: "34px", borderRadius: "11px", background: "rgba(15,92,77,0.08)", color: "var(--green)" }}><Bell size={17} /></span>
           <div>
-            <b style={{ fontSize: "13px", display: "block", color: "var(--ink)" }}>
+            <b style={{ fontSize: "14px", display: "block", color: "var(--ink)" }}>{tr("ڕاگەیاندن بۆ بەکارهێنەران", "إرسال إعلان", "Send an announcement")}</b>
+            <small style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginTop: "2px" }}>
+              {tr(
+                "لە ئەپ، لیستی ئاگادارکردنەوە و شاشەی قوفڵکراودا دەردەکەوێت.",
+                "يظهر في التطبيق وقائمة الإشعارات وشاشة القفل.",
+                "Delivered in the app, notification shade, and lock screen.",
+              )}
+            </small>
+          </div>
+        </div>
+        <textarea
+          rows={3}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder={tr("پەیامەکەت بنووسە…", "اكتب رسالتك…", "Write your message…")}
+          style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(15,92,77,.18)", borderRadius: 12, padding: "12px 14px", fontFamily: "inherit", fontSize: 13, color: "var(--portal-ink, #14251f)", background: "#fff", resize: "vertical" }}
+        />
+        <div className="portal-commercial-row" style={{ marginTop: 12 }}>
+          <label>
+            <small>{tr("وەرگران", "المستلمون", "Recipients")}</small>
+            <select value={audience} onChange={(event) => setAudience(event.target.value)}>
+              <option value="all">{tr("هەمووان، لەگەڵ میوانان", "الجميع، بما في ذلك الضيوف", "Everyone, including signed-out users")}</option>
+              <option value="client">{tr("تەنها زیارەتکاران", "المعتمرون فقط", "Pilgrims only")}</option>
+              <option value="companies">{tr("تەنها کۆمپانیاکان", "الشركات فقط", "Companies only")}</option>
+            </select>
+          </label>
+          <button type="button" className="portal-primary-button" onClick={broadcast} disabled={!message.trim() || busy === "broadcast"}>
+            {busy === "broadcast" ? <TawafLoadingSpinner size={14} /> : <ArrowUpRight size={14} />} {tr("ناردن", "إرسال", "Send")}
+          </button>
+        </div>
+      </section>
+
+      <PageHeading eyebrow={locale === "ku" ? "ڕێکخستنەکان" : locale === "ar" ? "الإعدادات" : "Settings"} title={locale === "ku" ? "ڕێکخستنەکان" : locale === "ar" ? "الإعدادات" : "Settings"} description={locale === "ku" ? "زمانی پانێڵی بەڕێوەبردن." : locale === "ar" ? "لغة لوحة تحكم المسؤول." : "Administrator panel language."} />
+
+      <section className="portal-panel" style={{ padding: "22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "15px" }}>
+          <span style={{ display: "grid", placeItems: "center", width: "34px", height: "34px", borderRadius: "11px", background: "rgba(15,92,77,0.08)", color: "var(--green)" }}><Languages size={17} /></span>
+          <div>
+            <b style={{ fontSize: "14px", display: "block", color: "var(--ink)" }}>
               {locale === "ku" ? "زمانی پلاتفۆرم" : locale === "ar" ? "لغة المنصة" : "Platform language"}
             </b>
-            <small style={{ fontSize: "9px", color: "var(--muted)", display: "block", marginTop: "2px" }}>
+            <small style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginTop: "2px" }}>
               {locale === "ku" ? "زمانی پانێڵی بەڕێوەبردن بگۆڕە" : locale === "ar" ? "تغيير لغة لوحة تحكم المسؤول" : "Switch administrator panel display language"}
             </small>
           </div>
         </div>
         <div className="locale-selector" style={{ background: "rgba(15, 92, 77, 0.05)", border: "1px solid rgba(15, 92, 77, 0.1)", borderRadius: "100px", display: "inline-flex", gap: "4px", padding: "2px" }}>
-          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "6px 16px", fontSize: "11px", fontWeight: "700", cursor: "pointer", color: locale === "ku" ? "#fff" : "#647169", background: locale === "ku" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("ku")}>کوردی</button>
-          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "6px 16px", fontSize: "11px", fontWeight: "700", cursor: "pointer", color: locale === "ar" ? "#fff" : "#647169", background: locale === "ar" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("ar")}>عربي</button>
-          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "6px 16px", fontSize: "11px", fontWeight: "700", cursor: "pointer", color: locale === "en" ? "#fff" : "#647169", background: locale === "en" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("en")}>EN</button>
+          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "8px 18px", fontSize: "12px", fontWeight: "700", cursor: "pointer", color: locale === "ku" ? "#fff" : "#647169", background: locale === "ku" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("ku")}>کوردی</button>
+          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "8px 18px", fontSize: "12px", fontWeight: "700", cursor: "pointer", color: locale === "ar" ? "#fff" : "#647169", background: locale === "ar" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("ar")}>عربي</button>
+          <button type="button" style={{ border: 0, borderRadius: "100px", padding: "8px 18px", fontSize: "12px", fontWeight: "700", cursor: "pointer", color: locale === "en" ? "#fff" : "#647169", background: locale === "en" ? "var(--green)" : "transparent" }} onClick={() => changeLocale("en")}>EN</button>
         </div>
-      </section>
-
-      <section className="portal-settings-grid">
-        {items.map((item) => <article key={item.title}><span><item.icon size={20} /></span><div><h3>{item.title}</h3><p>{item.text}</p></div><StatusPill status={item.status.toLowerCase()} /><ArrowUpRight size={16} /></article>)}
-      </section>
-      <section className="portal-panel portal-system">
-        <PanelHeader title={locale === "ku" ? "سیستمی تەواف" : locale === "ar" ? "نظام طواف" : "Tawaf system"} subtitle={locale === "ku" ? "بەستەرە چالاکەکانی بەرهەمەکە" : locale === "ar" ? "أسطح المنتجات المتصلة" : "Connected product surfaces"} />
-        <div><SystemItem icon={Building2} title={locale === "ku" ? "پۆرتاڵی کۆمپانیا" : locale === "ar" ? "بوابة الشركة" : "Company portal"} text={locale === "ku" ? "گەشتەکان، ئۆپەراسیۆنەکانی حیجز، پارە، نامەکان و دەستگەیشتنی کارمەندان" : locale === "ar" ? "الرحلات، عمليات الحجز، الأموال، الرسائل ووصول الموظفين" : "Trips, booking operations, money, messages and team access"} /><SystemItem icon={ShieldCheck} title={locale === "ku" ? "کۆنترۆڵی بەڕێوەبەر" : locale === "ar" ? "تحكم المسؤول" : "Admin control"} text={locale === "ku" ? "کۆمپانیاکان، پێداچوونەوە بە ناوەڕۆک، حیجز، دارایی و پشتگیری" : locale === "ar" ? "الشركات، مراجعة المحتوى، الحجوزات، المالية والدعم" : "Companies, content review, bookings, finance and support"} /><SystemItem icon={Plane} title={locale === "ku" ? "ئەپی زیارەتکار" : locale === "ar" ? "تطبيق الهاتف للمعتمر" : "Pilgrim mobile app"} text={locale === "ku" ? "دۆزینەوەی بازاڕ، حیجزکردن، بەڵگەنامەکان و نوێکارییەکانی گەشت" : locale === "ar" ? "استكشاف السوق، الحجز، المستندات وتحديثات الرحلة" : "Marketplace discovery, booking, documents and trip updates"} /></div>
       </section>
     </>
   );
@@ -2556,34 +4632,10 @@ function AttentionItem({ icon: Icon, tone, count, title, text, onClick }: { icon
   return <button type="button" onClick={onClick}><span className={tone}><Icon size={18} /></span><div><b>{title}</b><small>{text}</small></div><strong>{count}</strong><ArrowRight size={15} /></button>;
 }
 
-function EntityName({ name, image, fallback: Fallback, detail }: { name: string; image: string | null; fallback: LucideIcon; detail: string }) {
-  return <div className="portal-entity">{image ? (
-    // External company logos are already optimized by Tawaf Storage.
-    <img src={image} alt="" />
-  ) : <span><Fallback size={17} /></span>}<div><b>{name}</b><small>{detail}</small></div></div>;
-}
-
 function EmptyInline({ text }: { text: string }) {
   return <div className="portal-empty-inline"><CheckCircle2 size={19} /><span>{text}</span></div>;
 }
 
 function EmptyState({ icon: Icon, title, text, compact = false }: { icon: LucideIcon; title: string; text: string; compact?: boolean }) {
   return <div className={`portal-empty ${compact ? "compact" : ""}`}><span><Icon size={23} /></span><h3>{title}</h3><p>{text}</p></div>;
-}
-
-function SystemItem({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
-  return <article><span><Icon size={19} /></span><div><b>{title}</b><small>{text}</small></div><BadgeCheck size={17} /></article>;
-}
-
-function monthlyBookingCounts(bookings: Booking[]) {
-  const now = new Date();
-  return Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
-    const label = date.toLocaleDateString("en-US", { month: "short" });
-    const value = bookings.filter((booking) => {
-      const created = new Date(booking.created_at);
-      return created.getFullYear() === date.getFullYear() && created.getMonth() === date.getMonth();
-    }).length;
-    return { label, value };
-  });
 }

@@ -905,6 +905,18 @@
 .portal-table td.right { text-align: right; }
 .portal-table td > b { font-size: 8.5px; }
 
+/* Bookings has many columns — let long text and the row actions wrap so the
+   whole table fits the panel instead of forcing a horizontal scroll. */
+.portal-table-bookings th,
+.portal-table-bookings td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 13px 12px;
+  vertical-align: top;
+}
+.portal-table-bookings td > b { white-space: nowrap; }
+.portal-table-bookings .portal-row-actions { flex-wrap: wrap; justify-content: flex-end; }
+
 .portal-cell-sub {
   display: block;
   margin-top: 5px;
@@ -931,29 +943,6 @@
 .portal-status.negative i { background: #b95349; }
 .portal-status.neutral { color: #60736b; background: #eef2ef; }
 .portal-status.neutral i { background: #81938b; }
-
-.portal-entity {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.portal-entity > img,
-.portal-entity > span {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  object-fit: cover;
-  border-radius: 10px;
-  color: #0f5c4d;
-  background: #edf3ef;
-}
-
-.portal-entity b,
-.portal-entity small { display: block; }
-.portal-entity b { font-size: 8px; }
-.portal-entity small { margin-top: 4px; color: #8c9892; font-size: 6.5px; }
 
 .portal-rating { display: inline-flex; align-items: center; gap: 4px; color: #a47a28; }
 .portal-rating small { color: #8a9791; }
@@ -986,6 +975,8 @@
 .portal-card-actions button.approve { color: #176a50; border-color: rgba(23,106,80,.17); background: rgba(49,151,113,.07); }
 .portal-row-actions button.danger,
 .portal-card-actions button.danger { color: #9c493e; border-color: rgba(156,73,62,.16); background: rgba(185,84,72,.055); }
+.portal-row-actions button.changes,
+.portal-card-actions button.changes { color: #87631d; border-color: rgba(160,116,30,.2); background: rgba(201,162,75,.09); }
 .portal-row-actions button:disabled,
 .portal-action-button:disabled { opacity: .55; cursor: wait; }
 
@@ -1103,9 +1094,11 @@
   background: rgba(255,255,255,.07);
 }
 
-.portal-trip-visual .portal-status { position: absolute; left: 12px; top: 12px; color: #e8e9e5; background: rgba(5,38,31,.55); backdrop-filter: blur(10px); }
+/* Logical insets so the status and the featured badge swap sides in Kurdish
+   and Arabic instead of both drifting to the same physical corner. */
+.portal-trip-visual .portal-status { position: absolute; inset-inline-start: 12px; top: 12px; color: #e8e9e5; background: rgba(5,38,31,.55); backdrop-filter: blur(10px); }
 .portal-trip-visual .portal-status i { background: #d8b45c; }
-.portal-trip-visual > i { position: absolute; right: 12px; top: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 100px; color: #e3c473; background: rgba(6,39,32,.58); font-size: 6px; font-style: normal; }
+.portal-trip-visual > i { position: absolute; inset-inline-end: 12px; top: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 100px; color: #e3c473; background: rgba(6,39,32,.58); font-size: 6px; font-style: normal; }
 
 .portal-trip-body { padding: 18px; }
 .portal-trip-company { color: #a27b2b; font-size: 6.5px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
@@ -1131,6 +1124,9 @@
   border-bottom: 1px solid var(--portal-border);
 }
 
+/* Departure / return / price. */
+.portal-trip-dates.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 .portal-trip-dates small,
 .portal-trip-dates b { display: block; }
 .portal-trip-dates small { color: #8b9791; font-size: 6px; }
@@ -1139,7 +1135,9 @@
 .portal-capacity > span,
 .portal-capacity > small { font-size: 6.5px; }
 .portal-capacity > span { color: #66756e; }
-.portal-capacity > small { float: right; color: #87938d; }
+/* Logical, not `float: right` — the portal runs RTL in Kurdish and Arabic, and
+   the percentage belongs opposite the label in both directions. */
+.portal-capacity > small { float: inline-end; color: #87938d; }
 .portal-capacity > i { height: 5px; display: block; clear: both; overflow: hidden; margin-top: 8px; border-radius: 100px; background: #edf1ee; }
 .portal-capacity > i > b { height: 100%; display: block; border-radius: 100px; background: linear-gradient(90deg, #0f5c4d, #5ea48f); }
 
@@ -1152,12 +1150,356 @@
   font-size: 6.7px;
   line-height: 1.5;
 }
+.portal-review-note.is-rejection { color: #93463d; background: rgba(185,84,72,.08); }
+
+/* ---------- Booking cards ----------
+   A booking has no cover image, so unlike a trip card it leads with the
+   reference and status. Kept to the same radius, border and hover lift as
+   .portal-trip-card so the two pages read as one system. */
+
+.portal-collection-panel { padding: 0 0 18px; }
+.portal-collection-panel > .portal-panel-header { margin-bottom: 18px; }
+
+.portal-booking-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  padding: 0 18px;
+}
+
+.portal-booking-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 17px;
+  border: 1px solid var(--portal-border);
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 10px 35px rgba(18,59,48,.035);
+  cursor: pointer;
+  transition: transform .25s, box-shadow .25s;
+}
+
+.portal-booking-card:hover { transform: translateY(-4px); box-shadow: 0 18px 46px rgba(18,59,48,.08); }
+.portal-booking-card:focus-visible { outline: 2px solid #0f5c4d; outline-offset: 2px; }
+
+.portal-booking-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.portal-booking-head b { display: block; font-size: 9px; letter-spacing: .4px; }
+.portal-booking-head small { display: block; margin-top: 4px; color: #8b9791; font-size: 6.3px; }
+
+.portal-booking-client {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.portal-booking-client > span {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #0f5c4d;
+  background: rgba(15,92,77,.07);
+}
+
+/* min-width:0 lets a long name ellipsize instead of stretching the card. */
+.portal-booking-client > div,
+.portal-booking-trip > div { min-width: 0; }
+.portal-booking-client b { display: block; font-size: 7.8px; }
+.portal-booking-client small { display: block; margin-top: 2px; color: #8b9791; font-size: 6.3px; }
+
+.portal-booking-trip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--portal-border);
+  color: #74817a;
+}
+
+.portal-booking-trip > svg { flex: none; margin-top: 2px; }
+.portal-booking-trip b { display: block; color: var(--portal-ink); font-size: 7.5px; }
+.portal-booking-trip small { display: block; margin-top: 3px; color: #8b9791; font-size: 6.3px; }
+
+/* ---------- Company cards ----------
+   Same silhouette as the booking cards so the admin's two list pages read as
+   one system. A company has no countdown, so the profile-completion bar takes
+   the lead position — it is what a pending application is judged on. */
+
+.portal-company-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  padding: 0 18px;
+}
+
+.portal-company-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 17px;
+  border: 1px solid var(--portal-border);
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 10px 35px rgba(18,59,48,.035);
+  cursor: pointer;
+  transition: transform .25s, box-shadow .25s;
+}
+
+.portal-company-tile:hover { transform: translateY(-4px); box-shadow: 0 18px 46px rgba(18,59,48,.08); }
+.portal-company-tile.needs-review { border-inline-start: 3px solid #b8933d; }
+
+.portal-company-tile-head { display: flex; align-items: center; gap: 11px; }
+
+.portal-company-logo {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  color: #0f5c4d;
+  background: rgba(15,92,77,.07);
+}
+
+/* The building glyph stays underneath, so a broken logo URL degrades to it
+   rather than to a browser's broken-image icon. */
+.portal-company-logo > img { display: none; }
+.portal-company-logo.has-image > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.portal-company-tile-head > div { min-width: 0; }
+.portal-company-tile-head b { display: block; font-size: 9px; }
+.portal-company-tile-head small { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: #8b9791; font-size: 6.3px; }
+.portal-company-tile-head small > svg { flex: none; }
+
+.portal-company-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 13px; }
+
+.portal-company-promoted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 100px;
+  color: #8f681e;
+  background: rgba(196,153,61,.13);
+  font-size: 6.3px;
+  font-weight: 800;
+}
+
+.portal-company-completion { margin-top: 14px; }
+.portal-company-completion > span { color: #66756e; font-size: 6.5px; }
+.portal-company-completion > small { float: inline-end; color: #87938d; font-size: 6.5px; }
+.portal-company-completion > i { height: 5px; display: block; clear: both; overflow: hidden; margin-top: 8px; border-radius: 100px; background: #edf1ee; }
+.portal-company-completion > i > b { height: 100%; display: block; border-radius: 100px; background: linear-gradient(90deg, #0f5c4d, #5ea48f); }
+.portal-company-completion > i > b.is-low { background: linear-gradient(90deg, #b8933d, #d8b45c); }
+
+.portal-company-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--portal-border);
+  border-bottom: 1px solid var(--portal-border);
+}
+
+.portal-company-stats small { display: block; color: #8b9791; font-size: 6px; }
+.portal-company-stats b { display: block; margin-top: 5px; font-size: 8px; }
+
+.portal-company-meta { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.portal-company-meta li { display: flex; align-items: center; gap: 6px; color: #74817a; font-size: 6.3px; }
+.portal-company-meta li > svg { flex: none; }
+.portal-company-meta em { margin-inline-start: auto; color: #8b9791; font-style: normal; }
+
+.portal-company-tile > .portal-card-actions { margin-top: auto; padding-top: 14px; }
+.portal-company-tile > .portal-card-actions > button { width: 100%; justify-content: center; }
+
+/* ---------- Tier weights ----------
+   Five weights across ten stages. The left accent is the fastest signal in a
+   grid — it reads before any text does — so only tiers that want a human get
+   one, and inert cards are actively drained of contrast so they cannot compete
+   with live work. */
+
+.portal-booking-card.is-urgent { border-inline-start: 3px solid #b8933d; }
+.portal-booking-card.is-urgent.is-warning { border-inline-start-color: #c98a2e; }
+.portal-booking-card.is-urgent.is-critical,
+.portal-booking-card.is-urgent.is-lapsed { border-inline-start-color: #a3532b; }
+.portal-booking-card.is-blocked { border-inline-start: 3px solid #2f7d63; }
+
+.portal-booking-card.is-journey { background: #fcfbf6; box-shadow: none; }
+
+.portal-booking-card.is-inert {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+  /* Not opacity: that would dim the status pill and reason text below
+     legibility. Muting the ink keeps them readable but unimportant. */
+  color: #97a09b;
+}
+
+.portal-booking-card.is-inert:hover { transform: none; box-shadow: none; }
+.portal-booking-card.is-inert .portal-booking-head b,
+.portal-booking-card.is-inert .portal-booking-money b,
+.portal-booking-card.is-inert .portal-booking-client b,
+.portal-booking-card.is-inert .portal-booking-trip b { color: #8c958f; font-weight: 600; }
+.portal-booking-card.is-inert .portal-booking-money b { font-size: inherit; }
+.portal-booking-card.is-inert .portal-booking-client > span { color: #9aa39e; background: rgba(15,92,77,.05); }
+
+/* ---------- Countdown ---------- */
+
+.portal-booking-countdown {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: -2px 0 14px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  color: #7c6524;
+  background: rgba(184,147,61,.09);
+}
+
+.portal-booking-countdown > svg { align-self: center; flex: none; }
+.portal-booking-countdown b { font-size: 16px; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
+.portal-booking-countdown small { font-size: 6.5px; opacity: .85; }
+
+.is-warning > .portal-booking-countdown { color: #8f5a1c; background: rgba(201,138,46,.12); }
+.is-critical > .portal-booking-countdown { color: #97402c; background: rgba(163,83,43,.12); }
+.is-lapsed > .portal-booking-countdown { color: #8a8a86; background: rgba(90,90,86,.08); }
+
+/* Only the last hour pulses. Anything more and the page never settles. */
+.is-critical > .portal-booking-countdown > svg { animation: portal-countdown-pulse 1.6s ease-in-out infinite; }
+
+@keyframes portal-countdown-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ---------- Money ---------- */
+
+.portal-booking-money { margin: 14px 0 2px; }
+.portal-booking-money small { display: block; color: #8b9791; font-size: 6px; }
+.portal-booking-money b { display: block; margin: 4px 0 3px; font-size: 14px; letter-spacing: -.5px; }
+.portal-booking-money span { display: block; color: #8b9791; font-size: 6.3px; }
+
+/* ---------- Payment method / waiting ---------- */
+
+.portal-booking-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 12px;
+}
+
+.portal-booking-method,
+.portal-booking-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 6.5px;
+}
+
+.portal-booking-method { color: #66756e; }
+
+.portal-booking-waiting {
+  padding: 5px 9px;
+  border-radius: 100px;
+  color: #7c6524;
+  background: rgba(184,147,61,.11);
+  font-weight: 700;
+}
+
+/* ---------- Phone ---------- */
+
+.portal-booking-phone {
+  flex: none;
+  margin-inline-start: auto;
+  padding: 5px 9px;
+  border: 1px solid var(--portal-border);
+  border-radius: 100px;
+  color: #0f5c4d;
+  background: #fff;
+  font-size: 6.3px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.portal-booking-phone.is-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #8b9791;
+  cursor: pointer;
+}
+
+.portal-booking-phone.is-locked:hover { color: #0f5c4d; }
+
+.portal-booking-pay > span,
+.portal-booking-pay > small { font-size: 6.5px; }
+.portal-booking-pay > span { color: #66756e; }
+.portal-booking-pay > small { float: inline-end; color: #87938d; }
+.portal-booking-pay { margin-top: 12px; }
+.portal-booking-pay > i { height: 5px; display: block; clear: both; overflow: hidden; margin-top: 8px; border-radius: 100px; background: #edf1ee; }
+.portal-booking-pay > i > b { height: 100%; display: block; border-radius: 100px; background: linear-gradient(90deg, #b8933d, #d8b45c); }
+
+.portal-booking-alert {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: #1f6a55;
+  background: rgba(15,92,77,.07);
+  font-size: 6.5px;
+}
+
+.portal-booking-alert > svg { flex: none; }
+.portal-booking-alert.is-blocking { color: #97402c; background: rgba(163,83,43,.09); font-weight: 700; }
+
+.portal-booking-reason {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: #8b8f8c;
+  background: rgba(90,90,86,.055);
+  font-size: 6.5px;
+  line-height: 1.5;
+}
+
+/* Departure proximity, distinct from the date itself: the date is a fact, this
+   is how soon it is. */
+.portal-booking-trip small > em {
+  margin-inline-start: 6px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  color: #5d6a63;
+  background: rgba(15,92,77,.06);
+  font-size: .92em;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.portal-booking-trip small > em.is-imminent { color: #8f5a1c; background: rgba(201,138,46,.13); }
+
+/* Pins the action row to the bottom edge so cards of differing height in the
+   same row still line their buttons up. */
+.portal-booking-card > .portal-card-actions { margin-top: auto; padding-top: 14px; }
 
 .portal-card-actions {
   min-height: 38px;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   margin-top: 16px;
 }
 
@@ -1201,6 +1543,11 @@
 .portal-mini-metrics span.positive { color: #247259; background: rgba(56,152,115,.1); }
 .portal-mini-metrics span.neutral { color: #4f7268; background: #ebf1ed; }
 .portal-mini-metrics span.gold { color: #8a6238; background: rgba(138,98,56,.1); }
+.portal-mini-metrics span.teal { color: #2f7d72; background: rgba(47,125,114,.12); }
+
+.portal-row-clickable { cursor: pointer; }
+.portal-row-clickable:hover { background: rgba(15,92,77,.03); }
+.booking-await-inline { display: inline-flex; align-items: center; gap: 4px; color: #2f7d72 !important; }
 .portal-mini-metrics p { margin: 0; }
 .portal-mini-metrics b,
 .portal-mini-metrics small { display: block; }
@@ -1985,8 +2332,6 @@
 .portal-table td > b { font-size: 11.5px; }
 .portal-cell-sub { font-size: 9px; }
 .portal-status { padding: 7px 10px; font-size: 9px; }
-.portal-entity b { font-size: 11px; }
-.portal-entity small { font-size: 9px; }
 .portal-row-actions button,
 .portal-action-button { min-height: 34px; padding: 0 11px; font-size: 9.5px; }
 .portal-icon-button { width: 35px; height: 35px; }
@@ -2005,6 +2350,34 @@
 .portal-capacity > span,
 .portal-capacity > small { font-size: 9.5px; }
 .portal-review-note { font-size: 9.5px; }
+.portal-booking-head b { font-size: 13px; }
+.portal-booking-head small { font-size: 9px; }
+.portal-booking-client > span { width: 36px; height: 36px; }
+.portal-booking-client b { font-size: 12px; }
+.portal-booking-client small { font-size: 9px; }
+.portal-booking-trip b { font-size: 11px; }
+.portal-booking-trip small { font-size: 9px; }
+.portal-booking-pay > span,
+.portal-booking-pay > small { font-size: 9.5px; }
+.portal-booking-alert { font-size: 9.5px; }
+.portal-booking-reason { font-size: 9.5px; }
+/* Larger than the reference number, which is the whole point of it. */
+.portal-booking-countdown b { font-size: 24px; }
+.portal-booking-countdown small { font-size: 9.5px; }
+.portal-booking-money small { font-size: 9px; }
+.portal-booking-money b { font-size: 22px; }
+.portal-booking-money span { font-size: 9px; }
+.portal-booking-method,
+.portal-booking-waiting { font-size: 9.5px; }
+.portal-booking-phone { font-size: 9.5px; padding: 6px 11px; }
+.portal-company-tile-head b { font-size: 13.5px; }
+.portal-company-tile-head small { font-size: 9.5px; }
+.portal-company-promoted { font-size: 9.5px; }
+.portal-company-completion > span,
+.portal-company-completion > small { font-size: 9.5px; }
+.portal-company-stats small { font-size: 9px; }
+.portal-company-stats b { font-size: 11.5px; }
+.portal-company-meta li { font-size: 9.5px; }
 .portal-card-actions > button:not(.portal-icon-button) { min-height: 35px; font-size: 9.5px; }
 .portal-card-note { font-size: 9.5px; }
 .portal-mini-metrics > div { min-height: 90px; padding: 16px; }
@@ -2083,6 +2456,8 @@
 
 @media (max-width: 1180px) {
   .portal-trip-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .portal-booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .portal-company-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .portal-metric-grid { grid-template-columns: repeat(2, 1fr); }
   .portal-mini-metrics { grid-template-columns: repeat(2, 1fr); }
   .portal-overview-grid { grid-template-columns: 1fr; }
@@ -2147,6 +2522,8 @@
   .portal-toolbar > label { min-width: 0; }
   .portal-filter-row { padding: 0 2px; }
   .portal-trip-grid { grid-template-columns: 1fr; }
+  .portal-booking-grid { grid-template-columns: 1fr; padding: 0 14px; }
+  .portal-company-grid { grid-template-columns: 1fr; padding: 0 14px; }
   .portal-team-grid,
   .portal-support-grid,
   .portal-settings-grid { grid-template-columns: 1fr; }
