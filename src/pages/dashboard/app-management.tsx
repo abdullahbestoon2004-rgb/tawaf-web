@@ -255,8 +255,16 @@ export default function AppManagementWorkspace({
     });
   }, [trips, companyById, today, tripRank]);
 
+  // Agencies with at least one bookable trip. Below the promoted block this
+  // still decides the order, and it is what makes a promoted agency with an
+  // empty catalogue worth flagging to the administrator.
+  const liveTripCompanyIds = useMemo(
+    () => new Set(rankedTrips.map((trip) => trip.company_id)),
+    [rankedTrips],
+  );
+
   const rankedCompanies = useMemo(() => {
-    const withTrips = new Set(rankedTrips.map((trip) => trip.company_id));
+    const withTrips = liveTripCompanyIds;
     return companies.filter(isCompanyEligible).sort((a, b) => {
       // A promotion outranks every heuristic below it, including "has a live
       // trip" — this mirrors _compareCompanies in the app's provider.
@@ -279,7 +287,7 @@ export default function AppManagementWorkspace({
       if (served !== 0) return served;
       return b.created_at.localeCompare(a.created_at);
     });
-  }, [companies, rankedTrips, companyRank]);
+  }, [companies, liveTripCompanyIds, companyRank]);
 
   // Rows the server has, merged over the known set, so a table that predates a
   // new section key still renders every block in a sensible place.
@@ -448,7 +456,9 @@ export default function AppManagementWorkspace({
               locale={locale}
               busy={busy}
               runAction={runAction}
+              persistRank={persistRank}
               ranked={rankedCompanies}
+              liveTripCompanyIds={liveTripCompanyIds}
               limit={sectionLimit("agencies")}
             />
           )}
@@ -457,6 +467,7 @@ export default function AppManagementWorkspace({
               locale={locale}
               busy={busy}
               runAction={runAction}
+              persistRank={persistRank}
               ranked={rankedTrips}
               companyById={companyById}
               limit={sectionLimit("trips")}

@@ -528,6 +528,72 @@
 .portal-trip-modal-text { margin: 0 0 6px; color: #2c3b35; font-size: 13px; line-height: 1.7; }
 .portal-trip-modal-text.muted { color: #6c7a73; font-size: 12px; }
 
+/* Count chip next to a section heading, e.g. "Bookings (5)". */
+.portal-trip-modal-count {
+  min-width: 20px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  color: #0f5c4d;
+  background: rgba(15, 92, 77, 0.1);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.portal-trip-booking-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.portal-trip-booking-summary > div {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid rgba(15, 92, 77, 0.12); border-radius: 13px; background: #fff;
+}
+.portal-trip-booking-summary small { color: #8b9791; font-size: 10.5px; }
+.portal-trip-booking-summary b { color: #14251f; font-size: 14px; font-weight: 700; }
+
+/* Drill-down rows: trips inside a company profile, bookings inside a trip. */
+.portal-trip-booking-list,
+.portal-drawer-trip-list { list-style: none; display: grid; gap: 7px; margin: 0; padding: 0; }
+.portal-trip-booking-list > li > button,
+.portal-drawer-trip-list > li > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 16px;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 92, 77, 0.12);
+  border-radius: 13px;
+  color: inherit;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: start;
+  transition: border-color .14s, background .14s;
+}
+.portal-trip-booking-list > li > button:hover,
+.portal-drawer-trip-list > li > button:hover { border-color: rgba(15, 92, 77, 0.3); background: #f8faf7; }
+.portal-trip-booking-who,
+.portal-drawer-trip-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.portal-trip-booking-who b,
+.portal-drawer-trip-main b { overflow: hidden; color: #14251f; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.portal-trip-booking-who small,
+.portal-drawer-trip-main small { overflow: hidden; color: #8b9791; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.portal-trip-booking-money { color: #0f5c4d; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.portal-trip-booking-list svg,
+.portal-drawer-trip-list svg { color: #9aa69f; }
+[dir="rtl"] .portal-trip-booking-list > li > button > svg,
+[dir="rtl"] .portal-drawer-trip-list > li > button > svg { transform: scaleX(-1); }
+
+@media (max-width: 560px) {
+  .portal-trip-booking-summary { grid-template-columns: 1fr; }
+  /* Money and status drop to a second row rather than crushing the name. */
+  .portal-trip-booking-list > li > button,
+  .portal-drawer-trip-list > li > button { grid-template-columns: minmax(0, 1fr) 16px; gap: 8px 11px; }
+  .portal-trip-booking-money,
+  .portal-trip-booking-list .portal-status,
+  .portal-drawer-trip-list .portal-status { grid-column: 1; justify-self: start; }
+}
+
 .portal-trip-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 18px; }
 .portal-trip-facts > div { display: flex; flex-direction: column; gap: 4px; }
 .portal-trip-facts small { color: #8b9791; font-size: 10.5px; }
@@ -1952,4 +2018,96 @@
   .booking-workspace .portal-card-actions > button,
   .booking-workspace .portal-card-actions .portal-row-actions,
   .booking-workspace .portal-card-actions .portal-row-actions > button { width: 100%; }
+}
+
+/* ---------- Phones ----------
+   This file loads last for the dashboard, so phone-only corrections that must
+   beat the desktop rules in portal.css / trips.css live here. */
+
+@media (max-width: 680px) {
+  /* 100vh is the *expanded* viewport on mobile browsers, so full-height
+     surfaces sat partly behind the URL bar. dvh tracks what is visible. */
+  .portal-shell { min-height: 100dvh; }
+  .portal-main { min-height: 100dvh; }
+  .portal-content { min-height: calc(100dvh - 64px); }
+  .booking-modal { max-height: calc(100dvh - 40px); }
+
+  /* Fixed-position furniture has to clear the home indicator / notch. */
+  .portal-sidebar { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+  .portal-toast {
+    right: max(14px, env(safe-area-inset-right));
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .trip-wizard-footer { padding-bottom: max(13px, env(safe-area-inset-bottom)); }
+
+  /* Every control the portal renders is well under 16px, which makes iOS
+     Safari zoom the page on focus and leaves it panned sideways afterwards.
+     Only the control text is bumped; the surrounding layout keeps its scale. */
+  .portal-shell input,
+  .portal-shell select,
+  .portal-shell textarea,
+  .portal-reason-dialog textarea,
+  .booking-modal input,
+  .booking-modal select,
+  .booking-modal textarea { font-size: 16px; }
+
+  /* Micro-labels that read fine on a desktop monitor are illegible at arm's
+     length on a phone. */
+  .portal-shell { font-size: 15px; }
+  .trip-hero-kicker { font-size: 10px; }
+  .trip-hero p { font-size: 11.5px; }
+  .trip-hero-status small { font-size: 10px; }
+  .trip-finance-grid small,
+  .trip-overview-metrics span,
+  .trip-summary-grid small { font-size: 10.5px; }
+  .trip-finance-notice b { font-size: 12px; }
+  .trip-finance-notice p,
+  .trip-muted,
+  .trip-itinerary-summary p { font-size: 10.5px; }
+  .portal-toast { font-size: 11.5px; }
+
+  /* Banner actions cannot share a row with the message at this width — the
+     button was being squeezed to a couple of characters. */
+  .portal-alert { grid-template-columns: 31px minmax(0, 1fr); }
+  .portal-verification-banner { grid-template-columns: 39px minmax(0, 1fr); }
+  /* :last-child only — the alert's first child is the 31px close button and
+     must stay in column one. */
+  .portal-alert > button:last-child,
+  .portal-verification-banner > button:last-child,
+  .portal-verification-banner > a:last-child {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: auto;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Search + sort in the bookings inbox: the search field reserved 300px,
+     which alone overflows a 360px screen once padding is counted. */
+  .booking-controls { grid-template-columns: 1fr; }
+
+  /* Modal gutters: 18px each side of a 360px screen left the dialog cramped
+     against the edges once its own padding was added. */
+  .booking-modal-scrim,
+  .portal-trip-modal-scrim { padding: 14px 10px; }
+
+  /* Table cells are nowrap by design, so wide tables scroll inside their
+     wrapper. `contain` stops that swipe from also triggering the browser's
+     back gesture once the strip hits its end. */
+  .portal-table-wrap,
+  .portal-drawer-tabs,
+  .trip-tabs,
+  .trip-wizard-steps,
+  .trip-booking-toolbar > div { overscroll-behavior-x: contain; }
+  .portal-table th,
+  .portal-table td { padding: 12px 13px; }
+}
+
+@media (max-width: 430px) {
+  /* Three stat columns inside an already-padded card leave ~85px each. */
+  .portal-company-stats { grid-template-columns: 1fr 1fr; }
+  .portal-drawer-stats { grid-template-columns: 1fr; }
 }

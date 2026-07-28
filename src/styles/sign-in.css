@@ -55,3 +55,29 @@
   .signin-cards { display: none; }
   .signin-form-side { padding: 32px; min-height: auto; }
 }
+
+@media (max-width: 560px) {
+  /* 100vh is the *expanded* viewport on mobile Safari/Chrome, so the panel
+     ran under the browser chrome. dvh tracks the visible height instead. */
+  .signin-main { min-height: 100dvh; }
+  .signin-side { padding: 30px 20px 34px; }
+  .signin-brand img { width: 46px; height: 46px; border-radius: 13px; }
+  .signin-brand .kurdish { font-size: 25px; }
+  .signin-pitch h1 { line-height: 1.35; margin-top: 16px; }
+  .signin-pitch p { font-size: 14px; line-height: 1.85; margin-top: 16px; }
+  .signin-foot { font-size: 12px; }
+  .signin-form-side { padding: 26px 20px 40px; }
+  .signin-form-top { gap: 12px; }
+  .signin-form-wrap .eyebrow { margin-top: 18px; }
+  .signin-form-wrap > p { margin-bottom: 26px; line-height: 1.8; }
+  .locale-switch { gap: 2px; padding: 3px; }
+  .locale-switch button { padding: 5px 9px; font-size: 11px; }
+
+  /* iOS Safari zooms the whole page when a focused control is under 16px —
+     on the sign-in form that zoom left the page panned sideways. */
+  input,
+  select,
+  textarea,
+  .field-input { font-size: 16px; }
+  .role-btn { padding: 13px 10px; font-size: 13px; }
+}

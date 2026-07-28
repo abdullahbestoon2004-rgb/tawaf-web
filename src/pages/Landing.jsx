@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { X } from "lucide-react";
+import { Globe, UserRound, X } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -23,11 +23,43 @@ export default function Landing() {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [email, setEmail] = useState("");
   const [formMessage, setFormMessage] = useState("");
+  // Below 780px the locale switch collapses to a globe and the three options
+  // move into a popover. Tracked in JS rather than CSS alone so the globe is a
+  // real button only when it toggles something — at desktop width it is
+  // decoration and must stay out of the tab order.
+  const [compactNav, setCompactNav] = useState(() => window.matchMedia("(max-width: 780px)").matches);
+  const [langOpen, setLangOpen] = useState(false);
+  const langRef = useRef(null);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 780px)");
+    const apply = () => {
+      setCompactNav(query.matches);
+      if (!query.matches) setLangOpen(false);
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("tawaf-locale");
     if (saved && LOCALES.includes(saved)) setLocale(saved);
   }, []);
+
+  useEffect(() => {
+    if (!langOpen) return;
+    const onPointerDown = (event) => {
+      if (!langRef.current?.contains(event.target)) setLangOpen(false);
+    };
+    const onKey = (event) => { if (event.key === "Escape") setLangOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [langOpen]);
 
   useEffect(() => {
     document.documentElement.dir = locale === "en" ? "ltr" : "rtl";
@@ -295,20 +327,38 @@ export default function Landing() {
           <a href="#steps">{t.howItWorks}</a>
           <a href="#roles">{t.forAgencies}</a>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div className="locale-switch">
-            {LOCALES.map((code) => (
+        <div className="nav-actions">
+          <div className={`locale-switch${langOpen ? " is-open" : ""}`} ref={langRef}>
+            {compactNav ? (
               <button
-                key={code}
                 type="button"
-                className={locale === code ? "is-active" : ""}
-                onClick={() => changeLocale(code)}
+                className="locale-switch-toggle"
+                onClick={() => setLangOpen((open) => !open)}
+                aria-expanded={langOpen}
+                aria-label={locale === "ku" ? "زمان" : locale === "ar" ? "اللغة" : "Language"}
               >
-                {code === "ku" ? "کوردی" : code === "ar" ? "عربي" : "EN"}
+                <Globe size={16} aria-hidden="true" />
               </button>
-            ))}
+            ) : (
+              <Globe className="locale-switch-icon" size={15} aria-hidden="true" />
+            )}
+            <div className="locale-switch-options">
+              {LOCALES.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  className={locale === code ? "is-active" : ""}
+                  onClick={() => { changeLocale(code); setLangOpen(false); }}
+                >
+                  {code === "ku" ? "کوردی" : code === "ar" ? "عربي" : "EN"}
+                </button>
+              ))}
+            </div>
           </div>
-          <Link to="/sign-in" className="btn btn-primary">{t.signIn}</Link>
+          <Link to="/sign-in" className="btn btn-primary nav-signin" aria-label={t.signIn}>
+            <UserRound size={16} aria-hidden="true" />
+            <span>{t.signIn}</span>
+          </Link>
         </div>
       </nav>
 
@@ -337,7 +387,7 @@ export default function Landing() {
               alt={t.heroPhotoAlt ?? "Kaaba, Makkah"}
               onError={(event) => { event.currentTarget.style.display = "none"; }}
             />
-            <div className="img-slot"><span>وێنەی حەرەم / کەعبە</span></div>
+            <div className="img-slot" aria-hidden="true" />
           </div>
           <div className="hero-verified">
             <span className="tick">✓</span>

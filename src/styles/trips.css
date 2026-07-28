@@ -1225,3 +1225,36 @@
   .trip-finance-grid { grid-template-columns: 1fr; }
   .trip-wizard-footer > div { grid-template-columns: 1fr; }
 }
+
+/* ---------- Phones ---------- */
+@media (max-width: 560px) {
+  /* Three fact tiles inside the live preview leave ~45px of text width once
+     their own border and padding are taken off — they wrap to two. */
+  .trip-live-facts { grid-template-columns: 1fr 1fr; }
+  .trip-live-body { padding: 16px; gap: 18px; }
+  .trip-live-hero-top { padding: 13px; }
+  .trip-live-accom-row { flex-wrap: wrap; }
+  .trip-live-accom-meta { flex-wrap: wrap; }
+
+  .trip-hero { min-height: 230px; padding: 20px 18px; }
+  .trip-hero h1 { font-size: 32px; letter-spacing: -1.6px; }
+  .trip-hero p { flex-wrap: wrap; }
+
+  /* The strip already scrolls sideways; hide its scrollbar so the row does
+     not gain a grey band on top of the pills. */
+  .trip-tabs { gap: 4px; padding: 5px; scrollbar-width: none; }
+  .trip-tabs::-webkit-scrollbar { display: none; }
+  .trip-tabs button { padding: 0 11px; font-size: 11.5px; }
+
+  .trip-finance-notice { margin: 13px; padding: 14px; }
+  .trip-operation-panel { min-height: 0; }
+  .trip-overview-body { padding: 17px; }
+  .trip-card-facts { gap: 6px; }
+  .trip-wizard-section { padding: 18px 14px; }
+}
+
+@media (max-width: 430px) {
+  .trip-live-facts { grid-template-columns: 1fr; }
+  .trip-hero h1 { font-size: 28px; }
+  .trip-card-facts { grid-template-columns: 1fr 1fr; }
+}

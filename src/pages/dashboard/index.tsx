@@ -32,6 +32,7 @@ import {
   Hourglass,
   Languages,
   LayoutDashboard,
+  LoaderCircle,
   Lock,
   LogOut,
   Mail,
@@ -60,7 +61,7 @@ import { useScrollLock } from "@/lib/use-scroll-lock";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
 import AppManagementWorkspace from "./app-management.tsx";
-import type { HomeAd, HomeSectionRow } from "./app-management.tsx";
+import type { HomeAd, HomeSectionRow, HomeRankRow } from "./app-management.tsx";
 import { dashboardTranslations } from "./translations.ts";
 
 type Role = "admin" | "agency";
@@ -321,6 +322,7 @@ type PortalData = {
   // Admin-only: what the app's home screen shows and in which order.
   homeAds: HomeAd[];
   homeSections: HomeSectionRow[];
+  homeRank: HomeRankRow[];
 };
 
 const emptyData: PortalData = {
@@ -339,13 +341,17 @@ const emptyData: PortalData = {
   payouts: [],
   homeAds: [],
   homeSections: [],
+  homeRank: [],
 };
 
+// No Bookings entry for admins: bookings are reached by drilling into the trip
+// they belong to (Trips → trip → bookings, or Companies → company → trip →
+// bookings), so a flat cross-marketplace booking list would be a second,
+// competing way in.
 const adminNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "companies", label: "Companies", icon: Building2 },
   { id: "trips", label: "Trips", icon: Plane },
-  { id: "bookings", label: "Bookings", icon: BookOpenCheck },
   { id: "finance", label: "Finance", icon: CircleDollarSign },
   { id: "support", label: "Support", icon: Headphones },
   { id: "app", label: "App management", icon: Smartphone },
@@ -821,6 +827,7 @@ export default function DashboardPage() {
             supportResult,
             homeAdsResult,
             homeSectionsResult,
+            homeRankResult,
           ] = await Promise.all([
             supabase.from("companies").select("*").order("created_at", { ascending: false }),
             supabase.from("packages").select("*").order("created_at", { ascending: false }),
@@ -833,6 +840,7 @@ export default function DashboardPage() {
             supabase.from("support_messages").select("*").order("created_at", { ascending: false }),
             supabase.from("home_ads").select("*").order("sort_order", { ascending: true }),
             supabase.from("home_sections").select("*").order("sort_order", { ascending: true }),
+            supabase.from("home_rank").select("*").order("sort_order", { ascending: true }),
           ]);
 
           const firstError = [
@@ -875,6 +883,7 @@ export default function DashboardPage() {
             // cost the operator the whole workspace.
             homeAds: (homeAdsResult.data ?? []) as HomeAd[],
             homeSections: (homeSectionsResult.data ?? []) as HomeSectionRow[],
+            homeRank: (homeRankResult.data ?? []) as HomeRankRow[],
           });
         } else {
           // An owner can now hold a head office plus its branches, so this must
@@ -1041,7 +1050,7 @@ export default function DashboardPage() {
         { table: "companies" }, { table: "packages" }, { table: "trip_change_requests" },
         { table: "bookings" }, { table: "booking_travellers" }, { table: "traveller_documents" },
         { table: "payments" }, { table: "commissions" }, { table: "support_messages" },
-        { table: "home_ads" }, { table: "home_sections" },
+        { table: "home_ads" }, { table: "home_sections" }, { table: "home_rank" },
       ];
     }
     if (!company) return [];
@@ -1152,16 +1161,19 @@ export default function DashboardPage() {
       messages: data.inquiries.filter((item) => item.status !== "closed").length,
     };
 
-  const notificationItems: Array<{ page: PageId; label: string; count: number }> = role === "admin"
+  // `id` rather than `page` keys these rows: since admins lost the Bookings
+  // page, two admin rows now point at "trips".
+  const notificationItems: Array<{ id: string; page: PageId; label: string; count: number }> = role === "admin"
     ? [
-      { page: "companies", count: badges.companies ?? 0, label: locale === "en" ? "Company applications" : locale === "ar" ? "طلبات الشركات" : "داواکارییەکانی کۆمپانیا" },
-      { page: "trips", count: badges.trips ?? 0, label: locale === "en" ? "Trips awaiting review" : locale === "ar" ? "رحلات بانتظار المراجعة" : "گەشتەکان بۆ پێداچوونەوە" },
-      { page: "bookings", count: badges.bookings ?? 0, label: locale === "en" ? "New booking requests" : locale === "ar" ? "طلبات حجز جديدة" : "داواکاری حیجزی نوێ" },
-      { page: "support", count: badges.support ?? 0, label: locale === "en" ? "Support messages" : locale === "ar" ? "رسائل الدعم" : "نامەکانی پشتیوانی" },
+      { id: "companies", page: "companies", count: badges.companies ?? 0, label: locale === "en" ? "Company applications" : locale === "ar" ? "طلبات الشركات" : "داواکارییەکانی کۆمپانیا" },
+      { id: "trips", page: "trips", count: badges.trips ?? 0, label: locale === "en" ? "Trips awaiting review" : locale === "ar" ? "رحلات بانتظار المراجعة" : "گەشتەکان بۆ پێداچوونەوە" },
+      // Admins reach a booking by drilling into its trip, so this lands on Trips.
+      { id: "bookings", page: "trips", count: badges.bookings ?? 0, label: locale === "en" ? "New booking requests" : locale === "ar" ? "طلبات حجز جديدة" : "داواکاری حیجزی نوێ" },
+      { id: "support", page: "support", count: badges.support ?? 0, label: locale === "en" ? "Support messages" : locale === "ar" ? "رسائل الدعم" : "نامەکانی پشتیوانی" },
     ]
     : [
-      { page: "bookings", count: badges.bookings ?? 0, label: locale === "en" ? "New booking requests" : locale === "ar" ? "طلبات حجز جديدة" : "داواکاری حیجزی نوێ" },
-      { page: "messages", count: badges.messages ?? 0, label: locale === "en" ? "Open conversations" : locale === "ar" ? "محادثات مفتوحة" : "گفتوگۆ کراوەکان" },
+      { id: "bookings", page: "bookings", count: badges.bookings ?? 0, label: locale === "en" ? "New booking requests" : locale === "ar" ? "طلبات حجز جديدة" : "داواکاری حیجزی نوێ" },
+      { id: "messages", page: "messages", count: badges.messages ?? 0, label: locale === "en" ? "Open conversations" : locale === "ar" ? "محادثات مفتوحة" : "گفتوگۆ کراوەکان" },
     ];
 
   const attentionItems = notificationItems.filter((item) => item.count > 0);
@@ -1385,7 +1397,7 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               role="menuitem"
-                              key={item.page}
+                              key={item.id}
                               onClick={() => {
                                 setBellOpen(false);
                                 changePage(item.page);
@@ -1563,10 +1575,9 @@ function AdminPages({
 }) {
   if (page === "companies") return <AdminCompanies data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "trips") return <TripsPage role="admin" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
-  if (page === "bookings") return <BookingsPage role="admin" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "finance") return <FinancePage role="admin" data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "support") return <SupportPage data={data} busy={busy} runAction={runAction} locale={locale} />;
-  if (page === "app") return <AppManagementWorkspace homeAds={data.homeAds} homeSections={data.homeSections} companies={data.companies} trips={data.trips} busy={busy} runAction={runAction} locale={locale} />;
+  if (page === "app") return <AppManagementWorkspace homeAds={data.homeAds} homeSections={data.homeSections} homeRank={data.homeRank} companies={data.companies} trips={data.trips} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "more") return <AdminMore locale={locale} changeLocale={changeLocale} busy={busy} runAction={runAction} />;
   return <AdminOverview data={data} goTo={goTo} locale={locale} />;
 }
@@ -1686,7 +1697,7 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
       <section className="portal-metric-grid">
         <MetricCard icon={Building2} label={t.activeCompanies} value={`${data.companies.filter((item) => item.status === "active").length}`} detail={`${pendingCompanies.length} ${t.awaitingDecision}`} tone="green" onClick={() => goTo("companies")} />
         <MetricCard icon={Plane} label={t.marketplaceTrips} value={`${data.trips.length}`} detail={`${pendingTrips.length} ${t.pendingReview}`} tone="teal" onClick={() => goTo("trips")} />
-        <MetricCard icon={TicketCheck} label={t.totalBookings} value={`${data.bookings.length}`} detail={`${requestedBookings.length} ${t.newRequests}`} tone="gold" onClick={() => goTo("bookings")} />
+        <MetricCard icon={TicketCheck} label={t.totalBookings} value={`${data.bookings.length}`} detail={`${requestedBookings.length} ${t.newRequests}`} tone="gold" onClick={() => goTo("trips")} />
         <MetricCard icon={CircleDollarSign} label={t.collectedRevenue} value={formatIqd(collected, true)} detail={`${formatIqd(owed, true)} ${t.stillOwed}`} tone="sand" onClick={() => goTo("finance")} />
       </section>
 
@@ -1695,7 +1706,7 @@ function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: 
         <div className="portal-attention-list">
           <AttentionItem icon={Building2} tone="gold" count={pendingCompanies.length} title={t.companyApplications} text={t.reviewBusinessDetails} onClick={() => goTo("companies")} />
           <AttentionItem icon={ClipboardCheck} tone="teal" count={pendingTrips.length + pendingChanges.length} title={t.tripsForReview} text={locale === "ku" ? `${pendingTrips.length} گەشتی نوێ · ${pendingChanges.length} داواکاری گۆڕانکاری` : locale === "ar" ? `${pendingTrips.length} رحلات جديدة · ${pendingChanges.length} طلبات تغيير` : `${pendingTrips.length} new trips · ${pendingChanges.length} change requests`} onClick={() => goTo("trips")} />
-          <AttentionItem icon={BookOpenCheck} tone="sand" count={requestedBookings.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("bookings")} />
+          <AttentionItem icon={BookOpenCheck} tone="sand" count={requestedBookings.length} title={t.bookingRequests} text={t.waitingCompanyRespond} onClick={() => goTo("trips")} />
           <AttentionItem icon={Headphones} tone="green" count={openSupport.length} title={t.supportMessages} text={t.unresolvedInInbox} onClick={() => goTo("support")} />
         </div>
       </section>
@@ -1915,6 +1926,9 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
   const [sort, setSort] = useState("newest");
   const [listPage, setListPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A trip opened from inside the company drawer. Stacks on top of the drawer
+  // so the admin keeps their place in the company they were reviewing.
+  const [drilledTrip, setDrilledTrip] = useState<Trip | null>(null);
   const selected = data.companies.find((item) => item.id === selectedId) ?? null;
   const ownerById = useMemo(() => new Map(data.companyOwners.map((owner) => [owner.id, owner])), [data.companyOwners]);
 
@@ -2159,6 +2173,21 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
               ? (locale === "ku" ? "پرۆمۆشنی کۆمپانیا لابرا." : locale === "ar" ? "تمت إزالة ترويج الشركة." : "Company promotion removed.")
               : (locale === "ku" ? "کۆمپانیا پرۆمۆت کرا لە بازاڕدا." : locale === "ar" ? "تم ترويج الشركة في السوق." : "Company is now promoted in the marketplace."),
           )}
+          onOpenTrip={setDrilledTrip}
+        />
+      )}
+      {drilledTrip && (
+        <TripDetailModal
+          trip={drilledTrip}
+          companyName={data.companies.find((item) => item.id === drilledTrip.company_id)?.name ?? "Tawaf company"}
+          data={data}
+          locale={locale}
+          role="admin"
+          busy={busy}
+          runAction={runAction}
+          askReason={askReason}
+          onReview={(decision) => reviewTripDecision(drilledTrip, decision, { runAction, askReason, locale })}
+          onClose={() => setDrilledTrip(null)}
         />
       )}
     </>
@@ -2284,6 +2313,7 @@ function CompanyDetailDrawer({
   onClose,
   onReview,
   onTogglePromoted,
+  onOpenTrip,
 }: {
   company: Company;
   data: PortalData;
@@ -2293,12 +2323,13 @@ function CompanyDetailDrawer({
   onClose: () => void;
   onReview: (decision: "approved" | "rejected" | "needs_changes" | "suspended") => void;
   onTogglePromoted: () => void;
+  onOpenTrip: (trip: Trip) => void;
 }) {
   useScrollLock();
   const t = dashboardTranslations[locale];
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const state = companyVerificationState(company);
-  const [activeTab, setActiveTab] = useState<"overview" | "verification" | "commercial" | "activity">(state === "pending" ? "verification" : "overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "trips" | "verification" | "commercial" | "activity">(state === "pending" ? "verification" : "overview");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -2407,6 +2438,7 @@ function CompanyDetailDrawer({
         <nav className="portal-drawer-tabs" role="tablist" aria-label={tr("بەشەکانی پڕۆفایلی کۆمپانیا", "أقسام ملف الشركة", "Company profile sections")}>
           {([
             ["overview", tr("پوختە", "نظرة عامة", "Overview")],
+            ["trips", `${tr("گەشتەکان", "الرحلات", "Trips")} (${trips.length})`],
             ["verification", tr("پشتڕاستکردنەوە", "التحقق", "Verification")],
             ["commercial", tr("بازرگانی", "تجاري", "Commercial")],
             ["activity", tr("چالاکی", "النشاط", "Activity")],
@@ -2459,6 +2491,37 @@ function CompanyDetailDrawer({
                 </section>
               )}
             </>
+          )}
+
+          {activeTab === "trips" && (
+            <section>
+              <h3>{tr("گەشتەکانی ئەم کۆمپانیایە", "رحلات هذه الشركة", "Trips by this company")}</h3>
+              {trips.length ? (
+                <ul className="portal-drawer-trip-list">
+                  {trips.map((trip) => {
+                    const tripBookingCount = bookings.filter((item) => item.package_id === trip.id).length;
+                    return (
+                      <li key={trip.id}>
+                        <button type="button" onClick={() => onOpenTrip(trip)}>
+                          <span className="portal-drawer-trip-main">
+                            <b>{trip.title}</b>
+                            <small>
+                              {trip.departure_date ? formatDate(trip.departure_date, true) : tr("بەروار دیارینەکراوە", "التاريخ غير محدد", "Date not set")}
+                              {" · "}
+                              {tripBookingCount} {tr("حیجز", "حجز", tripBookingCount === 1 ? "booking" : "bookings")}
+                            </small>
+                          </span>
+                          <span className={`portal-status ${statusTone(trip.lifecycle_status)}`}><i />{titleCase(trip.lifecycle_status)}</span>
+                          <ArrowRight size={15} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="portal-commercial-note">{tr("ئەم کۆمپانیایە هێشتا هیچ گەشتێکی دروست نەکردووە.", "لم تنشئ هذه الشركة أي رحلة بعد.", "This company has not created any trips yet.")}</p>
+              )}
+            </section>
           )}
 
           {activeTab === "verification" && (
@@ -2546,12 +2609,15 @@ type TripDetailData = {
 // company submitted can be reviewed before the review decision. Pulls the child
 // tables (itinerary/pricing/hotels/inclusions) on open — admin RLS (is_admin) already
 // allows reading these for pending trips, so no server change is needed.
-function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onClose }: {
+function TripDetailModal({ trip, companyName, data, locale, role, busy, runAction, askReason, onReview, onClose }: {
   trip: any;
   companyName: string;
+  data: PortalData;
   locale: "ku" | "ar" | "en";
   role: Role;
   busy: string;
+  runAction: RunAction;
+  askReason: AskReason;
   onReview: (decision: "published" | "needs_changes" | "rejected") => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -2559,7 +2625,30 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
   const [details, setDetails] = useState<TripDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
   const rowBusy = busy === `trip-review-${trip.id}`;
+
+  // Bookings come from data already in memory, so this section renders straight
+  // away rather than waiting on the itinerary/pricing fetch below.
+  const tripBookings = useMemo(
+    () => data.bookings
+      .filter((item) => item.package_id === trip.id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [data.bookings, trip.id],
+  );
+  const activeTripBookings = tripBookings.filter((item) => !["cancelled", "rejected", "expired"].includes(item.operational_stage));
+  const bookedTravellers = activeTripBookings.reduce((sum, item) => sum + Number(item.travellers ?? 0), 0);
+  const bookedValue = activeTripBookings.reduce((sum, item) => sum + Number(item.total_iqd ?? 0), 0);
+  // Lead traveller names the booking; fall back to whichever traveller is on file.
+  const clientNameByBooking = useMemo(() => {
+    const names = new Map<string, string>();
+    data.bookingTravellers.forEach((row) => {
+      const name = (row.full_name || row.local_name || "").trim();
+      if (!name) return;
+      if (row.is_lead || !names.has(row.booking_id)) names.set(row.booking_id, name);
+    });
+    return names;
+  }, [data.bookingTravellers]);
 
   useScrollLock();
 
@@ -2593,12 +2682,13 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
     return () => { active = false; };
   }, [trip.id]);
 
-  // Close on Escape for keyboard reviewers.
+  // Close on Escape for keyboard reviewers. Skipped while a booking is open on
+  // top, so one Escape closes the booking rather than both layers at once.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !openBookingId) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, openBookingId]);
 
   const facts: Array<{ label: string; value: string }> = [
     { label: tr("بەرواری ڕۆیشتن", "تاريخ المغادرة", "Departure"), value: formatDate(trip.departure_date, true) },
@@ -2622,6 +2712,7 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
   const includedInclusions = (details?.inclusions ?? []).filter((row) => row.included);
 
   return (
+    <>
     <div className="portal-trip-modal-scrim" onClick={onClose}>
       <div className="portal-trip-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <header className="portal-trip-modal-head">
@@ -2661,6 +2752,43 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
                 <div key={fact.label}><small>{fact.label}</small><b>{fact.value}</b></div>
               ))}
             </div>
+          </section>
+
+          {/* Bookings live under the trip they were made against — this is the
+              only route to a booking now that admins have no Bookings page. */}
+          <section className="portal-trip-modal-section">
+            <h3>
+              <BookOpenCheck size={13} /> {tr("حیجزەکان", "الحجوزات", "Bookings")}
+              <span className="portal-trip-modal-count">{tripBookings.length}</span>
+            </h3>
+            {tripBookings.length ? (
+              <>
+                <div className="portal-trip-booking-summary">
+                  <div><small>{tr("چالاک", "نشطة", "Active")}</small><b>{activeTripBookings.length}</b></div>
+                  <div><small>{tr("گەشتیاران", "المعتمرون", "Travellers")}</small><b>{bookedTravellers}</b></div>
+                  <div><small>{tr("بەهای حیجزەکان", "قيمة الحجوزات", "Booking value")}</small><b dir="ltr">{formatIqd(bookedValue, true)}</b></div>
+                </div>
+                <ul className="portal-trip-booking-list">
+                  {tripBookings.map((booking) => (
+                    <li key={booking.id}>
+                      <button type="button" onClick={() => setOpenBookingId(booking.id)}>
+                        <span className="portal-trip-booking-who">
+                          <b>{clientNameByBooking.get(booking.id) ?? tr("گەشتیار", "معتمر", "Traveller")}</b>
+                          <small>#{booking.id.slice(0, 8).toUpperCase()} · {booking.travellers} {tr("کەس", "أشخاص", booking.travellers === 1 ? "traveller" : "travellers")}</small>
+                        </span>
+                        <span className="portal-trip-booking-money" dir="ltr">{formatIqd(booking.total_iqd, true)}</span>
+                        <span className={`portal-status ${statusTone(booking.operational_stage)}`}><i />{titleCase(booking.operational_stage)}</span>
+                        <ArrowRight size={15} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="portal-trip-modal-text muted">
+                {tr("هێشتا هیچ حیجزێک بۆ ئەم گەشتە نەکراوە.", "لا توجد حجوزات على هذه الرحلة بعد.", "No bookings have been made on this trip yet.")}
+              </p>
+            )}
           </section>
 
           <section className="portal-trip-modal-section">
@@ -2765,7 +2893,51 @@ function TripDetailModal({ trip, companyName, locale, role, busy, onReview, onCl
         )}
       </div>
     </div>
+    {/* Sibling, not a child: inside the trip scrim a click on the booking
+        backdrop would bubble up and close the trip modal underneath too. */}
+    {openBookingId && (
+      <BookingDetailModal
+        bookingId={openBookingId}
+        data={data}
+        role={role}
+        busy={busy}
+        runAction={runAction}
+        askReason={askReason}
+        locale={locale}
+        onClose={() => setOpenBookingId(null)}
+      />
+    )}
+    </>
   );
+}
+
+// Shared by the Trips page and the trip modal opened from a company profile —
+// both are the same admin decision on the same package, so they must ask for the
+// same reasons and emit the same toast.
+async function reviewTripDecision(
+  trip: Trip,
+  decision: "published" | "needs_changes" | "rejected",
+  { runAction, askReason, locale }: { runAction: RunAction; askReason: AskReason; locale: "ku" | "ar" | "en" },
+): Promise<boolean> {
+  const reason = decision === "rejected"
+    ? await askReason(locale === "ku" ? "بۆچی ئەم گەشتە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذه الرحلة؟" : "Why is this trip being rejected?")
+    : decision === "needs_changes"
+      ? await askReason(
+          locale === "ku" ? "چی دەبێت کۆمپانیاکە بگۆڕێت؟ (ئارەزوومەندانە)" : locale === "ar" ? "ما الذي يجب على الشركة تغييره؟ (اختياري)" : "What should the company change? (optional)",
+          { optional: true },
+        )
+      : null;
+  if (decision !== "published" && reason === null) return false;
+  const result = await runAction(
+    `trip-review-${trip.id}`,
+    () => getSupabase().rpc("review_package", { p_package_id: trip.id, p_decision: decision, p_reason: reason }),
+    decision === "published"
+      ? (locale === "ku" ? `${trip.title} ئێستا چالاکە.` : locale === "ar" ? `${trip.title} نشطة الآن.` : `${trip.title} is now live.`)
+      : decision === "needs_changes"
+        ? (locale === "ku" ? `${trip.title} گەڕێندرایەوە بۆ ڕەشنووس.` : locale === "ar" ? `أُعيدت ${trip.title} إلى المسودة.` : `${trip.title} returned to draft for changes.`)
+        : (locale === "ku" ? `${trip.title} ڕەتکرایەوە.` : locale === "ar" ? `تم رفض ${trip.title}.` : `${trip.title} was rejected.`),
+  );
+  return Boolean(result);
 }
 
 function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, locale }: { role: Role; data: PortalData; busy: string; runAction: RunAction; askReason: AskReason; onCreateTrip?: () => void; locale: "ku" | "ar" | "en" }) {
@@ -2781,27 +2953,8 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
   const pendingChanges = data.tripChangeRequests.filter((item) => item.status === "pending");
   const countByStatus = (status: string) => data.trips.filter((item) => item.lifecycle_status === status).length;
 
-  async function reviewTrip(trip: Trip, decision: "published" | "needs_changes" | "rejected") {
-    const reason = decision === "rejected"
-      ? await askReason(locale === "ku" ? "بۆچی ئەم گەشتە ڕەتدەکرێتەوە؟" : locale === "ar" ? "لماذا يتم رفض هذه الرحلة؟" : "Why is this trip being rejected?")
-      : decision === "needs_changes"
-        ? await askReason(
-            locale === "ku" ? "چی دەبێت کۆمپانیاکە بگۆڕێت؟ (ئارەزوومەندانە)" : locale === "ar" ? "ما الذي يجب على الشركة تغييره؟ (اختياري)" : "What should the company change? (optional)",
-            { optional: true },
-          )
-        : null;
-    if (decision !== "published" && reason === null) return false;
-    const result = await runAction(
-      `trip-review-${trip.id}`,
-      () => getSupabase().rpc("review_package", { p_package_id: trip.id, p_decision: decision, p_reason: reason }),
-      decision === "published"
-        ? (locale === "ku" ? `${trip.title} ئێستا چالاکە.` : locale === "ar" ? `${trip.title} نشطة الآن.` : `${trip.title} is now live.`)
-        : decision === "needs_changes"
-          ? (locale === "ku" ? `${trip.title} گەڕێندرایەوە بۆ ڕەشنووس.` : locale === "ar" ? `أُعيدت ${trip.title} إلى المسودة.` : `${trip.title} returned to draft for changes.`)
-          : (locale === "ku" ? `${trip.title} ڕەتکرایەوە.` : locale === "ar" ? `تم رفض ${trip.title}.` : `${trip.title} was rejected.`),
-    );
-    return Boolean(result);
-  }
+  const reviewTrip = (trip: Trip, decision: "published" | "needs_changes" | "rejected") =>
+    reviewTripDecision(trip, decision, { runAction, askReason, locale });
 
   async function toggleFeatured(trip: Trip) {
     await runAction(
@@ -3034,9 +3187,12 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
         <TripDetailModal
           trip={detailTrip}
           companyName={companyMap.get(detailTrip.company_id) ?? "Tawaf company"}
+          data={data}
           locale={locale}
           role={role}
           busy={busy}
+          runAction={runAction}
+          askReason={askReason}
           onReview={(decision) => reviewTrip(detailTrip, decision)}
           onClose={() => setDetailTrip(null)}
         />

@@ -136,7 +136,12 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 .footer-nav { display: flex; gap: 26px; flex-wrap: wrap; }
 .footer-nav a { color: #a7b6af; }
 
-.locale-switch { display: inline-flex; gap: 4px; border: 1px solid rgba(15,92,77,.18); border-radius: 100px; padding: 4px; }
+.nav-actions { display: flex; align-items: center; flex: none; gap: 16px; }
+.locale-switch { position: relative; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(15,92,77,.18); border-radius: 100px; padding: 4px; }
+.locale-switch-options { display: inline-flex; align-items: center; gap: 4px; }
+/* Desktop: a plain decorative glyph inside the pill — all three locales are
+   already visible, so there is nothing to toggle. */
+.locale-switch-icon { flex: none; margin-inline-start: 8px; color: var(--muted-3); }
 .locale-switch button { border: 0; background: transparent; cursor: pointer; font-family: "Vazirmatn", sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); padding: 6px 14px; border-radius: 100px; }
 .locale-switch button.is-active { background: var(--green); color: #fff; }
 .lang-chip { cursor: pointer; font-family: "Vazirmatn", sans-serif; }
@@ -173,4 +178,133 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 @media (max-width: 640px) {
   .pkg-grid, .feature-grid { grid-template-columns: 1fr; }
   .section-head { grid-template-columns: 1fr; gap: 20px; }
+}
+
+/* ---------- Phones ---------- */
+/* The 1000px block only collapsed the columns; the 64px side padding and
+   margins stayed, which left roughly 230px of usable width on a 360px
+   screen. Everything below pulls the page in to a phone-sized gutter. */
+@media (max-width: 700px) {
+  /* No top padding: the photo is the first grid item on phones and runs
+     straight off the bottom of the nav, edge to edge. */
+  .hero { padding: 0 20px 56px; gap: 34px; }
+  .hero p.lede { font-size: 16px; line-height: 1.85; margin: 22px 0 30px; }
+  .hero-cta-row { gap: 16px; }
+
+  /* Full-bleed hero image. The negative inline margin cancels the .hero
+     gutter above, so this must stay in step with that 20px value. */
+  .hero-photo-wrap {
+    max-width: none;
+    width: calc(100% + 40px);
+    margin: 0 -20px;
+  }
+  .hero-photo {
+    aspect-ratio: 4 / 3;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  /* The badge hangs 12px outside the photo on desktop; at full bleed that
+     would sit off-screen, so it tucks back inside the image instead. */
+  .hero-verified {
+    right: 16px;
+    bottom: 16px;
+    max-width: calc(100% - 32px);
+    padding: 13px 17px;
+  }
+  .badge-strip { margin: 0 20px; }
+  .badge-strip > div { padding: 20px 22px; }
+  section.section { padding: 64px 20px 32px; }
+  .steps-section { padding: 64px 20px; gap: 42px; margin-top: 40px; }
+  .steps-section p { margin-bottom: 24px; }
+  .roles-section { padding: 70px 20px; }
+  .role-card { min-height: 0; padding: 28px 24px; }
+  .lang-section { margin: 0 20px 70px; padding: 40px 24px; gap: 36px; }
+  .faq-section { margin-bottom: 76px; padding: 0 20px; gap: 30px; }
+  .faq-section > div:first-child p { max-width: none; }
+  .faq-q { gap: 14px; padding: 20px 0; font-size: 18px; }
+  .cta-section { padding: 70px 20px; }
+  .feature-head { margin-bottom: 44px; }
+  .feature-grid { gap: 34px; }
+  footer.site-footer { padding: 40px 20px 24px; }
+
+  /* The pill-shaped email form cannot stay on one line at this width; it
+     becomes a stacked field + full-width button instead of a squashed pill. */
+  .cta-form { flex-direction: column; gap: 8px; border-radius: 22px; padding: 10px; }
+  .cta-form input { width: 100%; min-width: 0; padding: 12px 14px; font-size: 16px; text-align: center; }
+  .cta-form button { width: 100%; padding: 14px 20px; }
+
+  /* iOS Safari zooms the whole page when a focused control is under 16px. */
+  input,
+  select,
+  textarea { font-size: 16px; }
+}
+
+/* ---------- Compact nav controls ----------
+   Below the desktop nav the wordmark, a three-way locale switch and a labelled
+   sign-in button do not fit on one line: the brand cannot shrink (its strapline
+   is nowrap) so it overlapped the switch instead. Both controls become icons,
+   which buys back roughly 190px. */
+@media (max-width: 780px) {
+  /* Last-resort guard: if the brand still runs out of room it now truncates
+     rather than overlapping whatever sits next to it. */
+  .brand { min-width: 0; }
+  .brand > span { min-width: 0; }
+  .brand-tag { overflow: hidden; text-overflow: ellipsis; }
+
+  .nav-actions { gap: 9px; }
+  .locale-switch { border: 0; padding: 0; }
+  .locale-switch-toggle {
+    display: grid; place-items: center; flex: none;
+    width: 42px; height: 42px;
+    padding: 0;
+    border: 1px solid rgba(15,92,77,.18); border-radius: 50%;
+    color: var(--green); background: #fff;
+    cursor: pointer;
+  }
+  .locale-switch.is-open .locale-switch-toggle { border-color: var(--green); color: var(--green); background: #eef3ef; }
+
+  /* The three locales move into a popover under the globe. */
+  .locale-switch-options {
+    position: absolute;
+    top: calc(100% + 8px);
+    inset-inline-end: 0;
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 132px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--cream-card);
+    box-shadow: 0 18px 44px rgba(9,55,45,.18);
+  }
+  .locale-switch.is-open .locale-switch-options { display: flex; }
+  .locale-switch-options button { width: 100%; padding: 10px 12px; border-radius: 9px; text-align: start; }
+
+  /* Sign in keeps only the person icon. */
+  .nav-signin {
+    width: 42px; height: 42px;
+    padding: 0;
+    border-radius: 50%;
+    gap: 0;
+  }
+  .nav-signin > span { display: none; }
+}
+
+/* The nav carried a full-size wordmark, a three-way locale switch and the
+   sign-in button — together wider than a 360px screen. */
+@media (max-width: 560px) {
+  .top-nav { height: 70px; padding: 0 14px; gap: 8px; }
+  .brand { gap: 9px; min-width: 0; }
+  .brand img { width: 40px; height: 40px; border-radius: 11px; object-fit: contain; }
+  .brand-kurdish { font-size: 21px; }
+  .brand-tag { display: none; }
+  /* Controls are already icon-only from 780px down; just tighten them. */
+  .locale-switch-toggle,
+  .nav-signin { width: 38px; height: 38px; }
+  .pkg-modal-foot { gap: 10px; }
+  .pkg-modal-foot b { font-size: 22px; }
+  .footer-top .tagline { font-size: 15px; }
 }

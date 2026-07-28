@@ -32,6 +32,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A single over-wide card (a table, a long booking id, a hero) used to make
+   every page pannable sideways on a phone. `clip` contains that without
+   turning html/body into a scroll container, so the sticky topbar, wizard
+   steps and wizard footer keep working. */
+html,
+body { max-width: 100%; overflow-x: clip; }
+
+/* `img` already gets this further down; these are the other elements that can
+   carry an intrinsic size wider than a phone. */
+svg,
+video,
+canvas { max-width: 100%; }
+
 a { color: inherit; text-decoration: none; }
 a:hover { color: var(--green); }
 
@@ -105,7 +118,10 @@ img { max-width: 100%; display: block; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand img { width: 82px; height: 66px; border-radius: 14px; object-fit: cover; }
 .brand-kurdish { display: block; font-family: "Amiri", serif; font-size: 30px; line-height: 1; color: var(--green); }
-.brand-tag { display: block; font-size: 10px; letter-spacing: 3px; color: var(--gold); margin-top: 3px; }
+/* nowrap only: without it the strapline broke into three stacked lines as soon
+   as the nav got tight. It already fits on one line at desktop widths, so this
+   changes nothing there. */
+.brand-tag { display: block; font-size: 10px; letter-spacing: 3px; color: var(--gold); margin-top: 3px; white-space: nowrap; }
 .nav-links { display: flex; gap: 40px; font-size: 15px; font-weight: 500; color: #3d4a44; }
 .nav-lang { font-size: 13px; color: var(--muted-3); border: 1px solid var(--border); border-radius: 100px; padding: 8px 16px; }
 
@@ -183,10 +199,18 @@ img { max-width: 100%; display: block; }
 
 @media (max-width: 780px) {
   .nav-links, .nav-lang { display: none; }
-  .top-nav { padding: 0 20px; height: 84px; }
-  .brand img { width: 60px; height: 48px; }
+  .top-nav { padding: 0 20px; height: 84px; gap: 12px; }
+  /* Square box + `contain` below desktop: 60x48 with `cover` cropped the top
+     and bottom off the ring once the mark got small. */
+  .brand img { width: 48px; height: 48px; object-fit: contain; }
   .brand-kurdish { font-size: 24px; }
+  /* Tightened tracking is what buys the strapline enough room to stay on
+     one line next to the locale switch and the sign-in button. */
+  .brand-tag { font-size: 9px; letter-spacing: 1.6px; }
 }
+
+/* Page-level phone rules live in each page's own stylesheet, since those load
+   after this one and would otherwise win the cascade. */
 
 /* ---------- Tawaf loading spinner ---------- */
 /* Two aligned layers: the Kaaba stays still, only the outer ring rotates. */
