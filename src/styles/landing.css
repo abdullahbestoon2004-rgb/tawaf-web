@@ -137,13 +137,33 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 .footer-nav a { color: #a7b6af; }
 
 .nav-actions { display: flex; align-items: center; flex: none; gap: 16px; }
-.locale-switch { position: relative; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(15,92,77,.18); border-radius: 100px; padding: 4px; }
-.locale-switch-options { display: inline-flex; align-items: center; gap: 4px; }
-/* Desktop: a plain decorative glyph inside the pill — all three locales are
-   already visible, so there is nothing to toggle. */
-.locale-switch-icon { flex: none; margin-inline-start: 8px; color: var(--muted-3); }
+.locale-switch { position: relative; display: inline-flex; align-items: center; }
+.locale-switch-toggle {
+  display: grid; place-items: center; flex: none;
+  width: 46px; height: 46px; padding: 0;
+  border: 1px solid rgba(15,92,77,.18); border-radius: 50%;
+  color: var(--green); background: transparent; cursor: pointer;
+}
+.locale-switch.is-open .locale-switch-toggle { border-color: var(--green); background: #eef3ef; }
+.locale-switch-options {
+  position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 20;
+  display: none; flex-direction: column; align-items: stretch; gap: 2px;
+  min-width: 132px; padding: 6px; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--cream-card);
+  box-shadow: 0 18px 44px rgba(9,55,45,.18);
+}
+.locale-switch.is-open .locale-switch-options { display: flex; }
 .locale-switch button { border: 0; background: transparent; cursor: pointer; font-family: "Vazirmatn", sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); padding: 6px 14px; border-radius: 100px; }
+.locale-switch .locale-switch-toggle {
+  border: 1px solid rgba(15,92,77,.18);
+  padding: 0;
+  color: var(--green);
+  background: transparent;
+}
+.locale-switch-options button { width: 100%; padding: 10px 12px; border-radius: 9px; text-align: start; }
 .locale-switch button.is-active { background: var(--green); color: #fff; }
+.nav-signin { width: 46px; height: 46px; padding: 0; gap: 0; }
+.nav-signin > span { display: none; }
 .lang-chip { cursor: pointer; font-family: "Vazirmatn", sans-serif; }
 .lang-chip.active { background: var(--green); color: #fff; }
 
@@ -175,10 +195,7 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
   .brand-tag { font-size: 8px; letter-spacing: 1.4px; }
   .nav-links { gap: clamp(10px, 1.7vw, 20px); font-size: 12px; }
   .nav-actions { gap: 8px; }
-  .locale-switch { gap: 2px; padding: 3px; }
-  .locale-switch-icon { margin-inline-start: 4px; }
-  .locale-switch button { padding: 6px 8px; font-size: 11px; }
-  .nav-signin { padding: 11px 15px; font-size: 12px; }
+  .locale-switch-options button { font-size: 11px; }
 
   .hero {
     grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
@@ -213,8 +230,6 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
   .brand-kurdish { font-size: 22px; }
   .brand-tag { display: none; }
   .nav-links { gap: 10px; font-size: 11px; }
-  .locale-switch button { padding-inline: 6px; font-size: 10px; }
-  .nav-signin { padding-inline: 11px; font-size: 11px; }
   .hero { gap: 24px; padding-inline: 24px; }
   .hero-stats { gap: 18px; }
 }

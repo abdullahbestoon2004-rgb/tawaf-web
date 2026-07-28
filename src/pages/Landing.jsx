@@ -23,24 +23,8 @@ export default function Landing() {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [email, setEmail] = useState("");
   const [formMessage, setFormMessage] = useState("");
-  // On phone-sized screens the locale switch collapses to a globe and the three options
-  // move into a popover. Tracked in JS rather than CSS alone so the globe is a
-  // real button only when it toggles something — at desktop width it is
-  // decoration and must stay out of the tab order.
-  const [compactNav, setCompactNav] = useState(() => window.matchMedia("(max-width: 700px)").matches);
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef(null);
-
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 700px)");
-    const apply = () => {
-      setCompactNav(query.matches);
-      if (!query.matches) setLangOpen(false);
-    };
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("tawaf-locale");
@@ -327,21 +311,17 @@ export default function Landing() {
           <a href="#steps">{t.howItWorks}</a>
           <a href="#roles">{t.forAgencies}</a>
         </div>
-        <div className="nav-actions">
+          <div className="nav-actions">
           <div className={`locale-switch${langOpen ? " is-open" : ""}`} ref={langRef}>
-            {compactNav ? (
-              <button
-                type="button"
-                className="locale-switch-toggle"
-                onClick={() => setLangOpen((open) => !open)}
-                aria-expanded={langOpen}
-                aria-label={locale === "ku" ? "زمان" : locale === "ar" ? "اللغة" : "Language"}
-              >
-                <Globe size={16} aria-hidden="true" />
-              </button>
-            ) : (
-              <Globe className="locale-switch-icon" size={15} aria-hidden="true" />
-            )}
+            <button
+              type="button"
+              className="locale-switch-toggle"
+              onClick={() => setLangOpen((open) => !open)}
+              aria-expanded={langOpen}
+              aria-label={locale === "ku" ? "زمان" : locale === "ar" ? "اللغة" : "Language"}
+            >
+              <Globe size={18} aria-hidden="true" />
+            </button>
             <div className="locale-switch-options">
               {LOCALES.map((code) => (
                 <button
