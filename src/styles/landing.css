@@ -139,11 +139,15 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 .nav-actions { display: flex; align-items: center; flex: none; gap: 16px; }
 .locale-switch { position: relative; display: inline-flex; align-items: center; }
 .locale-switch-toggle {
-  display: grid; place-items: center; flex: none;
-  width: 46px; height: 46px; padding: 0;
-  border: 1px solid rgba(15,92,77,.18); border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: none;
+  height: 46px; padding: 0 15px;
+  border: 1px solid rgba(15,92,77,.18); border-radius: 100px;
   color: var(--green); background: transparent; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
 }
+.locale-switch-toggle:hover { border-color: rgba(15,92,77,.42); background: rgba(15,92,77,.05); }
+.locale-switch-toggle > svg { flex: none; }
+.locale-switch-code { font-family: "Vazirmatn", sans-serif; font-size: 12px; font-weight: 800; letter-spacing: .4px; }
 .locale-switch.is-open .locale-switch-toggle { border-color: var(--green); background: #eef3ef; }
 .locale-switch-options {
   position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 20;
@@ -156,14 +160,16 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 .locale-switch button { border: 0; background: transparent; cursor: pointer; font-family: "Vazirmatn", sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); padding: 6px 14px; border-radius: 100px; }
 .locale-switch .locale-switch-toggle {
   border: 1px solid rgba(15,92,77,.18);
-  padding: 0;
   color: var(--green);
   background: transparent;
 }
 .locale-switch-options button { width: 100%; padding: 10px 12px; border-radius: 9px; text-align: start; }
 .locale-switch button.is-active { background: var(--green); color: #fff; }
-.nav-signin { width: 46px; height: 46px; padding: 0; gap: 0; }
-.nav-signin > span { display: none; }
+/* Scoped to .nav-actions so it outranks the generic `.btn` padding in
+   tawaf.css. Without that the button kept .btn's 28px side padding, leaving a
+   zero-width content box that collapsed the icon to 0px — a blank green pill. */
+.nav-actions .nav-signin { height: 46px; padding: 0 22px; gap: 8px; }
+.nav-actions .nav-signin > svg { flex: none; }
 .lang-chip { cursor: pointer; font-family: "Vazirmatn", sans-serif; }
 .lang-chip.active { background: var(--green); color: #fff; }
 
@@ -324,10 +330,10 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
   .nav-actions { gap: 9px; }
   .locale-switch { border: 0; padding: 0; }
   .locale-switch-toggle {
-    display: grid; place-items: center; flex: none;
-    width: 42px; height: 42px;
-    padding: 0;
-    border: 1px solid rgba(15,92,77,.18); border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: none;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid rgba(15,92,77,.18); border-radius: 100px;
     color: var(--green); background: #fff;
     cursor: pointer;
   }
@@ -353,14 +359,16 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
   .locale-switch.is-open .locale-switch-options { display: flex; }
   .locale-switch-options button { width: 100%; padding: 10px 12px; border-radius: 9px; text-align: start; }
 
-  /* Sign in keeps only the person icon. */
-  .nav-signin {
+  /* Sign in keeps only the person icon once the nav runs short of room. The
+     .nav-actions scope is required here too, or .btn's padding wins and the
+     icon collapses inside the circle. */
+  .nav-actions .nav-signin {
     width: 42px; height: 42px;
     padding: 0;
     border-radius: 50%;
     gap: 0;
   }
-  .nav-signin > span { display: none; }
+  .nav-actions .nav-signin > span { display: none; }
 }
 
 /* The nav carried a full-size wordmark, a three-way locale switch and the
@@ -371,9 +379,9 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
   .brand img { width: 40px; height: 40px; border-radius: 11px; object-fit: contain; }
   .brand-kurdish { font-size: 21px; }
   .brand-tag { display: none; }
-  /* Controls are already icon-only from 780px down; just tighten them. */
-  .locale-switch-toggle,
-  .nav-signin { width: 38px; height: 38px; }
+  /* Controls are already icon-only from 700px down; just tighten them. */
+  .locale-switch-toggle { height: 38px; padding: 0 10px; }
+  .nav-actions .nav-signin { width: 38px; height: 38px; }
   .pkg-modal-foot { gap: 10px; }
   .pkg-modal-foot b { font-size: 22px; }
   .footer-top .tagline { font-size: 15px; }

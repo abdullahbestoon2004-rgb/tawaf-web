@@ -320,7 +320,10 @@ export default function Landing() {
               aria-expanded={langOpen}
               aria-label={locale === "ku" ? "زمان" : locale === "ar" ? "اللغة" : "Language"}
             >
-              <Globe size={18} aria-hidden="true" />
+              <Globe size={17} aria-hidden="true" />
+              {/* The code makes the active language readable at a glance — a bare
+                  globe says a switcher exists but not what it is set to. */}
+              <span className="locale-switch-code">{locale === "ku" ? "KU" : locale === "ar" ? "AR" : "EN"}</span>
             </button>
             <div className="locale-switch-options">
               {LOCALES.map((code) => (

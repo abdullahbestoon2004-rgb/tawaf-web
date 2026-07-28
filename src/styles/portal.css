@@ -1245,13 +1245,29 @@
 .portal-company-tile {
   display: flex;
   flex-direction: column;
-  padding: 16px 17px;
+  overflow: hidden;
+  padding: 0 17px 16px;
   border: 1px solid var(--portal-border);
   border-radius: 19px;
   background: #fff;
   box-shadow: 0 10px 35px rgba(18,59,48,.035);
   cursor: pointer;
   transition: transform .25s, box-shadow .25s;
+}
+
+/* Full-bleed cover: the tile's side padding is cancelled so the banner meets
+   the rounded border, matching how trip cards present their cover. */
+.portal-company-cover {
+  height: 104px;
+  margin: 0 -17px 14px;
+  display: grid;
+  place-items: center;
+  color: rgba(15,92,77,.34);
+  background:
+    radial-gradient(circle at 82% 12%, rgba(201,162,75,.16), transparent 46%),
+    linear-gradient(140deg, #e8efe9, #dbe7df);
+  background-size: cover;
+  background-position: center;
 }
 
 .portal-company-tile:hover { transform: translateY(-4px); box-shadow: 0 18px 46px rgba(18,59,48,.08); }

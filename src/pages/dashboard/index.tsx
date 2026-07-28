@@ -2096,6 +2096,15 @@ function AdminCompanies({ data, busy, runAction, askReason, locale }: { data: Po
                     onClick={() => setSelectedId(company.id)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(company.id); } }}
                   >
+                    {/* Cover is a background image so a broken storage URL degrades to
+                        the gradient rather than a broken-image icon. */}
+                    <div
+                      className={`portal-company-cover${company.banner_url ? " has-image" : ""}`}
+                      style={company.banner_url ? { backgroundImage: `url("${company.banner_url}")` } : undefined}
+                    >
+                      {!company.banner_url && <Building2 size={20} aria-hidden="true" />}
+                    </div>
+
                     <header className="portal-company-tile-head">
                       <span className={`portal-company-logo${company.logo_url ? " has-image" : ""}`}>
                         <Building2 size={18} />
