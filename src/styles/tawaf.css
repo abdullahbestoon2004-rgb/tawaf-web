@@ -197,7 +197,7 @@ img { max-width: 100%; display: block; }
   .sidebar-scrim.is-open { display: block; }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 700px) {
   .nav-links, .nav-lang { display: none; }
   .top-nav { padding: 0 20px; height: 84px; gap: 12px; }
   /* Square box + `contain` below desktop: 60x48 with `cover` cropped the top

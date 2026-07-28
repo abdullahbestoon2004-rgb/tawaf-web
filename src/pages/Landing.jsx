@@ -23,16 +23,16 @@ export default function Landing() {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [email, setEmail] = useState("");
   const [formMessage, setFormMessage] = useState("");
-  // Below 780px the locale switch collapses to a globe and the three options
+  // On phone-sized screens the locale switch collapses to a globe and the three options
   // move into a popover. Tracked in JS rather than CSS alone so the globe is a
   // real button only when it toggles something — at desktop width it is
   // decoration and must stay out of the tab order.
-  const [compactNav, setCompactNav] = useState(() => window.matchMedia("(max-width: 780px)").matches);
+  const [compactNav, setCompactNav] = useState(() => window.matchMedia("(max-width: 700px)").matches);
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef(null);
 
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 780px)");
+    const query = window.matchMedia("(max-width: 700px)");
     const apply = () => {
       setCompactNav(query.matches);
       if (!query.matches) setLangOpen(false);
