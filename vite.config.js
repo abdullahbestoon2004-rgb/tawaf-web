@@ -3,6 +3,7 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { writeSeoStaticPages } from "./scripts/generate-seo-pages.mjs";
 
 function sitesStaticWorker() {
   let root = process.cwd();
@@ -38,6 +39,7 @@ function sitesStaticWorker() {
 export default worker;
 `,
       );
+      await writeSeoStaticPages(resolve(root, "dist"));
     },
   };
 }

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /sign-in
+
+Sitemap: https://www.tawafiraq.com/sitemap.xml
