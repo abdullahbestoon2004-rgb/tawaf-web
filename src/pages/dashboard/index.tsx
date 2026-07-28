@@ -45,6 +45,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Smartphone,
   Star,
   TicketCheck,
   Upload,
@@ -58,6 +59,8 @@ import { getSupabase } from "@/lib/supabase";
 import { useScrollLock } from "@/lib/use-scroll-lock";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
+import AppManagementWorkspace from "./app-management.tsx";
+import type { HomeAd, HomeSectionRow } from "./app-management.tsx";
 import { dashboardTranslations } from "./translations.ts";
 
 type Role = "admin" | "agency";
@@ -74,6 +77,7 @@ type PageId =
   | "finance"
   | "support"
   | "messages"
+  | "app"
   | "more";
 
 type Profile = {
@@ -121,6 +125,9 @@ type Company = {
   is_promoted: boolean;
   commission_rate: number | null;
   logo_url: string | null;
+  // Tie-breaker in the app's "top agencies" ranking, mirrored on the App
+  // management page so the preview matches what clients get.
+  pilgrims_served: number | null;
   created_at: string;
 };
 
@@ -311,6 +318,9 @@ type PortalData = {
   inquiries: Inquiry[];
   ledger: LedgerRow[];
   payouts: Payout[];
+  // Admin-only: what the app's home screen shows and in which order.
+  homeAds: HomeAd[];
+  homeSections: HomeSectionRow[];
 };
 
 const emptyData: PortalData = {
@@ -327,6 +337,8 @@ const emptyData: PortalData = {
   inquiries: [],
   ledger: [],
   payouts: [],
+  homeAds: [],
+  homeSections: [],
 };
 
 const adminNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> = [
@@ -336,6 +348,7 @@ const adminNavigation: Array<{ id: PageId; label: string; icon: LucideIcon }> = 
   { id: "bookings", label: "Bookings", icon: BookOpenCheck },
   { id: "finance", label: "Finance", icon: CircleDollarSign },
   { id: "support", label: "Support", icon: Headphones },
+  { id: "app", label: "App management", icon: Smartphone },
   { id: "more", label: "Settings", icon: Settings },
 ];
 
@@ -724,6 +737,7 @@ export default function DashboardPage() {
         case "finance": return "دارایی / پارە";
         case "support": return "پشتگیری";
         case "messages": return "نامەکان";
+        case "app": return "بەڕێوەبردنی ئەپ";
         case "more": return role === "admin" ? "زیاتر" : "پڕۆفایلی کۆمپانیا";
         default: return id;
       }
@@ -737,6 +751,7 @@ export default function DashboardPage() {
         case "finance": return "المالية";
         case "support": return "الدعم";
         case "messages": return "الرسائل";
+        case "app": return "إدارة التطبيق";
         case "more": return role === "admin" ? "المزيد" : "ملف الشركة";
         default: return id;
       }
@@ -749,6 +764,7 @@ export default function DashboardPage() {
       case "finance": return role === "admin" ? "Finance" : "Money";
       case "support": return "Support";
       case "messages": return "Messages";
+      case "app": return "App management";
       case "more": return role === "admin" ? "More" : "Company profile";
       default: return id;
     }
@@ -803,6 +819,8 @@ export default function DashboardPage() {
             commissionsResult,
             paymentsResult,
             supportResult,
+            homeAdsResult,
+            homeSectionsResult,
           ] = await Promise.all([
             supabase.from("companies").select("*").order("created_at", { ascending: false }),
             supabase.from("packages").select("*").order("created_at", { ascending: false }),
@@ -813,6 +831,8 @@ export default function DashboardPage() {
             supabase.from("commissions").select("*").order("created_at", { ascending: false }),
             supabase.from("payments").select("*").order("created_at", { ascending: false }),
             supabase.from("support_messages").select("*").order("created_at", { ascending: false }),
+            supabase.from("home_ads").select("*").order("sort_order", { ascending: true }),
+            supabase.from("home_sections").select("*").order("sort_order", { ascending: true }),
           ]);
 
           const firstError = [
@@ -850,6 +870,11 @@ export default function DashboardPage() {
             commissions: (commissionsResult.data ?? []) as Commission[],
             payments: (paymentsResult.data ?? []) as Payment[],
             support: (supportResult.data ?? []) as SupportMessage[],
+            // Home-screen curation is deliberately outside the error check
+            // above: it decorates one page, so an unreachable table must not
+            // cost the operator the whole workspace.
+            homeAds: (homeAdsResult.data ?? []) as HomeAd[],
+            homeSections: (homeSectionsResult.data ?? []) as HomeSectionRow[],
           });
         } else {
           // An owner can now hold a head office plus its branches, so this must
@@ -1016,6 +1041,7 @@ export default function DashboardPage() {
         { table: "companies" }, { table: "packages" }, { table: "trip_change_requests" },
         { table: "bookings" }, { table: "booking_travellers" }, { table: "traveller_documents" },
         { table: "payments" }, { table: "commissions" }, { table: "support_messages" },
+        { table: "home_ads" }, { table: "home_sections" },
       ];
     }
     if (!company) return [];
@@ -1540,6 +1566,7 @@ function AdminPages({
   if (page === "bookings") return <BookingsPage role="admin" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "finance") return <FinancePage role="admin" data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "support") return <SupportPage data={data} busy={busy} runAction={runAction} locale={locale} />;
+  if (page === "app") return <AppManagementWorkspace homeAds={data.homeAds} homeSections={data.homeSections} companies={data.companies} trips={data.trips} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "more") return <AdminMore locale={locale} changeLocale={changeLocale} busy={busy} runAction={runAction} />;
   return <AdminOverview data={data} goTo={goTo} locale={locale} />;
 }
