@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { getSupabase } from "@/lib/supabase";
+import { useScrollLock } from "@/lib/use-scroll-lock";
 import { translations } from "../translations.ts";
 import "../styles/landing.css";
 
@@ -55,13 +56,11 @@ export default function Landing() {
     localStorage.setItem("tawaf-locale", newLocale);
   };
 
-  // Freeze background scroll while the package modal is open.
-  useEffect(() => {
-    if (!selectedPackage) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previous; };
-  }, [selectedPackage]);
+  // Freeze background scroll while the package modal is open. Through the shared
+  // hook rather than body.style: html carries `overflow-x: clip`, which makes it
+  // the viewport's scroll container, and locking body alone did nothing here
+  // either. See lib/use-scroll-lock.ts.
+  useScrollLock(Boolean(selectedPackage));
 
   const t = translations[locale];
 

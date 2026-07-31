@@ -34,6 +34,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Star,
   Trash2,
   Upload,
@@ -126,6 +127,14 @@ type Booking = {
   contact_phone: string | null;
   note?: string | null;
   room_label?: string | null;
+  cash_payment_location_type: string | null;
+  cash_payment_location_name: string | null;
+  cash_payment_location_address: string | null;
+  cash_payment_location_hours: string | null;
+  payment_receipt_number: string | null;
+  payment_confirmation_code: string | null;
+  payment_confirmed_at: string | null;
+  accepted_at: string | null;
   created_at: string;
 };
 
@@ -234,6 +243,10 @@ type WizardState = {
   departure_date: string;
   return_date: string;
   capacity: string;
+  // Read-only mirror of packages.seats_reserved, carried so the preview can
+  // show seats REMAINING the way the app does. Never sent back — capacity
+  // changes on a live trip go through the capacity-adjustment flow.
+  seats_reserved: number;
   transport: "plane" | "bus";
   departure_airport: "EBL" | "BGW" | "ISU";
   airline_name: string;
@@ -274,26 +287,26 @@ const tripTranslations = {
   ku: {
     tripCatalogue: "کەتەلۆگی گەشتەکان",
     trips: "گەشتەکان",
-    createSubmitOperate: "گشت گەشتەکانی عومرە دروست بکە، پێشکەش بکە و بەڕێوەبەرە لە یەک شوێنەوە.",
+    createSubmitOperate: "گشت گەشتەکانی عومرە دروست بکە، پێشکەش بکە و بەڕێوە ببە لە یەک شوێنەوە.",
     createNewTrip: "گەشتی نوێ دروست بکە",
     totalTrips: "کۆی گەشتەکان",
     published: "بڵاوکراوەتەوە",
     underReview: "لەژێر پێداچوونەوەدایە",
     reservedSeats: "شوێنە گیراوەکان",
-    searchTripCarrier: "گەڕان بەپێی گەشت، فرۆکەخانە یان هێڵی ئاسمانی...",
+    searchTripCarrier: "گەڕان بەپێی گەشت، فڕۆکەخانە یان هێڵی ئاسمانی...",
     allStatus: "هەموو دۆخەکان",
     allTiers: "هەموو ئاستەکان",
-    selectDepartureDate: "ڕێکەوتی بەڕێ کەوتن دیاری بکە",
+    selectDepartureDate: "ڕێکەوتی بەڕێکەوتن دیاری بکە",
     duplicate: "کۆپیکردن",
     editTrip: "دەستکاری گەشت",
     allTrips: "هەموو گەشتەکان",
     overview: "پوختە",
-    bookings: "حیجزەکان",
+    bookings: "حجزەکان",
     travellers: "گەشتیاران",
     documents: "بەڵگەنامەکان",
     financials: "دارایی",
     loadingTrips: "بارکردنی چالاکییەکانی گەشت...",
-    adminFeedback: "تێبینی بەڕێوەبەر",
+    adminFeedback: "تێبینییەکانی بەڕێوەبەر",
     resolveFeedback: "چارەسەرکردنی تێبینی",
     noTripsFound: "هیچ گەشتێک نەدۆزرایەوە.",
     noTripsDesc: "گەشتێک دروست بکە بۆ ئەوەی لە کەتەلۆگەکەتدا بڵاوبێتەوە.",
@@ -308,7 +321,7 @@ const tripTranslations = {
     standard: "ئاسایی (ستاندارد)",
     vip: "تایبەت (VIP)",
     tripName: "ناو/ناونیشانی گەشت",
-    departureAirport: "فڕۆکەخانەی بەڕێ کەوتن",
+    departureAirport: "فڕۆکەخانەی بەڕێکەوتن",
     duration: "ماوە",
     startingPrice: "نرخی سەرەکی",
     capacity: "توانا/شوێن",
@@ -440,19 +453,19 @@ const wizardT = {
       ["هۆتێلەکان", "مانەوە لە مەککە و مەدینە"],
       ["نرخ و خزمەتگوزاری", "نرخی پاکێج و خزمەتگوزارییە لەخۆگیراوەکان"],
       ["بەرنامە", "بەرنامەی ڕۆژانە و سیاسەتەکان"],
-      ["پێداچوونەوە", "پێشبینینی زیارەتکار و ناردن"],
+      ["پێداچوونەوە", "پێشبینینی عومرەکار و ناردن"],
     ],
     backToTrips: "گەڕانەوە بۆ گەشتەکان", proposingChanges: "پێشنیاری گۆڕانکاری گەشت", editingDraft: "دەستکاری ڕەشنووس", newTripDraft: "ڕەشنووسی گەشتی نوێ", untitled: "گەشتی عومرەی بێ ناونیشان",
     originalUnchanged: "ئەسڵەکە بەبێ گۆڕانکاری دەمێنێتەوە", savedLabel: "پاشەکەوت کرا", secureDraft: "ڕەشنووسی پارێزراو",
     requestChangesTag: "داواکاری گۆڕانکاری", createTripTag: "دروستکردنی گەشت", stepWord: "هەنگاوی", ofWord: "لە",
-    adminProtected: "پارێزراوە لەلایەن بەڕێوەبەرەوە", adminNoteApproval: "گەشتە بڵاوکراوەکەت ناگۆڕدرێت هەتا تەواف ئەم داواکارییە پەسەند نەکات.", adminNoteNormal: "تەواف پێداچوونەوە بە هەموو گەشتێکدا دەکات پێش ئەوەی زیارەتکاران بتوانن حیجزی بکەن.",
-    tripIdentity: "ناسنامەی گەشت", tripIdentityDesc: "ناونیشانێکی ڕوون بەکاربهێنە کە زیارەتکاران خێرا تێی بگەن.",
+    adminProtected: "پارێزراوە لەلایەن بەڕێوەبەرەوە", adminNoteApproval: "گەشتە بڵاوکراوەکەت ناگۆڕدرێت هەتا تەواف ئەم داواکارییە پەسەند نەکات.", adminNoteNormal: "تەواف پێداچوونەوە بە هەموو گەشتێکدا دەکات پێش ئەوەی عومرەکاران بتوانن حجز بکەن.",
+    tripIdentity: "ناسنامەی گەشت", tripIdentityDesc: "ناونیشانێکی ڕوون بەکاربهێنە کە عومرەکاران خێرا تێی بگەن.",
     tripTitle: "ناونیشانی گەشت *", tripTitlePh: "عومرەی ڕەمەزان لە هەولێرەوە", englishTitle: "ناونیشانی ئینگلیزی", arabicTitle: "ناونیشانی عەرەبی",
     packageTier: "ئاستی پاکێج", tierEconomy: "ئابووری", tierStandard: "ئاسایی", tierVip: "تایبەت (VIP)",
     tripType: "جۆری گەشت", typeGroup: "بە کۆمەڵ", typeFamily: "خێزانی", typeIndividual: "تاکەکەسی",
     season: "وەرز", seasonRegular: "ئاسایی", seasonRamadan: "ڕەمەزان", seasonShawwal: "شەوال", seasonOther: "هیتر",
     totalSeats: "کۆی شوێنەکان *",
-    schedule: "خشتەی کات", scheduleDesc: "بەرواری گەشتە بڵاوکراوەکان دوای حیجزکردن دەپارێزرێن.",
+    schedule: "خشتەی کات", scheduleDesc: "بەرواری گەشتە بڵاوکراوەکان دوای حجزکردن دەپارێزرێن.",
     departureDate: "بەرواری بەڕێکەوتن *", returnDate: "بەرواری گەڕانەوە *",
     primaryDescription: "پێناسەی سەرەکی *", primaryDescriptionPh: "ئەزموونی گەشتەکە، بۆ کێیە و باشییە سەرەکییەکانی ڕوون بکەرەوە…",
     englishDescription: "پێناسەی ئینگلیزی", arabicDescription: "پێناسەی عەرەبی",
@@ -469,11 +482,11 @@ const wizardT = {
     makkahHotel: "هۆتێلی مەککە", madinahHotel: "هۆتێلی مەدینە", makkahSub: "مانەوەی سەرەکی عومرە", madinahSub: "سەردانی مەدینە",
     hotelName: "ناوی هۆتێل *", starRating: "پلەی ئەستێرە", starsWord: "ئەستێرە", nights: "شەو", distanceHaram: "دووری لە حەرەمەوە (مەتر)", distanceNabawi: "دووری لە مزگەوتی نەبەویەوە (مەتر)",
     hotelDescription: "پێناسەی هۆتێل *", hotelDescriptionPh: "شوێن، ژوورەکان، ژەمەکان و زانیاری گواستنەوە…",
-    priceTitle: "نرخی پاکێج", priceDesc: "یەک نرخی تەواو بۆ هەر زیارەتکارێک دابنێ. مانەوەی هۆتێل پێشتر لە پاکێجەکەدا لەخۆگیراوە.",
-    pricePerPilgrim: "نرخ بۆ هەر زیارەتکارێک (IQD) *", depositAmount: "بڕی پێشەکی (IQD)", mealsPerDay: "ژەم لە ڕۆژێکدا", depositTerms: "مەرجەکانی پێشەکی", depositTermsPh: "کەی بڕە ماوەکە دەدرێت…",
-    servicesTitle: "خزمەتگوزارییە لەخۆگیراوەکان", servicesDesc: "بە ڕوونی پیشانی زیارەتکاران بدە نرخەکەیان چی دەگرێتەوە.",
-    customerPrice: "نرخی کڕیار", customerPriceSub: "نرخی تەواوی پاکێج", tawafCommission: "کۆمسیۆنی تەواف", tawafCommissionSub: "خەمڵێنراو بە ٥٪", companyNet: "خەمڵێنراوی داهاتی کۆمپانیا", companyNetSub: "پێش کرێی دەروازەی پارەدان",
-    itineraryTitle: "بەرنامەی ڕۆژانە", itineraryDesc: "هەر ڕۆژێک کورت، بەسوود و ئاسان بێت بۆ خوێندنەوەی زیارەتکاران.",
+    priceTitle: "نرخی پاکێج", priceDesc: "یەک نرخی تەواو بۆ هەر عومرەکارێک دابنێ. مانەوەی هۆتێل پێشتر لە پاکێجەکەدا لەخۆگیراوە.",
+    pricePerPilgrim: "نرخ بۆ هەر عومرەکارێک (IQD) *", depositAmount: "بڕی پێشەکی (IQD)", mealsPerDay: "ژەم لە ڕۆژێکدا", depositTerms: "مەرجەکانی پێشەکی", depositTermsPh: "کەی بڕە ماوەکە دەدرێت…",
+    servicesTitle: "خزمەتگوزارییە لەخۆگیراوەکان", servicesDesc: "بە ڕوونی پیشانی عومرەکارانی بدە نرخەکەیان چی دەگرێتەوە.",
+    customerPrice: "نرخی کڕیار", customerPriceSub: "نرخی تەواوی پاکێج", tawafCommission: "کاشی تەواف", tawafCommissionSub: "خەمڵێنراو بە ٥٪", companyNet: "خەمڵێنراوی داهاتی کۆمپانیا", companyNetSub: "پێش کرێی دەروازەی پارەدان",
+    itineraryTitle: "بەرنامەی ڕۆژانە", itineraryDesc: "هەر ڕۆژێک کورت، بەسوود و ئاسان بێت بۆ خوێندنەوەی عومرەکاران.",
     dayWord: "ڕۆژی", dayTitlePh: "گەیشتن و چوونەژوورەوەی هۆتێل", daySummaryPh: "چالاکییە سەرەکییەکان باس بکە…", addDay: "زیادکردنی ڕۆژ", 
     policiesTitle: "سیاسەتەکان", policiesDesc: "سیاسەتی هەڵوەشاندنەوە پێویستە پێش پێداچوونەوە.",
     cancellationPolicy: "سیاسەتی هەڵوەشاندنەوە و گەڕاندنەوەی پارە *", cancellationPolicyPh: "کاتە دیاریکراوەکان، کرێکان، گەڕاندنەوەی پارە و مەرجەکانی ڕەتکردنەوەی ڤیزا ڕوون بکەرەوە…",
@@ -488,10 +501,10 @@ const wizardT = {
     cTitleDesc: "ناونیشان و پێناسە", cDates: "بەرواری بەڕێکەوتن و گەڕانەوەی داهاتوو", cCapPrice: "توانا و نرخی پاکێج", cHotels: "هۆتێلەکانی مەککە و مەدینە", cItinerary: "بەرنامەی ڕۆژانە", cServices: "خزمەتگوزارییە لەخۆگیراوەکان", cPolicy: "سیاسەتی هەڵوەشاندنەوە",
     errTitle: "پێش پاشەکەوتکردن ناونیشانی گەشت زیاد بکە.", errTitleImage: "پێش بارکردنی وێنە ناونیشانی گەشت زیاد بکە.", errImageType: "وێنەیەکی JPG، PNG یان WebP هەڵبژێرە کە لە ٦ MB کەمتر بێت.",
     toastDraftSaved: "ڕەشنووسی گەشت پاشەکەوت کرا.", toastProgressSaved: "پێشکەوتنی ڕەشنووس پاشەکەوت کرا.", toastSubmitted: "گەشتەکە نێردرا بۆ پێداچوونەوەی تەواف.", toastChangesSent: "گۆڕانکارییەکانی گەشت نێردران بۆ پەسەندکردنی بەڕێوەبەر.",
-    livePreviewTag: "پێشبینینی ڕاستەقینە", livePreviewHint: "ئەمە بەو شێوەیەیە کە زیارەتکاران گەشتەکەت پێی دەبینن. کرتە لەسەر هەر بەهایەک بکە بۆ دەستکاریکردنی.",
+    livePreviewTag: "پێشبینینی ڕاستەقینە", livePreviewHint: "ئەمە بەو شێوەیەیە کە عومرەکاران گەشتەکەت پێی دەبینن. کرتە لەسەر هەر بەهایەک بکە بۆ دەستکاریکردنی.",
     overviewTitle: "پوختە", accommodationTitle: "شوێنی مانەوە", transportationTitle: "گواستنەوە", includedTitle: "ئەوەی لەخۆگیراوە", trustTitle: "متمانە، سیاسەت و پارەدان",
-    packagePerPerson: "پاکێج (بۆ هەر کەسێک)", totalFrom: "کۆی گشتی دەستپێدەکات لە", bookThisTrip: "حیجزکردنی ئەم گەشتە",
-    hotelWord: "هۆتێل", seatsRemaining: "شوێن ماوە", onlyLeftWord: "تەنها ماوە", soldOutWord: "تەواو بوو", clickToEdit: "کرتە بکە بۆ دەستکاریکردن", groundTransfersIncluded: "هەموو گواستنەوەکانی زەوی لەخۆگیراون",
+    packagePerPerson: "پاکێج (بۆ هەر کەسێک)", totalFrom: "کۆی گشتی دەستپێدەکات لە", bookThisTrip: "حجزکردنی ئەم گەشتە",
+    hotelWord: "هۆتێل", seatsRemaining: "شوێن ماوە", onlyLeftWord: "تەنها ماوە", onlySeatsLeft: "تەنها {count} شوێن ماوە", seatsBookedNote: "{count} شوێن حجزکراون — ناتوانرێت لەمە کەمتر بێت.", internalTitle: "زانیاری ناوخۆیی", internalHint: "بۆ عومرەکاران نیشان نادرێت. گەڕان لە ئەپەکەدا بەکاریان دەهێنێت.", capacityLabel: "ژمارەی شوێنەکان", soldOutWord: "تەواو بوو", clickToEdit: "کرتە بکە بۆ دەستکاریکردن", groundTransfersIncluded: "هەموو گواستنەوەکانی زەوی لەخۆگیراون",
     topRatedBadge: "باشترین هەڵسەنگاندن", premiumBadge: "هاوبەشی تایبەت", fastResponderBadge: "خێرا وەڵامدەرەوە", verifiedBadge: "پشتڕاستکراوە",
   },
   ar: {
@@ -552,7 +565,7 @@ const wizardT = {
     livePreviewTag: "معاينة حية", livePreviewHint: "هذا بالضبط كيف سيرى المعتمرون رحلتك. انقر على أي قيمة لتعديلها.",
     overviewTitle: "نظرة عامة", accommodationTitle: "الإقامة", transportationTitle: "النقل", includedTitle: "ما يشمله السعر", trustTitle: "الثقة والسياسة والدفع",
     packagePerPerson: "الباقة (للفرد)", totalFrom: "الإجمالي يبدأ من", bookThisTrip: "احجز هذه الرحلة",
-    hotelWord: "فندق", seatsRemaining: "مقعد متبقٍ", onlyLeftWord: "تبقى فقط", soldOutWord: "مكتملة", clickToEdit: "انقر للتعديل", groundTransfersIncluded: "جميع التنقلات البرية مشمولة",
+    hotelWord: "فندق", seatsRemaining: "مقعد متبقٍ", onlyLeftWord: "تبقى فقط", onlySeatsLeft: "تبقى {count} مقاعد فقط", seatsBookedNote: "{count} مقعد محجوز — لا يمكن النزول تحت هذا الرقم.", internalTitle: "بيانات داخلية", internalHint: "لا تظهر للمعتمرين. يستخدمها البحث في التطبيق.", capacityLabel: "عدد المقاعد", soldOutWord: "مكتملة", clickToEdit: "انقر للتعديل", groundTransfersIncluded: "جميع التنقلات البرية مشمولة",
     topRatedBadge: "الأعلى تقييماً", premiumBadge: "شريك مميز", fastResponderBadge: "سريع الاستجابة", verifiedBadge: "موثّق",
   },
   en: {
@@ -613,7 +626,7 @@ const wizardT = {
     livePreviewTag: "LIVE PREVIEW", livePreviewHint: "This is exactly how pilgrims will see your trip. Click any value to edit it.",
     overviewTitle: "Overview", accommodationTitle: "Accommodation", transportationTitle: "Transportation", includedTitle: "What's included", trustTitle: "Trust, policy & payment",
     packagePerPerson: "Package (per person)", totalFrom: "Total from", bookThisTrip: "Book this trip",
-    hotelWord: "hotel", seatsRemaining: "seats remaining", onlyLeftWord: "Only left", soldOutWord: "Sold out", clickToEdit: "Click to edit", groundTransfersIncluded: "All ground transfers included",
+    hotelWord: "hotel", seatsRemaining: "seats remaining", onlyLeftWord: "Only left", onlySeatsLeft: "Only {count} seats left", seatsBookedNote: "{count} already booked — the total cannot go below this.", internalTitle: "Internal details", internalHint: "Not shown to pilgrims. Search in the app matches on these.", capacityLabel: "Seats on this trip", soldOutWord: "Sold out", clickToEdit: "Click to edit", groundTransfersIncluded: "All ground transfers included",
     topRatedBadge: "Top rated", premiumBadge: "Premium partner", fastResponderBadge: "Fast responder", verifiedBadge: "Verified",
   },
 } as const;
@@ -643,13 +656,25 @@ function formatIqd(value: number | string | null | undefined) {
 
 function isCashPending(booking: Booking) {
   return booking.pay_method === "cash"
+    && booking.operational_stage === "awaiting_payment"
     && Number(booking.amount_paid_iqd) < Number(booking.total_iqd)
-    && !["cancelled", "rejected", "expired"].includes(booking.operational_stage);
+    && booking.pay_status !== "paid";
 }
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "Not scheduled";
   return new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatDateTime(value: string | null | undefined, locale: "ku" | "ar" | "en") {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 /**
@@ -681,6 +706,95 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function CashReceiptDialog({
+  booking,
+  locale,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  booking: Booking;
+  locale: "ku" | "ar" | "en";
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (receiptNumber: string) => Promise<void>;
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const location = [
+    booking.cash_payment_location_name,
+    booking.cash_payment_location_address,
+    booking.cash_payment_location_hours,
+  ].filter(Boolean).join(" · ");
+  useScrollLock();
+
+  return (
+    <div
+      className="portal-reason-scrim"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
+      <form
+        className="portal-reason-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trip-cash-receipt-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape" && !busy) {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (receiptNumber.trim() && !busy) void onSubmit(receiptNumber.trim());
+        }}
+      >
+        <h2 id="trip-cash-receipt-dialog-title">{tr("تۆمارکردنی پسوڵەی نەختینە", "تسجيل إيصال الدفع النقدي", "Record cash receipt")}</h2>
+        {location && (
+          <p className="portal-receipt-location">
+            <MapPin size={16} />
+            <span>
+              <b>{booking.cash_payment_location_type === "company_office"
+                ? tr("نووسینگەی کۆمپانیا", "مكتب شركة السفر", "Travel company office")
+                : tr("شوێنی پارەدانی ڕێگەپێدراوی تەواف", "موقع دفع معتمد من طواف", "Tawaf-authorized payment location")}</b>
+              <small>{location}</small>
+            </span>
+          </p>
+        )}
+        <label className="portal-receipt-field">
+          <span>{tr("ژمارەی پسوڵە", "رقم الإيصال", "Receipt number")}</span>
+          <input
+            autoFocus
+            value={receiptNumber}
+            onChange={(event) => setReceiptNumber(event.target.value)}
+            placeholder={tr("ژمارەی پسوڵەکە بنووسە", "أدخل رقم الإيصال", "Enter the receipt number")}
+            disabled={busy}
+          />
+        </label>
+        <p className="portal-receipt-hint">{tr(
+          "تەنها دوای وەرگرتنی پارە و دڵنیابوون لە پسوڵە پشتڕاستی بکەرەوە.",
+          "أكد فقط بعد استلام المبلغ والتحقق من الإيصال.",
+          "Confirm only after the cash has been received and the receipt verified.",
+        )}</p>
+        <div className="portal-reason-actions">
+          <button type="button" className="portal-secondary-button" onClick={onCancel} disabled={busy}>
+            {tr("پاشگەزبوونەوە", "إلغاء", "Cancel")}
+          </button>
+          <button type="submit" className="portal-primary-button" disabled={busy || !receiptNumber.trim()}>
+            {busy ? <TawafLoadingSpinner size={14} /> : <BadgeCheck size={14} />}
+            {tr("پشتڕاستکردنەوەی پارەدان", "تأكيد الدفع", "Confirm payment")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function statusTone(status: string) {
   if (["published", "confirmed", "completed", "approved"].includes(status)) return "positive";
   if (["rejected", "cancelled", "expired"].includes(status)) return "negative";
@@ -707,6 +821,7 @@ function defaultWizard(): WizardState {
     departure_date: "",
     return_date: "",
     capacity: "40",
+    seats_reserved: 0,
     transport: "plane",
     departure_airport: "EBL",
     airline_name: "",
@@ -821,6 +936,7 @@ function wizardFromTrip(trip: Trip, details: TripDetails): WizardState {
     departure_date: trip.departure_date ?? "",
     return_date: trip.return_date ?? "",
     capacity: String(trip.capacity ?? 40),
+    seats_reserved: Number(trip.seats_reserved ?? 0),
     transport: trip.transport === "bus" ? "bus" : "plane",
     departure_airport: (trip.departure_airport as WizardState["departure_airport"]) ?? "EBL",
     airline_name: trip.airline_name ?? "",
@@ -1489,6 +1605,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
           onSetViewed={setBookingViewed}
           busy={busy}
           runAction={runAction}
+          askReason={askReason}
           locale={locale}
           defaultFilter="new"
         />
@@ -1761,6 +1878,7 @@ function BookingInbox({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "new" | "cash" | "cancelled">(defaultFilter);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [cashReceiptBooking, setCashReceiptBooking] = useState<Booking | null>(null);
   const gestureRef = useRef<{ booking: Booking; x: number; timer: number | null; longPressed: boolean } | null>(null);
   const suppressOpenRef = useRef(false);
 
@@ -1812,13 +1930,18 @@ function BookingInbox({
     if (!viewedBookingIds.has(booking.id)) await onSetViewed(booking.id, true);
   }
 
-  async function confirmCash(booking: Booking) {
+  async function confirmCashReceipt(booking: Booking, receiptNumber: string) {
     if (!isCashPending(booking)) return;
-    await runAction(
+    const result = await runAction(
       `booking-${booking.id}`,
-      () => getSupabase().rpc("confirm_cash_received", { p_booking_id: booking.id, p_amount_iqd: null }),
-      locale === "ku" ? "پارەی نەختینە پشتڕاستکرایەوە." : locale === "ar" ? "تم تأكيد استلام النقد." : "Cash received and booking confirmed.",
+      () => getSupabase().rpc("confirm_cash_receipt", {
+        p_booking_id: booking.id,
+        p_receipt_number: receiptNumber,
+        p_amount_iqd: null,
+      }),
+      locale === "ku" ? "پسوڵە تۆمارکرا و حیجزەکە پشتڕاستکرایەوە." : locale === "ar" ? "تم تسجيل الإيصال وتأكيد الحجز." : "Receipt recorded and booking confirmed.",
     );
+    if (result) setCashReceiptBooking(null);
   }
 
   function callBooking(booking: Booking) {
@@ -1826,10 +1949,8 @@ function BookingInbox({
   }
 
   function startGesture(event: ReactPointerEvent, booking: Booking) {
-    // Swipe-to-confirm-cash and long-press-to-mark-unread are touch gestures.
-    // Mouse users already have explicit call/mail buttons and right-click for
-    // mark-unread — letting a mouse drag trigger "confirm cash" risked firing
-    // a payment action from an ordinary imprecise click.
+    // Long-press-to-mark-unread is touch-only. Cash confirmation deliberately
+    // has no gesture: recording money must always pass through receipt proof.
     if (event.pointerType !== "touch") return;
     const state = { booking, x: event.clientX, timer: null as number | null, longPressed: false };
     state.timer = window.setTimeout(() => {
@@ -1847,10 +1968,7 @@ function BookingInbox({
     if (state.timer !== null) window.clearTimeout(state.timer);
     if (state.longPressed) return;
     const distance = event.clientX - state.x;
-    if (distance > 72 && isCashPending(state.booking)) {
-      suppressOpenRef.current = true;
-      void confirmCash(state.booking);
-    } else if (distance < -72 && state.booking.contact_phone) {
+    if (distance < -72 && state.booking.contact_phone) {
       suppressOpenRef.current = true;
       callBooking(state.booking);
     }
@@ -1979,7 +2097,7 @@ function BookingInbox({
                   {new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(booking.created_at))}
                 </time>
                 <div className="trip-booking-quick" onClick={(event) => event.stopPropagation()}>
-                  {cashPending && <button type="button" className="cash" disabled={busy === `booking-${booking.id}`} onClick={() => void confirmCash(booking)} title="Confirm cash"><Banknote size={15} /></button>}
+                  {cashPending && <button type="button" className="cash" disabled={busy === `booking-${booking.id}`} onClick={() => setCashReceiptBooking(booking)} title={locale === "ku" ? "تۆمارکردنی پسوڵە" : locale === "ar" ? "تسجيل الإيصال" : "Record receipt"}><Banknote size={15} /></button>}
                   <button type="button" disabled={!booking.contact_phone} onClick={() => callBooking(booking)} title="Call"><Phone size={15} /></button>
                   <button type="button" onClick={() => void onSetViewed(booking.id, unseen)} title={unseen ? "Mark seen" : "Mark unread"}>{unseen ? <UserCheck size={15} /> : <Inbox size={15} />}</button>
                   <ChevronRight size={16} />
@@ -1993,7 +2111,7 @@ function BookingInbox({
       )}
 
       <p className="trip-booking-gesture-help">
-        {locale === "ku" ? "ڕاکێشان بۆ ڕاست: پشتڕاستکردنەوەی نەختینە · ڕاکێشان بۆ چەپ: پەیوەندی · فشارێکی درێژ: نیشانکردن وەک نەخوێندراو" : locale === "ar" ? "اسحب يميناً: تأكيد النقد · اسحب يساراً: اتصال · ضغط مطول: تحديد كغير مقروء" : "Swipe right: confirm cash · Swipe left: call · Long-press: mark unread"}
+        {locale === "ku" ? "ڕاکێشان بۆ چەپ: پەیوەندی · فشارێکی درێژ: نیشانکردن وەک نەخوێندراو" : locale === "ar" ? "اسحب يساراً: اتصال · ضغط مطول: تحديد كغير مقروء" : "Swipe left: call · Long-press: mark unread"}
       </p>
 
       {selectedBooking && (
@@ -2007,9 +2125,18 @@ function BookingInbox({
           askReason={askReason}
           locale={locale}
           onSetViewed={onSetViewed}
-          onConfirmCash={confirmCash}
+          onRecordCash={() => setCashReceiptBooking(selectedBooking)}
           onCall={callBooking}
           onClose={() => setSelectedBookingId(null)}
+        />
+      )}
+      {cashReceiptBooking && (
+        <CashReceiptDialog
+          booking={cashReceiptBooking}
+          locale={locale}
+          busy={busy === `booking-${cashReceiptBooking.id}`}
+          onCancel={() => setCashReceiptBooking(null)}
+          onSubmit={(receiptNumber) => confirmCashReceipt(cashReceiptBooking, receiptNumber)}
         />
       )}
     </section>
@@ -2026,7 +2153,7 @@ function BookingInboxDetail({
   askReason,
   locale,
   onSetViewed,
-  onConfirmCash,
+  onRecordCash,
   onCall,
   onClose,
 }: {
@@ -2039,7 +2166,7 @@ function BookingInboxDetail({
   askReason?: Props["askReason"];
   locale: "ku" | "ar" | "en";
   onSetViewed: BookingInboxProps["onSetViewed"];
-  onConfirmCash: (booking: Booking) => Promise<void>;
+  onRecordCash: () => void;
   onCall: (booking: Booking) => void;
   onClose: () => void;
 }) {
@@ -2069,7 +2196,7 @@ function BookingInboxDetail({
     return () => { active = false; };
   }, [booking.id, docsRevision]);
 
-  async function transition(action: "request_information" | "reject" | "ready" | "start" | "complete") {
+  async function transition(action: "accept" | "request_information" | "reject" | "ready" | "start" | "complete") {
     let reason: string | null = null;
     if (["request_information", "reject"].includes(action)) {
       if (!askReason) return;
@@ -2088,6 +2215,23 @@ function BookingInboxDetail({
   const lead = travellers.find((traveller) => traveller.is_lead) ?? travellers[0];
   const visasReady = travellers.length > 0 && travellers.every((traveller) => traveller.visa_status === "approved");
   const working = busy === `booking-${booking.id}`;
+  const operationsEnabled = booking.operational_stage === "confirmed";
+  const cashLocationType = booking.cash_payment_location_type === "company_office"
+    ? (locale === "ku" ? "نووسینگەی کۆمپانیای گەشت" : locale === "ar" ? "مكتب شركة السفر" : "Travel company office")
+    : booking.cash_payment_location_type
+      ? (locale === "ku" ? "شوێنی پارەدانی ڕێگەپێدراوی تەواف" : locale === "ar" ? "موقع دفع معتمد من طواف" : "Tawaf-authorized payment location")
+      : (locale === "ku" ? "شوێن دیاری نەکراوە" : locale === "ar" ? "لم يحدد الموقع" : "Location not assigned");
+  const hasCashLocation = Boolean(
+    booking.cash_payment_location_type
+    || booking.cash_payment_location_name
+    || booking.cash_payment_location_address
+    || booking.cash_payment_location_hours,
+  );
+  const hasPaymentProof = Boolean(
+    booking.payment_receipt_number
+    || booking.payment_confirmation_code
+    || booking.payment_confirmed_at,
+  );
 
   return (
     <div className="portal-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -2107,6 +2251,30 @@ function BookingInboxDetail({
             <div><small>{locale === "ku" ? "دراوە" : locale === "ar" ? "المدفوع" : "Paid"}</small><b>{formatIqd(booking.amount_paid_iqd)}</b></div>
             <div><small>{locale === "ku" ? "پارەدان" : locale === "ar" ? "الدفع" : "Payment"}</small><b>{titleCase(booking.pay_method)}</b></div>
           </div>
+          {(booking.pay_method === "cash" || hasPaymentProof || booking.accepted_at) && (
+            <section className="booking-payment-proof trip-booking-payment-proof">
+              <header>
+                {booking.pay_method === "cash" ? <MapPin size={16} /> : <FileCheck2 size={16} />}
+                <div>
+                  <small>{booking.pay_method === "cash"
+                    ? (locale === "ku" ? "شوێنی پارەدانی نەختینە" : locale === "ar" ? "مكان الدفع النقدي" : "Cash payment location")
+                    : (locale === "ku" ? "پشتڕاستکردنەوەی پارەدان" : locale === "ar" ? "تأكيد الدفع" : "Payment confirmation")}</small>
+                  <b>{booking.pay_method === "cash" ? cashLocationType : titleCase(booking.pay_method)}</b>
+                </div>
+              </header>
+              {booking.pay_method === "cash" && (
+                hasCashLocation
+                  ? <p>{[booking.cash_payment_location_name, booking.cash_payment_location_address, booking.cash_payment_location_hours].filter(Boolean).join(" · ")}</p>
+                  : <p>{locale === "ku" ? "شوێنی پارەدان هێشتا بۆ ئەم حیجزە دیاری نەکراوە." : locale === "ar" ? "لم يتم تعيين مكان الدفع لهذا الحجز بعد." : "A payment location has not been assigned to this booking yet."}</p>
+              )}
+              <dl>
+                {booking.accepted_at && <div><dt>{locale === "ku" ? "وەرگیراوە لە" : locale === "ar" ? "تم القبول في" : "Accepted at"}</dt><dd>{formatDateTime(booking.accepted_at, locale)}</dd></div>}
+                {booking.payment_receipt_number && <div><dt>{locale === "ku" ? "ژمارەی پسوڵە" : locale === "ar" ? "رقم الإيصال" : "Receipt number"}</dt><dd dir="ltr">{booking.payment_receipt_number}</dd></div>}
+                {booking.payment_confirmation_code && <div><dt>{locale === "ku" ? "کۆدی پشتڕاستکردنەوە" : locale === "ar" ? "رمز التأكيد" : "Confirmation code"}</dt><dd dir="ltr">{booking.payment_confirmation_code}</dd></div>}
+                {booking.payment_confirmed_at && <div><dt>{locale === "ku" ? "پارەدان پشتڕاستکرا لە" : locale === "ar" ? "تم تأكيد الدفع في" : "Payment confirmed at"}</dt><dd>{formatDateTime(booking.payment_confirmed_at, locale)}</dd></div>}
+              </dl>
+            </section>
+          )}
           <div className="trip-booking-detail-contact">
             <div><Phone size={16} /><span><small>{locale === "ku" ? "مۆبایل" : locale === "ar" ? "الهاتف" : "Phone"}</small><b>{booking.contact_phone || "—"}</b></span></div>
             <Status value={booking.operational_stage} />
@@ -2125,6 +2293,7 @@ function BookingInboxDetail({
                 runAction={runAction}
                 askReason={askReason}
                 locale={locale}
+                operationsEnabled={operationsEnabled}
                 onDocsChanged={() => setDocsRevision((revision) => revision + 1)}
                 onOpenImage={(images, index) => setLightbox({ images, index })}
               />
@@ -2139,7 +2308,8 @@ function BookingInboxDetail({
             {unseen ? <UserCheck size={15} /> : <Inbox size={15} />} {unseen ? (locale === "ar" ? "تحديد كمقروء" : "Mark seen") : (locale === "ar" ? "تحديد كغير مقروء" : "Mark unread")}
           </button>
           <button type="button" className="portal-secondary-button" disabled={!booking.contact_phone} onClick={() => onCall(booking)}><Phone size={15} /> {locale === "ku" ? "پەیوەندی" : locale === "ar" ? "اتصال" : "Call"}</button>
-          {isCashPending(booking) && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void onConfirmCash(booking)}><Banknote size={15} /> {locale === "ku" ? "پشتڕاستکردنەوەی نەختینە" : locale === "ar" ? "تأكيد النقد" : "Confirm cash"}</button>}
+          {["requested", "needs_information"].includes(booking.operational_stage) && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("accept")}><Check size={15} /> {locale === "ku" ? "وەرگرتنی حیجز" : locale === "ar" ? "قبول الحجز" : "Accept booking"}</button>}
+          {isCashPending(booking) && <button type="button" className="portal-primary-button" disabled={working} onClick={onRecordCash}><Banknote size={15} /> {locale === "ku" ? "تۆمارکردنی پسوڵە" : locale === "ar" ? "تسجيل الإيصال" : "Record receipt"}</button>}
           {["requested", "needs_information"].includes(booking.operational_stage) && askReason && <button type="button" className="portal-secondary-button" disabled={working} onClick={() => void transition("request_information")}>{locale === "ku" ? "داوای زانیاری" : locale === "ar" ? "طلب معلومات" : "Request info"}</button>}
           {["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && askReason && <button type="button" className="portal-danger-button" disabled={working} onClick={() => void transition("reject")}>{locale === "ku" ? "ڕەتکردنەوە" : locale === "ar" ? "رفض" : "Reject"}</button>}
           {booking.operational_stage === "confirmed" && <button type="button" className="portal-primary-button" disabled={working || !visasReady} title={visasReady ? undefined : "All visas must be approved first"} onClick={() => void transition("ready")}><Check size={15} /> {locale === "ku" ? "ئامادەیە" : locale === "ar" ? "جاهز" : "Mark ready"}</button>}
@@ -2353,13 +2523,14 @@ const TRAVELLER_VISA_STEPS = ["submitted", "under_review", "approved", "rejected
 // One traveller's documents and visa controls, rendered inline inside the
 // booking modal so a multi-passenger booking shows every pilgrim's paperwork
 // under their own name without drilling into a second screen.
-function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, locale, onDocsChanged, onOpenImage }: {
+function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, locale, operationsEnabled, onDocsChanged, onOpenImage }: {
   traveller: Traveller;
   docs: TravellerDocument[];
   busy: string;
   runAction: Props["runAction"];
   askReason?: Props["askReason"];
   locale: "ku" | "ar" | "en";
+  operationsEnabled: boolean;
   onDocsChanged: () => void;
   onOpenImage: (images: LightboxImage[], index: number) => void;
 }) {
@@ -2380,15 +2551,18 @@ function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, lo
     if (result) onDocsChanged();
   }
   async function approveDocuments() {
+    if (!operationsEnabled) return;
     await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
   }
   async function rejectDocuments() {
+    if (!operationsEnabled) return;
     if (!askReason) return;
     const reason = await askReason(tr("بۆچی بەڵگەنامەکان ڕەتدەکرێنەوە؟ (زیارەتکار ئەمە دەبینێت)", "لماذا ترفض المستندات؟ (يراها المعتمر)", "Why are the documents rejected? (the pilgrim sees this)"));
     if (!reason) return;
     await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە.", "تم رفض المستندات.", "Documents rejected — the pilgrim was notified."));
   }
   async function setVisa(status: string) {
+    if (!operationsEnabled) return;
     let reason: string | null = null;
     if (status === "rejected") {
       if (!askReason) return;
@@ -2441,11 +2615,22 @@ function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, lo
         })}
       </div>
 
+      {!operationsEnabled && (
+        <p className="booking-workflow-lock">
+          <ShieldCheck size={13} />
+          {tr(
+            "پێداچوونەوەی بەڵگەنامە و ڤیزا دوای وەرگرتن و پشتڕاستکردنەوەی پارەدان چالاک دەبێت.",
+            "تتاح مراجعة المستندات والتأشيرة بعد قبول الحجز وتأكيد الدفع.",
+            "Document and visa controls unlock after the booking is accepted and payment is confirmed.",
+          )}
+        </p>
+      )}
+
       <div className="booking-review-actions">
-        <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || docsApproved || traveller.document_status === "missing"}>
+        <button type="button" className="approve" onClick={approveDocuments} disabled={!operationsEnabled || rowBusy || docsApproved || traveller.document_status === "missing"}>
           {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
         </button>
-        <button type="button" className="danger" onClick={rejectDocuments} disabled={rowBusy || traveller.document_status === "missing"}>
+        <button type="button" className="danger" onClick={rejectDocuments} disabled={!operationsEnabled || rowBusy || traveller.document_status === "missing"}>
           <X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
         </button>
       </div>
@@ -2454,11 +2639,11 @@ function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, lo
       {!docsApproved && <p className="booking-inline-note">{tr("سەرەتا بەڵگەنامەکان پەسەند بکە، پاشان ڤیزا پشتڕاست بکە.", "اعتمد المستندات أولاً ثم أكد التأشيرة.", "Approve the documents first, then confirm the visa.")}</p>}
       <div className="booking-visa-steps">
         {TRAVELLER_VISA_STEPS.map((s) => (
-          <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={rowBusy}>{titleCase(s)}</button>
+          <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={!operationsEnabled || rowBusy}>{titleCase(s)}</button>
         ))}
       </div>
       <div className="booking-inline-field">
-        <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} />
+        <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} disabled={!operationsEnabled || rowBusy} />
       </div>
       {t.visa_reason && <small className="booking-inline-note">{t.visa_reason}</small>}
       {visaApproved && <p className="booking-inline-note" style={{ color: "#176a50" }}><Check size={12} /> {tr("ڤیزا ئامادەیە.", "التأشيرة جاهزة.", "Visa ready.")}</p>}
@@ -2516,6 +2701,8 @@ function TripWizard({
     setWizard((current) => ({ ...current, itinerary: current.itinerary.filter((_, dayIndex) => dayIndex !== index).map((day, dayIndex) => ({ ...day, day_no: dayIndex + 1 })) }));
   }
 
+  const wizardSeats = Number(wizard.capacity || 0);
+
   return (
     <>
       <div className="trip-wizard-top">
@@ -2529,7 +2716,53 @@ function TripWizard({
 
         <div className="trip-review-layout">
           <TripLivePreview wizard={wizard} setWizard={setWizard} updateHotel={updateHotel} addDay={addDay} updateDay={updateDay} removeDay={removeDay} onUploadImage={onUploadImage} uploadingImage={uploadingImage} company={company} locale={locale} W={W} />
-          <aside className="trip-submit-checklist"><header><ShieldCheck size={20} /><div><b>{W.readyTitle}</b><small>{W.readySub}</small></div></header>{completion.map((item) => <div className={item.done ? "done" : ""} key={item.label}><span>{item.done ? <Check size={13} /> : "!"}</span>{item.label}</div>)}<p>{approvalMode ? W.adminNoteApproval : W.submitNote}</p></aside>
+          <div className="trip-review-side">
+            <aside className="trip-submit-checklist"><header><ShieldCheck size={20} /><div><b>{W.readyTitle}</b><small>{W.readySub}</small></div></header>{completion.map((item) => <div className={item.done ? "done" : ""} key={item.label}><span>{item.done ? <Check size={13} /> : "!"}</span>{item.label}</div>)}<p>{approvalMode ? W.adminNoteApproval : W.submitNote}</p></aside>
+
+            {/* Agency-only. These three used to sit in the preview as pills, but
+                the app stopped showing them on the trip page — they defaulted to
+                standard/group/regular, so nearly every trip carried the same
+                three. They still drive keyword search in the app, so they are
+                still collected, just no longer pretended to be something a
+                pilgrim sees. */}
+            <aside className="trip-internal-fields">
+              <header><SlidersHorizontal size={17} /><div><b>{W.internalTitle}</b><small>{W.internalHint}</small></div></header>
+              <label>
+                <span>{W.packageTier}</span>
+                <LiveSelect icon={BadgeCheck} value={wizard.package_tier} onChange={(value) => setWizard((current) => ({ ...current, package_tier: value as WizardState["package_tier"] }))} options={[["economy", W.tierEconomy], ["standard", W.tierStandard], ["vip", W.tierVip]]} />
+              </label>
+              <label>
+                <span>{W.tripType}</span>
+                <LiveSelect icon={Users} value={wizard.group_type} onChange={(value) => setWizard((current) => ({ ...current, group_type: value as WizardState["group_type"] }))} options={[["family", W.typeFamily], ["individual", W.typeIndividual], ["group", W.typeGroup]]} />
+              </label>
+              <label>
+                <span>{W.season}</span>
+                <LiveSelect icon={CalendarDays} value={wizard.season_tag} onChange={(value) => setWizard((current) => ({ ...current, season_tag: value as WizardState["season_tag"] }))} options={[["regular", W.seasonRegular], ["ramadan", W.seasonRamadan], ["shawwal", W.seasonShawwal], ["other", W.seasonOther]]} />
+              </label>
+              <label className="trip-internal-capacity">
+                <span>{W.capacityLabel}</span>
+                <span className="trip-internal-stepper">
+                  <button type="button" aria-label="−" disabled={wizardSeats <= 0}
+                    onClick={() => setWizard((current) => ({ ...current, capacity: String(Math.max(0, Number(current.capacity || 0) - 1)) }))}>
+                    <Minus size={13} />
+                  </button>
+                  <input type="number" min={0} max={500} value={wizard.capacity}
+                    onChange={(event) => setWizard((current) => ({ ...current, capacity: event.target.value }))} />
+                  <button type="button" aria-label="+" disabled={wizardSeats >= 500}
+                    onClick={() => setWizard((current) => ({ ...current, capacity: String(Math.min(500, Number(current.capacity || 0) + 1)) }))}>
+                    <Plus size={13} />
+                  </button>
+                </span>
+              </label>
+              {/* Seats already sold cannot be un-sold, so the floor is visible
+                  rather than left for the save to reject. */}
+              {Number(wizard.seats_reserved || 0) > 0 && (
+                <p className="trip-internal-note">
+                  {W.seatsBookedNote.replace("{count}", String(wizard.seats_reserved))}
+                </p>
+              )}
+            </aside>
+          </div>
         </div>
 
         <footer className="trip-wizard-footer">
@@ -2581,6 +2814,10 @@ function LiveSelect({ icon: Icon, value, options, onChange, className }: {
   );
 }
 
+// What the app calls `few_left`. Carried over unchanged from the capacity pill
+// this replaced, which turned amber at 10 or fewer.
+const FEW_SEATS_LEFT = 10;
+
 function TripLivePreview({
   wizard,
   setWizard,
@@ -2610,6 +2847,9 @@ function TripLivePreview({
   const totalNights = wizard.hotels.reduce((sum, hotel) => sum + hotel.nights, 0);
   const totalDays = totalNights + 1;
   const capacityNum = Number(wizard.capacity || 0);
+  // Remaining, not total: on a trip that already has bookings the two differ,
+  // and the app shows remaining. seats_reserved never changes from this screen.
+  const seatsLeft = Math.max(0, capacityNum - Number(wizard.seats_reserved || 0));
   const priceNum = Number(wizard.package_price_iqd || 0);
   const depositNum = Number(wizard.deposit_iqd || 0);
   const maxStar = Math.max(3, ...wizard.hotels.map((hotel) => hotel.star_rating || 3));
@@ -2670,6 +2910,10 @@ function TripLivePreview({
           <div className="trip-live-hero-bottom">
             <div className="trip-live-agency-row">
               <span>{company.name}</span>
+              {/* Mirrors the app hero, where the agency name became the trip's
+                  only link to the agency page. Decoration here: in a preview the
+                  agency is the person looking at it. */}
+              <ChevronRight size={12} className="trip-live-agency-chevron" aria-hidden="true" />
               <i title={W.verifiedBadge}><BadgeCheck size={12} /></i>
               <i title={W.topRatedBadge}><Star size={12} /></i>
               <i title={W.fastResponderBadge}><Zap size={12} /></i>
@@ -2710,13 +2954,6 @@ function TripLivePreview({
                 </div>
               </>}
             </div>
-          </div>
-
-          <div className="trip-live-pills">
-            <LiveSelect icon={BadgeCheck} value={wizard.package_tier} onChange={(value) => setWizard((current) => ({ ...current, package_tier: value as WizardState["package_tier"] }))} options={[["economy", W.tierEconomy], ["standard", W.tierStandard], ["vip", W.tierVip]]} />
-            <LiveSelect icon={Users} value={wizard.group_type} onChange={(value) => setWizard((current) => ({ ...current, group_type: value as WizardState["group_type"] }))} options={[["family", W.typeFamily], ["individual", W.typeIndividual], ["group", W.typeGroup]]} />
-            <LiveSelect icon={CalendarDays} value={wizard.season_tag} onChange={(value) => setWizard((current) => ({ ...current, season_tag: value as WizardState["season_tag"] }))} options={[["regular", W.seasonRegular], ["ramadan", W.seasonRamadan], ["shawwal", W.seasonShawwal], ["other", W.seasonOther]]} />
-            <span className={`trip-live-pill ${capacityNum <= 10 ? "warning" : ""}`}><Users size={13} /><input type="number" min={0} max={500} value={wizard.capacity} onChange={(event) => setWizard((current) => ({ ...current, capacity: event.target.value }))} />{capacityNum <= 0 ? W.soldOutWord : W.seatsRemaining}</span>
           </div>
 
           <div className="trip-live-section">
@@ -2810,8 +3047,18 @@ function TripLivePreview({
           </div>
 
           <div className="trip-live-footer">
-            <div><small>{W.startingFrom}</small><strong>{formatIqd(priceNum)}</strong></div>
-            <span className="trip-live-book-btn">{W.bookThisTrip}</span>
+            <div>
+              <small>{W.startingFrom}</small>
+              <strong>{formatIqd(priceNum)}</strong>
+              {seatsLeft > 0 && (
+                <span className={`trip-live-seats ${seatsLeft <= FEW_SEATS_LEFT ? "few" : ""}`}>
+                  {seatsLeft <= FEW_SEATS_LEFT
+                    ? W.onlySeatsLeft.replace("{count}", String(seatsLeft))
+                    : `${seatsLeft} ${W.seatsRemaining}`}
+                </span>
+              )}
+            </div>
+            <span className="trip-live-book-btn">{seatsLeft > 0 ? W.bookThisTrip : W.soldOutWord}</span>
           </div>
         </div>
       </div>

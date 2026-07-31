@@ -28,6 +28,7 @@ import {
   FileCheck2,
   FileText,
   Filter,
+  Globe,
   Headphones,
   Hourglass,
   Languages,
@@ -62,6 +63,16 @@ import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
 import AppManagementWorkspace from "./app-management.tsx";
 import type { HomeAd, HomeSectionRow, HomeRankRow } from "./app-management.tsx";
+import FinanceWorkspace from "./finance.tsx";
+import type {
+  LedgerRow as FinanceLedgerRow,
+  PayoutRow as FinancePayoutRow,
+  ExpenseRow as FinanceExpenseRow,
+  BudgetRow as FinanceBudgetRow,
+  ReceiptRow as FinanceReceiptRow,
+  FinanceAuditRow,
+  CommercialSetting,
+} from "./finance.tsx";
 import { dashboardTranslations } from "./translations.ts";
 
 type Role = "admin" | "agency";
@@ -106,6 +117,10 @@ type Company = {
   phone: string | null;
   whatsapp: string | null;
   office_hours: string | null;
+  cash_payment_location_type: "company_office" | "tawaf_authorized" | null;
+  cash_payment_location_name: string | null;
+  cash_payment_location_address: string | null;
+  cash_payment_location_hours: string | null;
   license_number: string | null;
   since: number | null;
   tags: string[] | null;
@@ -130,6 +145,12 @@ type Company = {
   // management page so the preview matches what clients get.
   pilgrims_served: number | null;
   created_at: string;
+};
+
+type StaffMembership = {
+  company_id: string;
+  role: string | null;
+  permissions: string[] | null;
 };
 
 type CompanyOwner = {
@@ -202,6 +223,14 @@ type Booking = {
   room_label: string | null;
   room_occupancy: number | null;
   room_count: number | null;
+  cash_payment_location_type: string | null;
+  cash_payment_location_name: string | null;
+  cash_payment_location_address: string | null;
+  cash_payment_location_hours: string | null;
+  payment_receipt_number: string | null;
+  payment_confirmation_code: string | null;
+  payment_confirmed_at: string | null;
+  accepted_at: string | null;
   expires_at: string | null;
   created_at: string;
 };
@@ -262,9 +291,15 @@ type Payment = {
   booking_id: string;
   company_id: string;
   amount_iqd: number;
+  // Already selected by select("*") — the finance page is the first surface to
+  // read either. refunded_iqd is where refunds live (the ledger never sees
+  // them); confirmed_at is the only per-movement timestamp cash has, which is
+  // what makes "collected in this period" a real figure rather than a proxy.
+  refunded_iqd: number | null;
   method: string;
   status: string;
   created_at: string;
+  confirmed_at: string | null;
 };
 
 type SupportMessage = {
@@ -289,21 +324,13 @@ type Inquiry = {
   }>;
 };
 
-type LedgerRow = {
-  id: string;
-  entry_type: string;
-  amount_iqd: number;
-  description: string | null;
-  created_at: string;
-};
-
-type Payout = {
-  id: string;
-  amount_iqd: number;
-  method: string | null;
-  status: string;
-  created_at: string;
-};
+// The ledger and payout shapes live with the workspace that renders them, so
+// the settlement logic and the types it relies on stay in one file.
+type LedgerRow = FinanceLedgerRow;
+type Payout = FinancePayoutRow;
+type Expense = FinanceExpenseRow;
+type Budget = FinanceBudgetRow;
+type Receipt = FinanceReceiptRow;
 
 type PortalData = {
   companies: Company[];
@@ -319,6 +346,13 @@ type PortalData = {
   inquiries: Inquiry[];
   ledger: LedgerRow[];
   payouts: Payout[];
+  expenses: Expense[];
+  budgets: Budget[];
+  receipts: Receipt[];
+  // Finance-only reads. auditLogs is admin-only by RLS; commercialSettings is
+  // how a company learns which commission rate it is actually on.
+  financeAudit: FinanceAuditRow[];
+  commercialSettings: CommercialSetting[];
   // Admin-only: what the app's home screen shows and in which order.
   homeAds: HomeAd[];
   homeSections: HomeSectionRow[];
@@ -339,6 +373,11 @@ const emptyData: PortalData = {
   inquiries: [],
   ledger: [],
   payouts: [],
+  expenses: [],
+  budgets: [],
+  receipts: [],
+  financeAudit: [],
+  commercialSettings: [],
   homeAds: [],
   homeSections: [],
   homeRank: [],
@@ -394,9 +433,9 @@ function notificationCopy(type: string, arg: string | null, locale: "ku" | "ar" 
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const subject = arg || tr("گەشتێک", "رحلة", "a trip");
   switch (type) {
-    case "bookingRequested": return { title: tr("داواکاری حیجزی نوێ", "طلب حجز جديد", "New booking request"), body: subject };
-    case "bookingConfirmed": return { title: tr("حیجز پشتڕاستکرایەوە", "تم تأكيد الحجز", "Booking confirmed"), body: subject };
-    case "bookingCancelled": return { title: tr("حیجز هەڵوەشێندرایەوە", "تم إلغاء الحجز", "Booking cancelled"), body: subject };
+    case "bookingRequested": return { title: tr("داواکاری حجزی نوێ", "طلب حجز جديد", "New booking request"), body: subject };
+    case "bookingConfirmed": return { title: tr("حجز پشتڕاستکرایەوە", "تم تأكيد الحجز", "Booking confirmed"), body: subject };
+    case "bookingCancelled": return { title: tr("حجز هەڵوەشێندرایەوە", "تم إلغاء الحجز", "Booking cancelled"), body: subject };
     case "bookingReady": return { title: tr("گەشت ئامادەیە", "الرحلة جاهزة", "Trip is ready"), body: subject };
     case "documentsUploaded": return { title: tr("بەڵگەنامە بارکرا", "تم رفع مستندات", "Documents uploaded"), body: subject };
     case "documentsApproved": return { title: tr("بەڵگەنامەکان پەسەندکران", "تمت الموافقة على المستندات", "Documents approved"), body: subject };
@@ -549,6 +588,17 @@ function formatDate(value: string | null | undefined, includeYear = false) {
   }).format(new Date(value));
 }
 
+function formatDateTime(value: string | null | undefined, locale: "ku" | "ar" | "en") {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 /// Departure–return as one string. The year is printed once at the end when
 /// both dates fall in the same year, so "01 Aug – 12 Aug 2026" rather than the
 /// noisier "01 Aug 2026 – 12 Aug 2026".
@@ -684,6 +734,10 @@ export default function DashboardPage() {
   // Every company this account may act for. More than one means the agency runs
   // branches, and the workspace shows a switcher.
   const [companies, setCompanies] = useState<Company[]>([]);
+  // The caller's own agency_staff rows. Only used to decide which nav entries a
+  // staff account is shown — RLS is still the boundary; this only stops the
+  // portal from offering a page the database would answer with nothing.
+  const [staffRoles, setStaffRoles] = useState<StaffMembership[]>([]);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branchFormOpen, setBranchFormOpen] = useState(false);
   const [branchName, setBranchName] = useState("");
@@ -697,6 +751,7 @@ export default function DashboardPage() {
   const [toast, setToast] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [reasonDialog, setReasonDialog] = useState<{
     title: string;
     optional: boolean;
@@ -825,6 +880,13 @@ export default function DashboardPage() {
             commissionsResult,
             paymentsResult,
             supportResult,
+            ledgerResult,
+            payoutsResult,
+            expensesResult,
+            budgetsResult,
+            receiptsResult,
+            auditResult,
+            commercialResult,
             homeAdsResult,
             homeSectionsResult,
             homeRankResult,
@@ -838,6 +900,21 @@ export default function DashboardPage() {
             supabase.from("commissions").select("*").order("created_at", { ascending: false }),
             supabase.from("payments").select("*").order("created_at", { ascending: false }),
             supabase.from("support_messages").select("*").order("created_at", { ascending: false }),
+            // Marketplace-wide: can_access_company() short-circuits on
+            // is_admin(), so admin reads every company's ledger and payouts
+            // under the same policy a company uses for its own.
+            supabase.from("agency_ledger").select("*").order("created_at", { ascending: false }),
+            supabase.from("payouts").select("*").order("created_at", { ascending: false }),
+            // Both books: expenses.company_id is null for Tawaf's own costs and
+            // set for an agency's. RLS decides which of the two an account sees.
+            supabase.from("expenses").select("*").order("spent_at", { ascending: false }),
+            supabase.from("finance_budgets").select("*"),
+            supabase.from("finance_receipts").select("*").order("issued_at", { ascending: false }),
+            // Only the finance actions — the audit table carries every entity.
+            supabase.from("audit_logs").select("*")
+              .in("action", ["payout_recorded", "commission_collected", "expense_recorded", "expense_updated", "expense_voided"])
+              .order("created_at", { ascending: false }).limit(200),
+            supabase.from("agency_commercial_settings").select("*"),
             supabase.from("home_ads").select("*").order("sort_order", { ascending: true }),
             supabase.from("home_sections").select("*").order("sort_order", { ascending: true }),
             supabase.from("home_rank").select("*").order("sort_order", { ascending: true }),
@@ -853,6 +930,9 @@ export default function DashboardPage() {
             commissionsResult,
             paymentsResult,
             supportResult,
+            ledgerResult,
+            payoutsResult,
+            expensesResult,
           ].find((result) => result.error)?.error;
           if (firstError) throw firstError;
 
@@ -866,6 +946,7 @@ export default function DashboardPage() {
           const companyOwners = ownerResults.flatMap((result) => result.error ? [] : (result.data ?? [])) as CompanyOwner[];
 
           setCompany(null);
+          setStaffRoles([]);
           setData({
             ...emptyData,
             companies: companyRows,
@@ -878,6 +959,17 @@ export default function DashboardPage() {
             commissions: (commissionsResult.data ?? []) as Commission[],
             payments: (paymentsResult.data ?? []) as Payment[],
             support: (supportResult.data ?? []) as SupportMessage[],
+            ledger: (ledgerResult.data ?? []) as LedgerRow[],
+            payouts: (payoutsResult.data ?? []) as Payout[],
+            expenses: (expensesResult.data ?? []) as Expense[],
+            // Budgets, receipts, the audit trail and commission tiers each
+            // decorate one panel, so like the home-screen tables below they stay
+            // outside the error check — an unreachable one must not cost the
+            // operator the whole workspace.
+            budgets: (budgetsResult.data ?? []) as Budget[],
+            receipts: (receiptsResult.data ?? []) as Receipt[],
+            financeAudit: (auditResult.data ?? []) as FinanceAuditRow[],
+            commercialSettings: (commercialResult.data ?? []) as CommercialSetting[],
             // Home-screen curation is deliberately outside the error check
             // above: it decorates one page, so an unreachable table must not
             // cost the operator the whole workspace.
@@ -895,7 +987,7 @@ export default function DashboardPage() {
             supabase.from("companies").select("*").eq("owner_id", currentProfile.id),
             supabase
               .from("agency_staff")
-              .select("companies(*)")
+              .select("company_id, role, permissions, companies(*)")
               .eq("user_id", currentProfile.id)
               .eq("status", "active"),
           ]);
@@ -903,9 +995,11 @@ export default function DashboardPage() {
           if (membershipResult.error) throw membershipResult.error;
 
           const owned = (ownedResult.data ?? []) as Company[];
-          const staffCompanies = ((membershipResult.data ?? []) as Array<{ companies: Company | null }>)
-            .map((row) => row.companies)
-            .filter(Boolean) as Company[];
+          const memberships = (membershipResult.data ?? []) as Array<StaffMembership & { companies: Company | null }>;
+          const staffCompanies = memberships.map((row) => row.companies).filter(Boolean) as Company[];
+          setStaffRoles(memberships.map(({ company_id, role: staffRole, permissions }) => ({
+            company_id, role: staffRole, permissions,
+          })));
 
           // Branches of a head office this account owns. RLS already allows it
           // (owns_company walks the parent), but they are not returned by the
@@ -975,6 +1069,10 @@ export default function DashboardPage() {
             inquiriesResult,
             ledgerResult,
             payoutsResult,
+            expensesResult,
+            budgetsResult,
+            receiptsResult,
+            commercialResult,
           ] = await Promise.all([
             supabase.from("packages").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("trip_change_requests").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }).limit(100),
@@ -987,6 +1085,12 @@ export default function DashboardPage() {
             supabase.from("inquiries").select("*, inquiry_messages(*)").eq("agency_id", companyRow.id).order("updated_at", { ascending: false }),
             supabase.from("agency_ledger").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payouts").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
+            // A company only ever sees its own book — the platform rows
+            // (company_id is null) are admin-only in RLS as well as here.
+            supabase.from("expenses").select("*").eq("company_id", companyRow.id).order("spent_at", { ascending: false }),
+            supabase.from("finance_budgets").select("*").eq("company_id", companyRow.id),
+            supabase.from("finance_receipts").select("*").eq("company_id", companyRow.id).order("issued_at", { ascending: false }),
+            supabase.from("agency_commercial_settings").select("*").eq("agency_id", companyRow.id),
           ]);
 
           const firstError = [
@@ -1000,6 +1104,7 @@ export default function DashboardPage() {
             inquiriesResult,
             ledgerResult,
             payoutsResult,
+            expensesResult,
           ].find((result) => result.error)?.error;
           if (firstError) throw firstError;
 
@@ -1016,6 +1121,10 @@ export default function DashboardPage() {
             inquiries: (inquiriesResult.data ?? []) as Inquiry[],
             ledger: (ledgerResult.data ?? []) as LedgerRow[],
             payouts: (payoutsResult.data ?? []) as Payout[],
+            expenses: (expensesResult.data ?? []) as Expense[],
+            budgets: (budgetsResult.data ?? []) as Budget[],
+            receipts: (receiptsResult.data ?? []) as Receipt[],
+            commercialSettings: (commercialResult.data ?? []) as CommercialSetting[],
           });
         }
       } catch (cause) {
@@ -1050,6 +1159,8 @@ export default function DashboardPage() {
         { table: "companies" }, { table: "packages" }, { table: "trip_change_requests" },
         { table: "bookings" }, { table: "booking_travellers" }, { table: "traveller_documents" },
         { table: "payments" }, { table: "commissions" }, { table: "support_messages" },
+        { table: "agency_ledger" }, { table: "payouts" },
+        { table: "expenses" }, { table: "finance_budgets" }, { table: "finance_receipts" },
         { table: "home_ads" }, { table: "home_sections" }, { table: "home_rank" },
       ];
     }
@@ -1063,6 +1174,13 @@ export default function DashboardPage() {
       { table: "traveller_documents", filter: mine },
       { table: "payments", filter: mine },
       { table: "commissions", filter: mine },
+      // So a company sees a payout the moment admin records it, without a reload.
+      { table: "agency_ledger", filter: mine },
+      { table: "payouts", filter: mine },
+      // So an expense filed by a colleague appears without a reload.
+      { table: "expenses", filter: mine },
+      { table: "finance_budgets", filter: mine },
+      { table: "finance_receipts", filter: mine },
       { table: "inquiries", filter: `agency_id=eq.${company.id}` },
       // These two carry no company column; the refetch applies the real scoping.
       { table: "booking_travellers" },
@@ -1143,7 +1261,34 @@ export default function DashboardPage() {
   );
   const canSwitchBranch = companies.length > 1 || canAddBranch;
 
-  const navigation = role === "admin" ? adminNavigation : companyNavigation;
+  // The mobile sidebar is an overlay like any other — with it open, scrolling
+  // used to move the page behind it.
+  useScrollLock(mobileOpen);
+
+  // Mirrors can_access_company(id, 'finance') in the database: owner, manager or
+  // accountant. Without this the Money tab was offered to every staff account
+  // and then rendered empty, because RLS returns no ledger, payout or expense
+  // rows to a booking clerk — an empty page reads as "there is no money here",
+  // which is a worse answer than not offering the page.
+  const canSeeFinance = useMemo(() => {
+    if (role !== "agency" || !company) return true;
+    if (company.owner_id === profile?.id) return true;
+    const membership = staffRoles.find((item) => item.company_id === company.id);
+    if (!membership) return true;
+    const permissions = membership.permissions ?? [];
+    return permissions.includes("manage_all") ||
+      permissions.includes("finance") ||
+      ["manager", "accountant"].includes(membership.role ?? "");
+  }, [role, company?.id, company?.owner_id, profile?.id, staffRoles]);
+
+  // Covers the direct link and the restored session, not just the sidebar.
+  useEffect(() => {
+    if (!canSeeFinance && page === "finance") setPage("overview");
+  }, [canSeeFinance, page]);
+
+  const navigation = role === "admin"
+    ? adminNavigation
+    : companyNavigation.filter((item) => item.id !== "finance" || canSeeFinance);
   const badges: Partial<Record<PageId, number>> = role === "admin"
     ? {
       // "Changes requested" is waiting on the company, not on an admin.
@@ -1421,7 +1566,53 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
-            <div className="portal-user-top">{(profile.full_name || profile.email).slice(0, 2).toUpperCase()}</div>
+            {/* Language lives here rather than on an avatar: the account's name,
+                email and initials are already in the sidebar foot, so the topbar
+                slot was repeating them, and until now the only way to change
+                language inside the workspace was to go back to the landing page.
+                Same wrapper/scrim shape as the bell so both menus behave alike. */}
+            <div className="portal-lang-wrap">
+              <button
+                type="button"
+                className={langOpen ? "is-open" : ""}
+                aria-label={locale === "en" ? "Language" : locale === "ar" ? "اللغة" : "زمان"}
+                aria-expanded={langOpen}
+                aria-haspopup="menu"
+                onClick={() => setLangOpen((open) => !open)}
+              >
+                <Globe size={17} />
+                {/* The code makes the active language readable at a glance — the
+                    icon alone says a switcher exists but not what it is set to. */}
+                <span>{locale === "ku" ? "KU" : locale === "ar" ? "AR" : "EN"}</span>
+              </button>
+              {langOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="portal-bell-scrim"
+                    aria-label={locale === "en" ? "Close language menu" : locale === "ar" ? "إغلاق قائمة اللغة" : "داخستنی لیستی زمان"}
+                    onClick={() => setLangOpen(false)}
+                  />
+                  <div className="portal-lang-menu" role="menu">
+                    {(["ku", "ar", "en"] as const).map((code) => (
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={locale === code}
+                        key={code}
+                        className={locale === code ? "is-active" : ""}
+                        onClick={() => { changeLocale(code); setLangOpen(false); }}
+                      >
+                        {/* Each language is named in itself — a reader looking for
+                            Kurdish should not have to read Arabic to find it. */}
+                        <span>{code === "ku" ? "کوردی" : code === "ar" ? "العربية" : "English"}</span>
+                        {locale === code && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 
@@ -1554,6 +1745,95 @@ function ReasonDialog({
   );
 }
 
+function CashReceiptDialog({
+  booking,
+  locale,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  booking: Booking;
+  locale: "ku" | "ar" | "en";
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (receiptNumber: string) => Promise<void>;
+}) {
+  const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const location = [
+    booking.cash_payment_location_name,
+    booking.cash_payment_location_address,
+    booking.cash_payment_location_hours,
+  ].filter(Boolean).join(" · ");
+  useScrollLock();
+
+  return (
+    <div
+      className="portal-reason-scrim"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
+      <form
+        className="portal-reason-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cash-receipt-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape" && !busy) {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (receiptNumber.trim() && !busy) void onSubmit(receiptNumber.trim());
+        }}
+      >
+        <h2 id="cash-receipt-dialog-title">{tr("تۆمارکردنی پسوڵەی نەختینە", "تسجيل إيصال الدفع النقدي", "Record cash receipt")}</h2>
+        {location && (
+          <p className="portal-receipt-location">
+            <MapPin size={16} />
+            <span>
+              <b>{booking.cash_payment_location_type === "company_office"
+                ? tr("نووسینگەی کۆمپانیا", "مكتب شركة السفر", "Travel company office")
+                : tr("شوێنی پارەدانی ڕێگەپێدراوی تەواف", "موقع دفع معتمد من طواف", "Tawaf-authorized payment location")}</b>
+              <small>{location}</small>
+            </span>
+          </p>
+        )}
+        <label className="portal-receipt-field">
+          <span>{tr("ژمارەی پسوڵە", "رقم الإيصال", "Receipt number")}</span>
+          <input
+            autoFocus
+            value={receiptNumber}
+            onChange={(event) => setReceiptNumber(event.target.value)}
+            placeholder={tr("ژمارەی پسوڵەکە بنووسە", "أدخل رقم الإيصال", "Enter the receipt number")}
+            disabled={busy}
+          />
+        </label>
+        <p className="portal-receipt-hint">{tr(
+          "تەنها دوای وەرگرتنی پارە و دڵنیابوون لە پسوڵە پشتڕاستی بکەرەوە.",
+          "أكد فقط بعد استلام المبلغ والتحقق من الإيصال.",
+          "Confirm only after the cash has been received and the receipt verified.",
+        )}</p>
+        <div className="portal-reason-actions">
+          <button type="button" className="portal-secondary-button" onClick={onCancel} disabled={busy}>
+            {tr("پاشگەزبوونەوە", "إلغاء", "Cancel")}
+          </button>
+          <button type="submit" className="portal-primary-button" disabled={busy || !receiptNumber.trim()}>
+            {busy ? <TawafLoadingSpinner size={14} /> : <TicketCheck size={14} />}
+            {tr("پشتڕاستکردنەوەی پارەدان", "تأكيد الدفع", "Confirm payment")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function AdminPages({
   page,
   data,
@@ -1575,7 +1855,28 @@ function AdminPages({
 }) {
   if (page === "companies") return <AdminCompanies data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "trips") return <TripsPage role="admin" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
-  if (page === "finance") return <FinancePage role="admin" data={data} busy={busy} runAction={runAction} locale={locale} />;
+  if (page === "finance") {
+    return (
+      <FinanceWorkspace
+        role="admin"
+        companies={data.companies}
+        trips={data.trips}
+        bookings={data.bookings}
+        commissions={data.commissions}
+        payments={data.payments}
+        ledger={data.ledger}
+        payouts={data.payouts}
+        expenses={data.expenses}
+        budgets={data.budgets}
+        receipts={data.receipts}
+        auditLogs={data.financeAudit}
+        commercialSettings={data.commercialSettings}
+        busy={busy}
+        runAction={runAction}
+        locale={locale}
+      />
+    );
+  }
   if (page === "support") return <SupportPage data={data} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "app") return <AppManagementWorkspace homeAds={data.homeAds} homeSections={data.homeSections} homeRank={data.homeRank} companies={data.companies} trips={data.trips} busy={busy} runAction={runAction} locale={locale} />;
   if (page === "more") return <AdminMore locale={locale} changeLocale={changeLocale} busy={busy} runAction={runAction} />;
@@ -1612,7 +1913,29 @@ function CompanyPages({
   if (page === "trips") return <CompanyTripsWorkspace company={company} trips={data.trips} changeRequests={data.tripChangeRequests} bookings={data.bookings} bookingTravellers={data.bookingTravellers} commissions={data.commissions} payments={data.payments} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "bookings") return <BookingsPage role="agency" data={data} busy={busy} runAction={runAction} askReason={askReason} locale={locale} />;
   if (page === "messages") return <MessagesPage data={data} profile={profile} busy={busy} runAction={runAction} locale={locale} />;
-  if (page === "finance") return <FinancePage role="agency" data={data} busy={busy} runAction={runAction} locale={locale} />;
+  if (page === "finance") {
+    return (
+      <FinanceWorkspace
+        role="agency"
+        companies={[{ id: company.id, name: company.name }]}
+        trips={data.trips}
+        bookings={data.bookings}
+        commissions={data.commissions}
+        payments={data.payments}
+        ledger={data.ledger}
+        payouts={data.payouts}
+        expenses={data.expenses}
+        budgets={data.budgets}
+        receipts={data.receipts}
+        auditLogs={[]}
+        commercialSettings={data.commercialSettings}
+        companyId={company.id}
+        busy={busy}
+        runAction={runAction}
+        locale={locale}
+      />
+    );
+  }
   if (page === "more") return <CompanyProfile company={company} profile={profile} busy={busy} runAction={runAction} locale={locale} changeLocale={changeLocale} />;
   return <CompanyOverview data={data} company={company} companies={companies} switchCompany={switchCompany} goTo={goTo} locale={locale} busy={busy} runAction={runAction} />;
 }
@@ -2212,7 +2535,7 @@ function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }:
   busy: string;
   runAction: RunAction;
   locale: "ku" | "ar" | "en";
-  activeTab: "overview" | "verification" | "commercial" | "activity";
+  activeTab: "overview" | "trips" | "verification" | "commercial" | "activity";
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const [tier, setTier] = useState("standard");
@@ -2220,6 +2543,12 @@ function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }:
   const [loaded, setLoaded] = useState(false);
   const [activity, setActivity] = useState<Array<{ id: string; action: string; reason: string | null; created_at: string; actor_role: string | null }>>([]);
   const savingKey = `commercial-${company.id}`;
+  const paymentLocationKey = `cash-location-${company.id}`;
+  const [cashLocationType, setCashLocationType] = useState<"company_office" | "tawaf_authorized">(company.cash_payment_location_type ?? "company_office");
+  const [cashLocationName, setCashLocationName] = useState(company.cash_payment_location_name ?? "");
+  const [cashLocationAddress, setCashLocationAddress] = useState(company.cash_payment_location_address ?? "");
+  const [cashLocationHours, setCashLocationHours] = useState(company.cash_payment_location_hours ?? "");
+  const [cashLocationError, setCashLocationError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -2240,6 +2569,20 @@ function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }:
     return () => { active = false; };
   }, [company.id]);
 
+  useEffect(() => {
+    setCashLocationType(company.cash_payment_location_type ?? "company_office");
+    setCashLocationName(company.cash_payment_location_name ?? "");
+    setCashLocationAddress(company.cash_payment_location_address ?? "");
+    setCashLocationHours(company.cash_payment_location_hours ?? "");
+    setCashLocationError("");
+  }, [
+    company.id,
+    company.cash_payment_location_type,
+    company.cash_payment_location_name,
+    company.cash_payment_location_address,
+    company.cash_payment_location_hours,
+  ]);
+
   async function save() {
     const rate = Number(percent) / 100;
     if (!Number.isFinite(rate) || rate < 0 || rate > 1) return;
@@ -2253,8 +2596,50 @@ function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }:
         updated_by: auth.user?.id ?? null,
         updated_at: new Date().toISOString(),
       }, { onConflict: "agency_id" }),
-      tr("ڕێژەی کۆمسیۆن نوێکرایەوە.", "تم تحديث نسبة العمولة.", "Commission rate updated."),
+      tr("ڕێژەی کاش نوێکرایەوە.", "تم تحديث نسبة العمولة.", "Commission rate updated."),
     );
+  }
+
+  async function saveCashPaymentLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const authorized = cashLocationType === "tawaf_authorized";
+    if (authorized && (!cashLocationName.trim() || !cashLocationAddress.trim())) {
+      setCashLocationError(tr(
+        "ناو و ناونیشان بۆ شوێنی پارەدانی ڕێگەپێدراو پێویستن.",
+        "الاسم والعنوان مطلوبان لموقع الدفع المعتمد.",
+        "Name and address are required for an authorized payment location.",
+      ));
+      return;
+    }
+
+    setCashLocationError("");
+    const result = await runAction(
+      paymentLocationKey,
+      () => getSupabase()
+        .from("companies")
+        .update({
+          cash_payment_location_type: cashLocationType,
+          // Company-office bookings snapshot the company's existing public
+          // office information. Clear every authorized-location override so a
+          // stale value cannot leak into future payment instructions.
+          cash_payment_location_name: authorized ? cashLocationName.trim() : null,
+          cash_payment_location_address: authorized ? cashLocationAddress.trim() : null,
+          cash_payment_location_hours: authorized ? cashLocationHours.trim() || null : null,
+        })
+        .eq("id", company.id)
+        .select("id")
+        .single(),
+      tr(
+        "شوێنی پارەدانی نەختینە نوێکرایەوە.",
+        "تم تحديث موقع الدفع النقدي.",
+        "Cash payment location updated.",
+      ),
+    );
+    if (result && !authorized) {
+      setCashLocationName("");
+      setCashLocationAddress("");
+      setCashLocationHours("");
+    }
   }
 
   return (
@@ -2290,6 +2675,88 @@ function CompanyCommercialPanel({ company, busy, runAction, locale, activeTab }:
           </>
         )}
       </section>}
+
+      {activeTab === "commercial" && (
+        <section>
+          <h3>{tr("شوێنی پارەدانی نەختینە", "موقع الدفع النقدي", "Cash payment location")}</h3>
+          <form className="portal-payment-location-form" onSubmit={saveCashPaymentLocation}>
+            <label>
+              <small>{tr("جۆری شوێن", "نوع الموقع", "Location type")}</small>
+              <select
+                value={cashLocationType}
+                onChange={(event) => {
+                  setCashLocationType(event.target.value as "company_office" | "tawaf_authorized");
+                  setCashLocationError("");
+                }}
+                disabled={busy === paymentLocationKey}
+              >
+                <option value="company_office">{tr("نووسینگەی کۆمپانیا", "مكتب شركة السفر", "Travel company office")}</option>
+                <option value="tawaf_authorized">{tr("شوێنی ڕێگەپێدراوی تەواف", "موقع معتمد من طواف", "Tawaf-authorized location")}</option>
+              </select>
+            </label>
+
+            {cashLocationType === "company_office" ? (
+              <div className="portal-payment-location-preview">
+                <MapPin size={16} />
+                <div>
+                  <b>{company.name}</b>
+                  <span>{company.office_address || tr("ناونیشانی نووسینگە دیاری نەکراوە", "عنوان المكتب غير محدد", "Office address not set")}</span>
+                  <small><Clock3 size={12} /> {company.office_hours || tr("کاتی کار دیاری نەکراوە", "ساعات العمل غير محددة", "Office hours not set")}</small>
+                </div>
+              </div>
+            ) : (
+              <div className="portal-payment-location-fields">
+                <label>
+                  <small>{tr("ناوی شوێن", "اسم الموقع", "Location name")} *</small>
+                  <input
+                    value={cashLocationName}
+                    onChange={(event) => { setCashLocationName(event.target.value); setCashLocationError(""); }}
+                    placeholder={tr("وەک ناوەندی پارەدانی تەواف", "مثال: مركز دفع طواف", "e.g. Tawaf Payment Center")}
+                    disabled={busy === paymentLocationKey}
+                  />
+                </label>
+                <label>
+                  <small>{tr("ناونیشان", "العنوان", "Address")} *</small>
+                  <input
+                    value={cashLocationAddress}
+                    onChange={(event) => { setCashLocationAddress(event.target.value); setCashLocationError(""); }}
+                    placeholder={tr("شار، گەڕەک، شەقام", "المدينة، الحي، الشارع", "City, district, street")}
+                    disabled={busy === paymentLocationKey}
+                  />
+                </label>
+                <label>
+                  <small>{tr("کاتی کار", "ساعات العمل", "Hours")}</small>
+                  <input
+                    value={cashLocationHours}
+                    onChange={(event) => setCashLocationHours(event.target.value)}
+                    placeholder={tr("شەممە–پێنجشەممە، ٩–٥", "السبت–الخميس، ٩–٥", "Sat–Thu, 9–5")}
+                    disabled={busy === paymentLocationKey}
+                  />
+                </label>
+              </div>
+            )}
+
+            <p className="portal-commercial-note">
+              {cashLocationType === "company_office"
+                ? tr(
+                  "ناو، ناونیشان و کاتی کاری نووسینگە لە پڕۆفایلی کۆمپانیا وەردەگیرێن؛ هەر زانیارییەکی تایبەت بە شوێنی ڕێگەپێدراو پاک دەکرێتەوە.",
+                  "يُستخدم اسم الشركة وعنوان المكتب وساعات العمل من ملف الشركة، وتُمسح أي بيانات سابقة لموقع معتمد.",
+                  "The company name, office address, and office hours come from its profile; any authorized-location overrides are cleared.",
+                )
+                : tr(
+                  "ئەم زانیارییانە لە کاتی وەرگرتنی حیجز بۆ کڕیار نیشان دەدرێن.",
+                  "تظهر هذه التفاصيل للعميل عند قبول الحجز.",
+                  "These details are shown to the client when the booking is accepted.",
+                )}
+            </p>
+            {cashLocationError && <p className="portal-payment-location-error"><AlertTriangle size={13} /> {cashLocationError}</p>}
+            <button type="submit" className="portal-secondary-button portal-payment-location-save" disabled={busy === paymentLocationKey}>
+              {busy === paymentLocationKey ? <TawafLoadingSpinner size={14} /> : <Check size={14} />}
+              {tr("شوێنی پارەدان پاشەکەوت بکە", "حفظ موقع الدفع", "Save payment location")}
+            </button>
+          </form>
+        </section>
+      )}
 
       {activeTab === "activity" && (
         <section>
@@ -2467,7 +2934,7 @@ function CompanyDetailDrawer({
                 <div><b>{trips.length}</b><small>{tr("گەشتەکان", "الرحلات", "Trips")}</small></div>
                 <div><b>{bookings.length}</b><small>{tr("حیجزەکان", "الحجوزات", "Bookings")}</small></div>
                 <div><b>{formatIqd(bookingValue, true)}</b><small>{t.bookingValue}</small></div>
-                <div><b>{formatIqd(commissionOwed, true)}</b><small>{tr("کۆمسیۆنی ماوە", "عمولة مستحقة", "Commission owed")}</small></div>
+                <div><b>{formatIqd(commissionOwed, true)}</b><small>{tr("کاشی ماوە", "عمولة مستحقة", "Commission owed")}</small></div>
               </div>
 
               <section>
@@ -3271,7 +3738,11 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
   onOpenImages: (images: LightboxImage[], index: number) => void;
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
-  const canReview = role === "agency"; // admin is read-only for document/visa verdicts
+  // Document and visa decisions belong to the confirmed service workflow.
+  // Before that point the company may inspect uploads, but cannot advance them.
+  const canReview = role === "agency" && booking.operational_stage === "confirmed";
+  const waitingForConfirmation = role === "agency"
+    && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage);
   const rowBusy = busy === `traveller-${traveller.id}`;
   const [signed, setSigned] = useState<Record<string, string>>({});
   const [visaRef, setVisaRef] = useState(traveller.visa_reference ?? "");
@@ -3413,6 +3884,17 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
         })}
       </div>
 
+      {waitingForConfirmation && (
+        <p className="booking-workflow-lock">
+          <Lock size={13} />
+          {tr(
+            "سەرەتا حیجزەکە وەربگرە و پارەدان پشتڕاست بکەرەوە؛ پاشان پێداچوونەوەی بەڵگەنامە و ڤیزا چالاک دەبێت.",
+            "اقبل الحجز وأكد الدفع أولاً؛ بعدها تتاح مراجعة المستندات والتأشيرة.",
+            "Accept the booking and confirm payment before document and visa work begins.",
+          )}
+        </p>
+      )}
+
       {canReview && (
         <div className="booking-review-actions">
           <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || traveller.document_status === "approved" || traveller.document_status === "missing"}>
@@ -3473,12 +3955,12 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
 function bookingJourneyStage(stage: string, docs: string[], visas: string[]): number {
   if (["ready", "in_progress", "completed"].includes(stage)) return 4;
   if (["cancelled", "rejected", "expired"].includes(stage)) return 0;
-  if (stage === "awaiting_payment" || stage === "requested") return 1;
-  // confirmed / needs_information → derived from traveller statuses, same precedence as the app
+  if (["requested", "needs_information", "awaiting_payment"].includes(stage)) return 1;
+  // confirmed → derived from traveller statuses, same precedence as the app
   if (visas.includes("rejected")) return 3;
   if (visas.includes("submitted") || visas.includes("under_review")) return 3;
   if (visas.length > 0 && visas.every((v) => v === "approved")) return 3;
-  if (docs.includes("rejected") || stage === "needs_information") return 2;
+  if (docs.includes("rejected")) return 2;
   const submitted = new Set(["uploaded", "under_review", "approved"]);
   if (docs.length === 0 || docs.some((d) => !submitted.has(d))) return 2;
   if (docs.includes("uploaded") || docs.includes("under_review")) return 2;
@@ -3549,6 +4031,7 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
   const [rooms, setRooms] = useState<Array<{ id: string; city: string; label: string; capacity: number; gender_policy: string }>>([]);
   const [assignments, setAssignments] = useState<Array<{ room_id: string; traveller_id: string }>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+  const [cashReceiptOpen, setCashReceiptOpen] = useState(false);
 
   useScrollLock();
 
@@ -3588,8 +4071,17 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
     await runAction(`booking-${bookingId}`, () => getSupabase().rpc("transition_booking", { p_booking_id: bookingId, p_action: action, p_reason: reason }), tr("دۆخی حیجز نوێکرایەوە.", "تم تحديث حالة الحجز.", "Booking updated."));
   }
 
-  async function confirmCash() {
-    await runAction(`booking-${bookingId}`, () => getSupabase().rpc("confirm_cash_received", { p_booking_id: bookingId, p_amount_iqd: null }), tr("پارەی نەختینە پشتڕاستکرایەوە.", "تم تأكيد الدفع النقدي.", "Cash payment confirmed."));
+  async function confirmCashReceipt(receiptNumber: string) {
+    const result = await runAction(
+      `booking-${bookingId}`,
+      () => getSupabase().rpc("confirm_cash_receipt", {
+        p_booking_id: bookingId,
+        p_receipt_number: receiptNumber,
+        p_amount_iqd: null,
+      }),
+      tr("پسوڵە تۆمارکرا و حیجزەکە پشتڕاستکرایەوە.", "تم تسجيل الإيصال وتأكيد الحجز.", "Receipt recorded and booking confirmed."),
+    );
+    if (result) setCashReceiptOpen(false);
   }
 
   if (!booking) return null;
@@ -3602,6 +4094,22 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
   // The booking row has no return date, so it is read off the package.
   const bookingReturnDate = data.trips.find((item) => item.id === booking.package_id)?.return_date ?? null;
   const bookingNights = nightsBetween(booking.departure_date, bookingReturnDate);
+  const cashLocationType = booking.cash_payment_location_type === "company_office"
+    ? tr("نووسینگەی کۆمپانیای گەشت", "مكتب شركة السفر", "Travel company office")
+    : booking.cash_payment_location_type
+      ? tr("شوێنی پارەدانی ڕێگەپێدراوی تەواف", "موقع دفع معتمد من طواف", "Tawaf-authorized payment location")
+      : tr("شوێن دیاری نەکراوە", "لم يحدد الموقع", "Location not assigned");
+  const hasCashLocation = Boolean(
+    booking.cash_payment_location_type
+    || booking.cash_payment_location_name
+    || booking.cash_payment_location_address
+    || booking.cash_payment_location_hours,
+  );
+  const hasPaymentProof = Boolean(
+    booking.payment_receipt_number
+    || booking.payment_confirmation_code
+    || booking.payment_confirmed_at,
+  );
 
   return (
     <div className="booking-modal-scrim" onClick={onClose}>
@@ -3631,6 +4139,30 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
             <div><small>{tr("بەرواری گەڕانەوە", "العودة", "Return")}</small><b>{formatDate(bookingReturnDate, true)}{bookingNights ? <em className="booking-nights"> · {bookingNights} {tr("شەو", "ليلة", bookingNights === 1 ? "night" : "nights")}</em> : null}</b></div>
             {expirySoon && <div><small>{tr("کۆتایی داواکاری", "انتهاء الطلب", "Request expires")}</small><b className={booking.expires_at && new Date(booking.expires_at) < new Date() ? "is-past" : undefined}>{relativeTime(booking.expires_at!)}</b></div>}
           </section>
+          {(booking.pay_method === "cash" || hasPaymentProof || booking.accepted_at) && (
+            <section className="booking-payment-proof">
+              <header>
+                {booking.pay_method === "cash" ? <MapPin size={16} /> : <TicketCheck size={16} />}
+                <div>
+                  <small>{booking.pay_method === "cash"
+                    ? tr("شوێنی پارەدانی نەختینە", "مكان الدفع النقدي", "Cash payment location")
+                    : tr("پشتڕاستکردنەوەی پارەدان", "تأكيد الدفع", "Payment confirmation")}</small>
+                  <b>{booking.pay_method === "cash" ? cashLocationType : titleCase(booking.pay_method)}</b>
+                </div>
+              </header>
+              {booking.pay_method === "cash" && (
+                hasCashLocation
+                  ? <p>{[booking.cash_payment_location_name, booking.cash_payment_location_address, booking.cash_payment_location_hours].filter(Boolean).join(" · ")}</p>
+                  : <p>{tr("شوێنی پارەدان هێشتا بۆ ئەم حیجزە دیاری نەکراوە.", "لم يتم تعيين مكان الدفع لهذا الحجز بعد.", "A payment location has not been assigned to this booking yet.")}</p>
+              )}
+              <dl>
+                {booking.accepted_at && <div><dt>{tr("وەرگیراوە لە", "تم القبول في", "Accepted at")}</dt><dd>{formatDateTime(booking.accepted_at, locale)}</dd></div>}
+                {booking.payment_receipt_number && <div><dt>{tr("ژمارەی پسوڵە", "رقم الإيصال", "Receipt number")}</dt><dd dir="ltr">{booking.payment_receipt_number}</dd></div>}
+                {booking.payment_confirmation_code && <div><dt>{tr("کۆدی پشتڕاستکردنەوە", "رمز التأكيد", "Confirmation code")}</dt><dd dir="ltr">{booking.payment_confirmation_code}</dd></div>}
+                {booking.payment_confirmed_at && <div><dt>{tr("پارەدان پشتڕاستکرا لە", "تم تأكيد الدفع في", "Payment confirmed at")}</dt><dd>{formatDateTime(booking.payment_confirmed_at, locale)}</dd></div>}
+              </dl>
+            </section>
+          )}
           {booking.note && <p className="booking-note"><FileText size={12} /> {booking.note}</p>}
 
           <div className="booking-section-title"><UserRound size={14} /> {tr("زیارەتکاران و بەڵگەنامەکان", "المعتمرون والمستندات", "Pilgrims & documents")}{canManage && awaitingReview > 0 && <span className="booking-queue-badge">{awaitingReview}</span>}</div>
@@ -3655,11 +4187,14 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
         </div>
 
         <footer className="booking-modal-actions">
-          {canManage && booking.pay_method === "cash" && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && (
-            <button type="button" className="approve" onClick={confirmCash} disabled={bookingBusy}><Banknote size={14} /> {tr("پشتڕاستکردنی پارەی نەختینە", "تأكيد الدفع النقدي", "Confirm cash received")}</button>
+          {canManage && ["requested", "needs_information"].includes(booking.operational_stage) && (
+            <button type="button" className="approve" onClick={() => transition("accept")} disabled={bookingBusy}><Check size={14} /> {tr("وەرگرتنی حیجز", "قبول الحجز", "Accept booking")}</button>
           )}
-          {booking.pay_method === "fib" && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && (
-            <span className="booking-readonly-note"><CreditCard size={14} /> {tr("پارەدانی FIB خۆکارانە پشتڕاست دەکرێتەوە", "دفع FIB يُؤكَّد تلقائياً", "FIB payment confirms automatically")}</span>
+          {canManage && booking.pay_method === "cash" && booking.operational_stage === "awaiting_payment" && (
+            <button type="button" className="approve" onClick={() => setCashReceiptOpen(true)} disabled={bookingBusy}><Banknote size={14} /> {tr("تۆمارکردنی پسوڵە", "تسجيل الإيصال", "Record cash receipt")}</button>
+          )}
+          {booking.pay_method === "fib" && booking.operational_stage === "awaiting_payment" && (
+            <span className="booking-readonly-note"><CreditCard size={14} /> {tr("چاوەڕێی پشتڕاستکردنەوەی خۆکاری پارەدانی FIB", "بانتظار التأكيد التلقائي لدفع FIB", "Waiting for automatic FIB payment confirmation")}</span>
           )}
           {canManage && ["requested", "needs_information"].includes(booking.operational_stage) && (
             <button type="button" onClick={() => transition("request_information")} disabled={bookingBusy}>{tr("داوای زانیاری", "طلب معلومات", "Request info")}</button>
@@ -3691,6 +4226,15 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
         </footer>
       </div>
       {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} />}
+      {cashReceiptOpen && (
+        <CashReceiptDialog
+          booking={booking}
+          locale={locale}
+          busy={bookingBusy}
+          onCancel={() => setCashReceiptOpen(false)}
+          onSubmit={confirmCashReceipt}
+        />
+      )}
     </div>
   );
 }
@@ -4128,6 +4672,7 @@ function BookingCard({
   // response, and RLS is what actually decides who may read it. This only stops
   // a full grid of client numbers being readable over someone's shoulder.
   const [phoneShown, setPhoneShown] = useState(false);
+  const [cashReceiptOpen, setCashReceiptOpen] = useState(false);
 
   const total = Number(booking.total_iqd);
   const paid = Number(booking.amount_paid_iqd);
@@ -4140,7 +4685,7 @@ function BookingCard({
   const msLeft = booking.expires_at ? new Date(booking.expires_at).getTime() - now : null;
   const level = msLeft == null ? null : countdownLevel(msLeft);
   const showCountdown = tier === "urgent" && msLeft != null;
-  const awaitingClient = tier === "urgent" && booking.pay_method !== "cash";
+  const awaitingClient = booking.operational_stage === "awaiting_payment";
 
   const days = daysUntil(booking.departure_date);
   const proximity = proximityLabel(days, locale);
@@ -4148,6 +4693,19 @@ function BookingCard({
   const blocker = blockerLabel(blockers, locale);
   const inert = tier === "inert";
   const PayIcon = booking.pay_method === "cash" ? Banknote : booking.pay_method === "card" ? CreditCard : WalletCards;
+
+  async function confirmCashReceipt(receiptNumber: string) {
+    const result = await runAction(
+      `booking-${booking.id}`,
+      () => getSupabase().rpc("confirm_cash_receipt", {
+        p_booking_id: booking.id,
+        p_receipt_number: receiptNumber,
+        p_amount_iqd: null,
+      }),
+      tr("پسوڵە تۆمارکرا و حیجزەکە پشتڕاستکرایەوە.", "تم تسجيل الإيصال وتأكيد الحجز.", "Receipt recorded and booking confirmed."),
+    );
+    if (result) setCashReceiptOpen(false);
+  }
 
   return (
     <article
@@ -4256,8 +4814,25 @@ function BookingCard({
           <button type="button" className="portal-action-button" onClick={onOpen}>
             {tier === "blocked" ? <><FileCheck2 size={14} /> {tr("بەڵگەنامەکان", "المستندات", "Documents")}</> : <><FileText size={14} /> {tr("پێداچوونەوە", "مراجعة", "Review")}</>}
           </button>
-          <BookingActions booking={booking} busy={busy === `booking-${booking.id}`} transition={transition} role={role} runAction={runAction} locale={locale} visasReady={visasReady} />
+          <BookingActions
+            booking={booking}
+            busy={busy === `booking-${booking.id}`}
+            transition={transition}
+            role={role}
+            locale={locale}
+            visasReady={visasReady}
+            onRecordReceipt={() => setCashReceiptOpen(true)}
+          />
         </div>
+      )}
+      {cashReceiptOpen && (
+        <CashReceiptDialog
+          booking={booking}
+          locale={locale}
+          busy={busy === `booking-${booking.id}`}
+          onCancel={() => setCashReceiptOpen(false)}
+          onSubmit={confirmCashReceipt}
+        />
       )}
     </article>
   );
@@ -4271,16 +4846,28 @@ function visasReadyByBooking(travellers: BookingTraveller[], bookingId: string) 
   return rows.length > 0 && rows.every((item) => item.visa_status === "approved");
 }
 
-function BookingActions({ booking, busy, transition, role, runAction, locale, visasReady }: { booking: Booking; busy: boolean; transition: (action: string) => void; role: Role; runAction: RunAction; locale: "ku" | "ar" | "en"; visasReady: boolean }) {
+function BookingActions({ booking, busy, transition, role, locale, visasReady, onRecordReceipt }: {
+  booking: Booking;
+  busy: boolean;
+  transition: (action: string) => void;
+  role: Role;
+  locale: "ku" | "ar" | "en";
+  visasReady: boolean;
+  onRecordReceipt: () => void;
+}) {
   const t = dashboardTranslations[locale];
   if (busy) return <TawafLoadingSpinner size={16} />;
+  if (role !== "agency") return null;
   if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage)) {
     return (
       <div className="portal-row-actions">
-        {role === "agency" && booking.pay_method === "cash" && (
-          <button type="button" className="approve" onClick={() => runAction(`booking-${booking.id}`, () => getSupabase().rpc("confirm_cash_received", { p_booking_id: booking.id, p_amount_iqd: null }), locale === "ku" ? "پارەی نەختینە پشتڕاستکرایەوە." : locale === "ar" ? "تم تأكيد الدفع النقدي." : "Cash payment confirmed.")}><Banknote size={14} /> {t.confirmCash}</button>
+        {["requested", "needs_information"].includes(booking.operational_stage) && (
+          <button type="button" className="approve" onClick={() => transition("accept")}><Check size={14} /> {locale === "ku" ? "وەرگرتن" : locale === "ar" ? "قبول" : "Accept"}</button>
         )}
-        {booking.operational_stage === "requested" && <button type="button" onClick={() => transition("request_information")}>{t.requestInfo}</button>}
+        {booking.operational_stage === "awaiting_payment" && booking.pay_method === "cash" && (
+          <button type="button" className="approve" onClick={onRecordReceipt}><Banknote size={14} /> {locale === "ku" ? "تۆمارکردنی پسوڵە" : locale === "ar" ? "تسجيل الإيصال" : "Record receipt"}</button>
+        )}
+        {["requested", "needs_information"].includes(booking.operational_stage) && <button type="button" onClick={() => transition("request_information")}>{t.requestInfo}</button>}
         <button type="button" className="danger" onClick={() => transition("reject")}>{t.reject}</button>
       </div>
     );
@@ -4303,60 +4890,6 @@ function BookingActions({ booking, busy, transition, role, runAction, locale, vi
   }
   if (booking.operational_stage === "in_progress") return <button type="button" className="portal-action-button" onClick={() => transition("complete")}><Check size={14} /> {t.complete}</button>;
   return null;
-}
-
-function FinancePage({ role, data, busy, runAction, locale }: { role: Role; data: PortalData; busy: string; runAction: RunAction; locale: "ku" | "ar" | "en" }) {
-  const t = dashboardTranslations[locale];
-  const collected = data.payments.filter((item) => item.status === "succeeded").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const commissionOwed = data.commissions.filter((item) => item.status === "owed").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const commissionCollected = data.commissions.filter((item) => item.status === "collected").reduce((sum, item) => sum + Number(item.amount_iqd), 0);
-  const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
-
-  return (
-    <>
-      <PageHeading eyebrow={locale === "ku" ? "ئۆپەراسیۆنە دارایییەکان" : locale === "ar" ? "العمليات المالية" : "Financial operations"} title={role === "admin" ? t.finance : t.bookingValue} description={role === "admin" ? (locale === "ku" ? "چاودێری پارەدانەکانی بازاڕ و تسویەی کۆمسیۆنی کۆمپانیاکان بکە." : locale === "ar" ? "تتبع مدفوعات السوق وتسوية عمولة الشركة." : "Track marketplace payments and company commission settlement.") : (locale === "ku" ? "پارە وەرگیراوەکان، کۆمسیۆنی تەواف، حیساباتی خۆت و مێژووی دەرهێنانی پارە ببینە." : locale === "ar" ? "شاهد المدفوعات المستلمة، وعمولة طواف، ودفتر الحسابات وتاريخ عمليات السحب." : "See received payments, Tawaf commission, your ledger and payout history.")} />
-      <section className="portal-metric-grid">
-        <MetricCard icon={WalletCards} label={t.paymentsReceived} value={formatIqd(collected, true)} detail={locale === "ku" ? `${data.payments.filter((item) => item.status === "succeeded").length} پارەدانی سەرکەوتوو` : locale === "ar" ? `${data.payments.filter((item) => item.status === "succeeded").length} مدفوعات ناجحة` : `${data.payments.filter((item) => item.status === "succeeded").length} successful payments`} tone="green" />
-        <MetricCard icon={Clock3} label={t.totalOwed} value={formatIqd(commissionOwed, true)} detail={locale === "ku" ? `${data.commissions.filter((item) => item.status === "owed").length} بڕگەی کراوە` : locale === "ar" ? `${data.commissions.filter((item) => item.status === "owed").length} عناصر مفتوحة` : `${data.commissions.filter((item) => item.status === "owed").length} open items`} tone="gold" />
-        <MetricCard icon={BadgeCheck} label={locale === "ku" ? "کۆمسیۆنی یەکلاکراوە" : locale === "ar" ? "العمولة المسواة" : "Commission settled"} value={formatIqd(commissionCollected, true)} detail={locale === "ku" ? "کۆکراوەتەوە لەلایەن تەواف" : locale === "ar" ? "تم تحصيلها بواسطة طواف" : "Collected by Tawaf"} tone="teal" />
-        <MetricCard icon={Banknote} label={role === "admin" ? (locale === "ku" ? "پارەدانەکانی پلاتفۆرم" : locale === "ar" ? "مدفوعات المنصة" : "Platform payments") : t.netEarnings} value={formatIqd(Math.max(0, collected - commissionOwed), true)} detail={locale === "ku" ? "دوای کۆمسیۆنەکان" : locale === "ar" ? "بعد العمولة المفتوحة" : "After open commission"} tone="sand" />
-      </section>
-
-      <section className="portal-overview-grid finance">
-        <article className="portal-panel">
-          <PanelHeader title={locale === "ku" ? "دەفتەری کۆمسیۆن" : locale === "ar" ? "دفتر الأستاذ للعمولة" : "Commission ledger"} subtitle={role === "admin" ? (locale === "ku" ? "دۆخی تسویە بەپێی کۆمپانیا" : locale === "ar" ? "حالة التسوية حسب الشركة" : "Settlement status by company") : (locale === "ku" ? "کۆمسیۆنی دروستبوو لە حیجزەکانتدا" : locale === "ar" ? "العمولة الناتجة عن حجوزاتك" : "Commission generated by your bookings")} />
-          {data.commissions.length ? (
-            <div className="portal-finance-list">
-              {data.commissions.slice(0, 8).map((item) => (
-                <div key={item.id}>
-                  <span className={`portal-row-icon ${item.status === "collected" ? "positive" : "warning"}`}><CircleDollarSign size={17} /></span>
-                  <div><b>{role === "admin" ? companyMap.get(item.company_id) ?? "Company" : (locale === "ku" ? `حیجزی #${item.booking_id.slice(0, 8).toUpperCase()}` : locale === "ar" ? `حجز #${item.booking_id.slice(0, 8).toUpperCase()}` : `Booking #${item.booking_id.slice(0, 8).toUpperCase()}`)}</b><small>{formatDate(item.created_at, true)}</small></div>
-                  <strong>{formatIqd(item.amount_iqd)}</strong>
-                  <StatusPill status={item.status} />
-                  {role === "admin" && item.status === "owed" && <button type="button" onClick={() => runAction(`commission-${item.id}`, () => getSupabase().from("commissions").update({ status: "collected", collected_at: new Date().toISOString() }).eq("id", item.id), locale === "ku" ? "کۆمسیۆن وەک کۆکراوە نیشان کرا." : locale === "ar" ? "تم تحديد العمولة كمحصلة." : "Commission marked as collected.")} disabled={busy === `commission-${item.id}`}>{busy === `commission-${item.id}` ? <TawafLoadingSpinner size={14} /> : (locale === "ku" ? "نیشانکردنی کۆکراوە" : locale === "ar" ? "تحديد كمحصل" : "Mark collected")}</button>}
-                </div>
-              ))}
-            </div>
-          ) : <EmptyInline text={locale === "ku" ? "هیچ کۆمسیۆنێک هێشتا نییە." : locale === "ar" ? "لا توجد قيود عمولة بعد." : "No commission entries yet."} />}
-        </article>
-
-        <article className="portal-panel">
-          <PanelHeader title={role === "admin" ? (locale === "ku" ? "دوایین پارەدانەکان" : locale === "ar" ? "أحدث المدفوعات" : "Latest payments") : (locale === "ku" ? "چالاکییەکانی جزدان" : locale === "ar" ? "نشاط المحفظة" : "Wallet activity")} subtitle={locale === "ku" ? "چالاکی دارایی پشتڕاستکراوە" : locale === "ar" ? "النشاط المالي المعتمد" : "Verified financial activity"} />
-          <div className="portal-finance-list">
-            {(role === "agency" && data.ledger.length ? data.ledger : data.payments).slice(0, 8).map((item: any) => (
-              <div key={item.id}>
-                <span className="portal-row-icon positive">{Number(item.amount_iqd) >= 0 ? <ArrowDownRight size={17} /> : <ArrowUpRight size={17} />}</span>
-                <div><b>{item.description ?? (item.method ? titleCase(item.method) : titleCase(item.entry_type ?? "Payment"))}</b><small>{formatDate(item.created_at, true)}</small></div>
-                <strong>{formatIqd(item.amount_iqd)}</strong>
-                <StatusPill status={item.status ?? "completed"} />
-              </div>
-            ))}
-            {!(role === "agency" && data.ledger.length ? data.ledger : data.payments).length && <EmptyInline text={locale === "ku" ? "چالاکی دارایی لێرەدا دەردەکەوێت." : locale === "ar" ? "سوف يظهر النشاط المالي هنا." : "Financial activity will appear here."} />}
-          </div>
-        </article>
-      </section>
-    </>
-  );
 }
 
 function MessagesPage({ data, profile, busy, runAction, locale }: { data: PortalData; profile: Profile; busy: string; runAction: RunAction; locale: "ku" | "ar" | "en" }) {

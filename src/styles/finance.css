@@ -1,0 +1,724 @@
+/* Financial workspace — admin and company.
+   Builds on portal.css: .portal-table, .portal-status, .portal-metric and
+   .portal-modal are reused as-is so the ledger looks like the rest of the
+   portal. Only what is specific to money lives here.
+
+   Loaded AFTER portal-theme.css (index.tsx imports the theme at the top and
+   finance.tsx further down), so anything set here wins — which is why the type
+   sizes below match the theme's 10–14px scale rather than fighting it. */
+
+.finance-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.finance-workspace .portal-metric-grid { margin-bottom: 2px; }
+/* These metrics are read-outs, not links, so they must not inherit the
+   button hover lift .portal-metric gets elsewhere. */
+.finance-workspace .portal-metric { cursor: default; }
+
+/* ---------------------------------------------------------------- *
+ * Tabs
+ * ---------------------------------------------------------------- */
+
+.finance-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 14px;
+  background: #fffdf7;
+}
+
+.finance-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  color: #4e6259;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.finance-tabs button:hover { color: #0f5c4d; background: rgba(15, 92, 77, .055); }
+.finance-tabs button.active { color: #fff; background: #0f5c4d; }
+.finance-tabs button:focus-visible { outline: 2px solid #0f5c4d; outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- *
+ * Period picker
+ * ---------------------------------------------------------------- */
+
+.finance-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 14px;
+  background: #fbfcfa;
+}
+
+.finance-period-icon { display: inline-flex; color: #0f5c4d; }
+
+.finance-period-presets { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.finance-period-presets button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #4e6259;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.finance-period-presets button:hover { border-color: rgba(15, 92, 77, .22); }
+.finance-period-presets button.active {
+  color: #0f5c4d;
+  border-color: rgba(15, 92, 77, .35);
+  background: rgba(15, 92, 77, .07);
+}
+
+.finance-period-custom { display: flex; align-items: center; gap: 6px; }
+.finance-period-custom span { color: #8b968f; font-size: 11px; }
+.finance-period-custom input {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.finance-period-range {
+  margin-inline-start: auto;
+  color: #8b968f;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- *
+ * Deltas on the metric cards
+ * ---------------------------------------------------------------- */
+
+.finance-delta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.finance-delta-row em { color: #9aaba4; font-size: 10px; font-style: normal; }
+
+.finance-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Direction × whether up is good — a rising expense is not a win. */
+.finance-delta.good { color: #0a6b46; background: rgba(13, 134, 102, .11); }
+.finance-delta.bad { color: #97392f; background: rgba(168, 68, 58, .1); }
+.finance-delta.muted { color: #8b968f; background: rgba(139, 150, 143, .12); }
+
+/* ---------------------------------------------------------------- *
+ * Currency columns
+ * ---------------------------------------------------------------- */
+
+/* Numbers stay right-aligned in every locale and the cells carry dir="ltr" in
+   the markup, so "-IQD 230,252" never reorders into "IQD 230,252-" in Arabic
+   or Kurdish. This is the standard convention for currency in RTL text. */
+.finance-table th.finance-num,
+.finance-table td.finance-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-table td.finance-num small {
+  display: block;
+  margin-top: 3px;
+  color: #8a9690;
+  font-size: 10px;
+}
+
+.finance-amount { font-weight: 800; }
+.finance-amount.credit { color: #0a6b46; }
+.finance-amount.debit { color: #97392f; }
+
+.finance-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: .3px;
+  color: #60736b;
+}
+
+.finance-trip {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-entry-tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 7px;
+  color: #4e6259;
+  background: #eef2ef;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.finance-table tbody tr { cursor: default; }
+.finance-table td > small { display: block; margin-top: 4px; color: #8a9690; font-size: 10px; }
+.finance-table td.finance-action { text-align: end; white-space: nowrap; }
+
+.finance-row-active { background: rgba(15, 92, 77, .05) !important; }
+/* Voided rows stay legible — they are still evidence — but read as retired. */
+.finance-row-void td { opacity: .55; text-decoration: line-through; }
+.finance-row-void td:last-child { text-decoration: none; }
+
+.finance-ok { color: #0a6b46; vertical-align: middle; }
+.finance-bad { color: #97392f; vertical-align: middle; }
+
+.finance-pay {
+  min-height: 32px;
+  padding: 0 13px;
+  font-size: 11.5px;
+}
+
+.finance-sort,
+.finance-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  color: #0f5c4d;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.finance-sort:hover,
+.finance-icon-button:hover { border-color: rgba(15, 92, 77, .28); }
+.finance-icon-button { padding: 0 9px; margin-inline-start: 5px; }
+.finance-icon-button.danger { color: #97392f; border-color: rgba(168, 68, 58, .2); }
+
+.finance-inline-select {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.finance-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8b968f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- *
+ * Filter bar
+ * ---------------------------------------------------------------- */
+
+.finance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  background: #fbfcfa;
+}
+
+.finance-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.finance-filters label > small {
+  color: #4e6259;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.finance-filters input,
+.finance-filters select {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  outline: 0;
+  color: inherit;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.finance-filters input:focus,
+.finance-filters select:focus { border-color: rgba(15, 92, 77, .35); }
+
+.finance-filters label.finance-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+}
+
+.finance-filters label.finance-check input { min-height: 0; width: 15px; height: 15px; }
+
+.finance-filter-total {
+  margin-inline-start: auto;
+  color: #14251f;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-search {
+  flex: 1 1 200px;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  background: #fff;
+  color: #8a9690;
+}
+
+.finance-search input {
+  flex: 1;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.finance-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(184, 76, 66, .22);
+  border-radius: 9px;
+  color: #97392f;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.finance-export { display: flex; gap: 8px; }
+
+/* ---------------------------------------------------------------- *
+ * Charts
+ * ---------------------------------------------------------------- */
+
+.finance-chart-panel .portal-panel-header { align-items: flex-start; }
+.finance-chart-actions { display: flex; gap: 8px; align-items: center; }
+
+.finance-chart-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.finance-chart {
+  padding: 14px 18px 6px;
+}
+
+/* The tooltip's containing block, sized exactly to the SVG so a percentage
+   offset means the same thing in both. */
+.finance-chart-plot { position: relative; }
+
+/* Scales uniformly: stretching the viewBox to a fixed pixel height would
+   distort the 2px strokes and the axis type along with it. */
+.finance-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.finance-chart rect[fill="transparent"] { cursor: crosshair; }
+
+.finance-tooltip {
+  position: absolute;
+  top: 8px;
+  /* Physical, like `left` above — a logical translation would flip in RTL and
+     undo the correction. */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 132px;
+  padding: 9px 11px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 10px;
+  background: #fffdf7;
+  box-shadow: 0 12px 30px rgba(18, 59, 48, .12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.finance-tooltip b { color: #14251f; font-size: 11px; }
+.finance-tooltip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4e6259;
+  font-size: 11px;
+}
+.finance-tooltip i { width: 8px; height: 8px; border-radius: 3px; flex: 0 0 auto; }
+.finance-tooltip em {
+  margin-inline-start: auto;
+  color: #14251f;
+  font-style: normal;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 2px 10px;
+}
+
+.finance-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #4e6259;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.finance-legend i { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ---------------------------------------------------------------- *
+ * Bar charts
+ * ---------------------------------------------------------------- */
+
+.finance-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 18px 18px;
+}
+
+.finance-bar-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 168px) 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.finance-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #4e6259;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.finance-bar-track {
+  position: relative;
+  display: block;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(15, 92, 77, .05);
+}
+
+/* Square at the baseline, rounded at the data end — the end that carries the
+   value is the end that gets the radius. */
+.finance-bar-track i {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: block;
+  border-radius: 0 4px 4px 0;
+}
+
+[dir="rtl"] .finance-bar-track i { border-radius: 4px 0 0 4px; }
+
+/* The budget marker is a rule on the same axis, not a competing bar. */
+.finance-bar-marker {
+  position: absolute;
+  inset-block: -3px;
+  width: 2px;
+  border-radius: 1px;
+  background: #4e6259;
+}
+
+.finance-bar-value {
+  color: #14251f;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.finance-bar-value.negative { color: #97392f; }
+
+/* ---------------------------------------------------------------- *
+ * Budgets
+ * ---------------------------------------------------------------- */
+
+.finance-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.finance-budget-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 13px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 12px;
+  background: #fbfcfa;
+}
+
+.finance-budget-cell.over { border-color: rgba(168, 68, 58, .3); background: rgba(168, 68, 58, .04); }
+.finance-budget-cell b { color: #14251f; font-size: 12px; }
+.finance-budget-cell small { color: #8b968f; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+.finance-budget-cell input {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- *
+ * Statement
+ * ---------------------------------------------------------------- */
+
+.finance-statement-head {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  background: #fbfcfa;
+}
+
+.finance-statement-head div { display: flex; flex-direction: column; gap: 4px; }
+.finance-statement-head small { color: #8b968f; font-size: 11px; font-weight: 700; }
+.finance-statement-head b {
+  color: #14251f;
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- *
+ * Modals
+ * ---------------------------------------------------------------- */
+
+.finance-modal { width: min(620px, 100%); }
+.finance-modal.narrow { width: min(440px, 100%); }
+.finance-modal .portal-form-grid { padding-bottom: 4px; }
+
+.finance-modal .portal-form-grid label.finance-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.finance-modal .portal-form-grid label.finance-check input { width: 15px; height: 15px; min-height: 0; }
+
+.finance-inline-link {
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  color: #0f5c4d;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.finance-modal-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #4e6259;
+  background: rgba(15, 92, 77, .05);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.finance-modal-note svg { flex: 0 0 auto; color: #0f5c4d; }
+
+/* ---------------------------------------------------------------- *
+ * Print / PDF
+ * ---------------------------------------------------------------- */
+
+/* Reconciliation happens on paper often enough that "Print / PDF" has to give
+   the numbers alone, not the whole shell around it. Charts print: they are the
+   report, not decoration. */
+@media print {
+  body * { visibility: hidden; }
+  .finance-workspace,
+  .finance-workspace * { visibility: visible; }
+  .finance-workspace {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+  }
+  .finance-filters,
+  .finance-export,
+  .finance-sort,
+  .finance-icon-button,
+  .finance-tabs,
+  .finance-period-presets,
+  .finance-chart-actions,
+  .finance-action,
+  .finance-tooltip,
+  .portal-modal-backdrop { display: none !important; }
+  .portal-panel { box-shadow: none; border-color: #ddd; break-inside: avoid; }
+  .finance-chart-pair { grid-template-columns: 1fr; }
+  .finance-table { font-size: 10px; }
+}
+
+/* ---------------------------------------------------------------- *
+ * Narrow screens
+ * ---------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .finance-workspace .portal-metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .finance-chart-pair { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .finance-workspace .portal-metric-grid { grid-template-columns: 1fr; }
+  .finance-filters > label,
+  .finance-search { flex: 1 1 100%; }
+  .finance-export { width: 100%; }
+  .finance-export button { flex: 1; }
+  .finance-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .finance-tabs button { flex: 0 0 auto; }
+  .finance-period-range { margin-inline-start: 0; }
+  .finance-bar-row { grid-template-columns: minmax(76px, 110px) 1fr auto; gap: 8px; }
+  .finance-statement-head { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------- *
+ * Server-paged ledger
+ * ---------------------------------------------------------------- */
+
+.finance-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 34px 18px;
+  color: #8b968f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.finance-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+}
+
+.finance-pager span {
+  color: #8b968f;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-pager button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Only rows that lead somewhere say so. */
+.finance-table tbody tr.finance-row-clickable { cursor: pointer; }
+.finance-table tbody tr.finance-row-clickable:hover td { background: rgba(15, 92, 77, .045); }
+
+/* ---------------------------------------------------------------- *
+ * Booking earnings drill-down
+ * ---------------------------------------------------------------- */
+
+.finance-earnings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 18px;
+  padding: 20px 22px 6px;
+}
+
+.finance-earnings-grid > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.finance-earnings-grid > div.full { grid-column: 1 / -1; }
+.finance-earnings-grid small { color: #8b968f; font-size: 11px; font-weight: 700; }
+.finance-earnings-grid b {
+  color: #14251f;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* A tier that was never recorded must not look like a tier called "—". */
+.finance-unknown { color: #8b968f; font-size: 12px; font-style: normal; font-weight: 700; }
+
+.finance-modal .finance-modal-note { margin: 10px 22px 0; }
+
+@media (max-width: 600px) {
+  .finance-earnings-grid { grid-template-columns: 1fr; }
+}

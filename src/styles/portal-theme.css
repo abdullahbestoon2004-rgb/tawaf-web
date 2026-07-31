@@ -83,7 +83,6 @@
 .portal-topbar-title b { font-size: 16px; font-weight: 700; }
 .portal-live { font-size: 11px; color: #0f5c4d; border-color: rgba(15, 92, 77, 0.18); }
 .portal-topbar-actions > button { border-radius: 100px; }
-.portal-user-top { background: #0f5c4d; }
 
 /* ---------- Page headings ---------- */
 .portal-page-heading p { font-size: 12px; color: #b68a33; letter-spacing: 1.5px; }
@@ -362,7 +361,6 @@
 [dir="rtl"] .portal-metric > svg { right: auto; left: 17px; transform: scaleX(-1); }
 [dir="rtl"] .portal-topbar-actions > button i { right: auto; left: 7px; }
 [dir="rtl"] .portal-live { margin-right: 0; margin-left: 4px; }
-[dir="rtl"] .portal-user-top { margin-left: 0; margin-right: 3px; }
 [dir="rtl"] .portal-company-card small span { margin-right: 0; margin-left: 5px; }
 
 @media (max-width: 900px) {
@@ -384,14 +382,17 @@
      from inside them — at a lower value the host modal covered it and the
      reason textarea could not be clicked at all. */
   z-index: 200;
-  display: grid;
-  place-items: center;
+  display: flex;
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(4, 29, 23, 0.55);
   backdrop-filter: blur(4px);
   animation: portal-fade-in 0.15s ease;
 }
 .portal-reason-dialog {
+  margin: auto;
+  flex: 0 0 auto;
   width: 460px;
   max-width: 100%;
   background: #fffdf7;
@@ -409,7 +410,8 @@
   line-height: 1.5;
   color: #14251f;
 }
-.portal-reason-dialog textarea {
+.portal-reason-dialog textarea,
+.portal-reason-dialog input {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid rgba(15, 92, 77, 0.2);
@@ -420,8 +422,28 @@
   font-size: 13px;
   color: #14251f;
   outline-color: #0f5c4d;
+}
+.portal-reason-dialog textarea {
   resize: vertical;
 }
+.portal-receipt-location {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  color: #0f5c4d;
+  background: rgba(15, 92, 77, 0.07);
+}
+.portal-receipt-location > svg { flex: none; margin-top: 2px; }
+.portal-receipt-location b,
+.portal-receipt-location small { display: block; }
+.portal-receipt-location b { font-size: 12px; }
+.portal-receipt-location small { margin-top: 4px; color: #667870; font-size: 11px; line-height: 1.55; }
+.portal-receipt-field { display: block; }
+.portal-receipt-field > span { display: block; margin-bottom: 7px; color: #46564f; font-size: 11px; font-weight: 800; }
+.portal-receipt-hint { margin: 9px 0 0; color: #7c8983; font-size: 10.5px; line-height: 1.55; }
 .portal-reason-actions {
   display: flex;
   justify-content: flex-end;
@@ -443,6 +465,7 @@
   justify-content: center;
   padding: 40px 20px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(4, 29, 23, 0.55);
   backdrop-filter: blur(4px);
   animation: portal-fade-in 0.15s ease;
@@ -509,6 +532,7 @@
 .portal-trip-modal-body {
   max-height: 62vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 20px 22px;
 }
 .portal-trip-modal-body .portal-review-note { margin: 0 0 16px; font-size: 12px; }
@@ -732,6 +756,88 @@
 @media (max-width: 680px) {
   .portal-topbar-actions .portal-bell-wrap > button:not(.portal-bell-scrim) { width: 35px; height: 35px; }
 }
+
+/* ---------- Language switcher (topbar) ---------- */
+/* A pill rather than a 37px circle: it carries the active language code beside
+   the icon, and the code is the point — a bare globe says a switcher exists but
+   not what it is set to. */
+.portal-lang-wrap { position: relative; }
+
+.portal-topbar-actions .portal-lang-wrap > button:not(.portal-bell-scrim) {
+  height: 37px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--portal-border);
+  border-radius: 100px;
+  color: #5f7069;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font: inherit;
+}
+
+.portal-topbar-actions .portal-lang-wrap > button > span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  /* The code is Latin in every locale, so it must not flip with the page. */
+  direction: ltr;
+}
+
+.portal-topbar-actions .portal-lang-wrap > button:not(.portal-bell-scrim):hover { color: #0f5c4d; background: #fff; }
+.portal-topbar-actions .portal-lang-wrap > button.is-open {
+  color: #0f5c4d;
+  background: #fff;
+  border-color: rgba(15, 92, 77, 0.35);
+}
+
+.portal-lang-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  inset-inline-end: 0;
+  z-index: 81;
+  min-width: 168px;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid rgba(15, 92, 77, 0.12);
+  border-radius: 14px;
+  background: #fffdf7;
+  box-shadow: 0 24px 50px rgba(2, 14, 11, 0.16);
+  animation: portal-modal-in 0.14s ease;
+}
+
+.portal-lang-menu > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 10px;
+  color: #14251f;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: start;
+}
+
+.portal-lang-menu > button:hover { background: rgba(15, 92, 77, 0.06); }
+.portal-lang-menu > button.is-active { color: #0f5c4d; background: rgba(15, 92, 77, 0.08); }
+.portal-lang-menu > button:focus-visible { outline: 2px solid #0f5c4d; outline-offset: -2px; }
+
+@media (max-width: 680px) {
+  /* The code drops away before the icon does — the icon still says what the
+     control is, and the open menu ticks the active language anyway. */
+  .portal-topbar-actions .portal-lang-wrap > button { padding: 0 11px; }
+  .portal-topbar-actions .portal-lang-wrap > button > span { display: none; }
+}
 .portal-bell-scrim {
   position: fixed;
   inset: 0;
@@ -794,6 +900,7 @@
   gap: 2px;
   max-height: 340px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .portal-bell-list > button {
   width: 100%;
@@ -1067,7 +1174,7 @@
 }
 .portal-drawer-tabs button:hover { color: #0f5c4d; background: rgba(15, 92, 77, .055); }
 .portal-drawer-tabs button.active { color: #fff; background: #0f5c4d; }
-.portal-drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 18px; }
+.portal-drawer-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px; display: flex; flex-direction: column; gap: 18px; }
 .portal-drawer-body section h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #7c8a82; }
 .portal-drawer-reason {
   display: flex;
@@ -1181,7 +1288,7 @@
 .booking-modal-scrim {
   position: fixed; inset: 0; z-index: 95;
   display: flex; align-items: flex-start; justify-content: center;
-  padding: 32px 18px; overflow-y: auto;
+  padding: 32px 18px; overflow-y: auto; overscroll-behavior: contain;
   background: rgba(4, 29, 23, 0.55); backdrop-filter: blur(4px);
   animation: portal-fade-in 0.15s ease;
 }
@@ -1210,12 +1317,32 @@
 }
 .booking-modal-close:hover { background: rgba(255,255,255,.22); }
 
-.booking-modal-body { padding: 20px 22px; overflow-y: auto; }
+.booking-modal-body { padding: 20px 22px; overflow-y: auto; overscroll-behavior: contain; }
 .booking-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; }
 .booking-summary-grid > div { display: flex; flex-direction: column; gap: 4px; }
 .booking-summary-grid small { color: #8b9791; font-size: 10.5px; }
 .booking-summary-grid b { color: #14251f; font-size: 13.5px; font-weight: 700; }
 .booking-summary-grid b.is-past { color: #9c493e; }
+.booking-payment-proof {
+  margin-top: 16px;
+  padding: 14px 15px;
+  border: 1px solid rgba(15,92,77,.12);
+  border-radius: 13px;
+  color: #14251f;
+  background: linear-gradient(135deg, rgba(15,92,77,.055), rgba(196,153,61,.055));
+}
+.booking-payment-proof > header { display: flex; align-items: flex-start; gap: 9px; color: #0f5c4d; }
+.booking-payment-proof > header > svg { flex: none; margin-top: 2px; }
+.booking-payment-proof > header small,
+.booking-payment-proof > header b { display: block; }
+.booking-payment-proof > header small { color: #78877f; font-size: 9.5px; }
+.booking-payment-proof > header b { margin-top: 2px; font-size: 12.5px; }
+.booking-payment-proof > p { margin: 9px 0 0 25px; color: #62736b; font-size: 11.5px; line-height: 1.6; }
+.booking-payment-proof > dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin: 12px 0 0; padding-top: 11px; border-top: 1px dashed rgba(15,92,77,.14); }
+.booking-payment-proof > dl:empty { display: none; }
+.booking-payment-proof > dl div { min-width: 0; }
+.booking-payment-proof dt { color: #839088; font-size: 9.5px; }
+.booking-payment-proof dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #213b33; font-size: 11.5px; font-weight: 750; }
 .booking-note { margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(196,153,61,.09); color: #6f5320; font-size: 12.5px; line-height: 1.6; display: flex; gap: 7px; }
 
 .booking-section-title { display: flex; align-items: center; gap: 8px; margin: 22px 0 12px; padding-top: 16px; border-top: 1px solid rgba(15,92,77,.1); color: #0f5c4d; font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
@@ -1286,6 +1413,19 @@
 .booking-inline-field button { flex: none; padding: 0 12px; height: 34px; border: 1px solid rgba(15,92,77,.18); border-radius: 8px; background: rgba(15,92,77,.06); color: #0f5c4d; font-size: 11.5px; font-weight: 700; cursor: pointer; }
 .booking-inline-field button:disabled { opacity: .5; cursor: default; }
 .booking-inline-note { display: block; margin-top: 6px; color: #9c493e; font-size: 11px; }
+.booking-workflow-lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: #755b1c;
+  background: rgba(196,153,61,.11);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.booking-workflow-lock > svg { flex: none; margin-top: 2px; }
 
 .booking-modal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 22px; border-top: 1px solid rgba(15,92,77,.12); background: #fbf8f0; }
 .booking-modal-actions > button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 15px; border: 1px solid var(--portal-border, rgba(15,92,77,.14)); border-radius: 10px; font-size: 12.5px; font-weight: 800; cursor: pointer; background: #fff; color: #2c3b35; }
@@ -1308,6 +1448,7 @@
 
 @media (max-width: 640px) {
   .booking-summary-grid { grid-template-columns: 1fr 1fr; }
+  .booking-payment-proof > dl { grid-template-columns: 1fr; }
   .booking-ops-grid { grid-template-columns: 1fr; }
 }
 
@@ -1365,12 +1506,57 @@
 }
 .portal-commercial-row .portal-secondary-button { min-height: 38px; padding: 0 18px; flex: none; }
 .portal-commercial-note { margin: 10px 0 0; color: #6c7a73; font-size: 11.5px; line-height: 1.6; }
+.portal-payment-location-form { display: flex; flex-direction: column; gap: 11px; }
+.portal-payment-location-form label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.portal-payment-location-form label small { color: #6c7a73; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.portal-payment-location-form select,
+.portal-payment-location-form input {
+  width: 100%;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid rgba(15,92,77,.18);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: #14251f;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+}
+.portal-payment-location-form select:disabled,
+.portal-payment-location-form input:disabled { opacity: .58; cursor: default; }
+.portal-payment-location-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.portal-payment-location-fields > label:last-child { grid-column: 1 / -1; }
+.portal-payment-location-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15,92,77,.11);
+  border-radius: 11px;
+  color: #0f5c4d;
+  background: rgba(15,92,77,.055);
+}
+.portal-payment-location-preview > svg { flex: none; margin-top: 2px; }
+.portal-payment-location-preview b,
+.portal-payment-location-preview span,
+.portal-payment-location-preview small { display: block; }
+.portal-payment-location-preview b { color: #173b31; font-size: 12.5px; }
+.portal-payment-location-preview span { margin-top: 3px; color: #53665d; font-size: 11.5px; line-height: 1.5; }
+.portal-payment-location-preview small { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: #7b8982; font-size: 10.5px; }
+.portal-payment-location-error { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #9c493e; font-size: 11px; line-height: 1.5; }
+.portal-payment-location-error > svg { flex: none; margin-top: 1px; }
+.portal-payment-location-save { align-self: flex-start; min-height: 38px; padding: 0 16px; }
 
 .portal-activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .portal-activity-list > li { padding: 10px 12px; border: 1px solid rgba(15,92,77,.1); border-radius: 11px; background: #fff; }
 .portal-activity-list b { display: block; font-size: 12.5px; color: #14251f; }
 .portal-activity-list small { display: block; margin-top: 2px; color: #8b9791; font-size: 10.5px; }
 .portal-activity-list p { margin: 6px 0 0; color: #5a6862; font-size: 11.5px; line-height: 1.5; }
+
+@media (max-width: 480px) {
+  .portal-payment-location-fields { grid-template-columns: 1fr; }
+  .portal-payment-location-fields > label:last-child { grid-column: auto; }
+}
 
 /* ---------- Branch switcher (multi-branch agencies) ---------- */
 .portal-branch-wrap { position: relative; }
@@ -1385,7 +1571,7 @@
   background: #0d3a30; border: 1px solid rgba(216, 181, 102, 0.24);
   box-shadow: 0 24px 50px rgba(2, 14, 11, 0.5);
   animation: portal-modal-in 0.14s ease;
-  max-height: 320px; overflow-y: auto;
+  max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
 }
 .portal-branch-menu > small {
   display: block; padding: 4px 10px 8px;
@@ -2047,6 +2233,7 @@
   .portal-shell input,
   .portal-shell select,
   .portal-shell textarea,
+  .portal-reason-dialog input,
   .portal-reason-dialog textarea,
   .booking-modal input,
   .booking-modal select,

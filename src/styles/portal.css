@@ -503,8 +503,7 @@
   align-items: center;
 }
 
-.portal-user > span,
-.portal-user-top {
+.portal-user > span {
   width: 35px;
   height: 35px;
   display: grid;
@@ -616,7 +615,6 @@
 }
 
 .portal-live i { width: 6px; height: 6px; border-radius: 50%; background: #3eb685; box-shadow: 0 0 0 4px rgba(62,182,133,.11); animation: portal-live-pulse 2s ease-out infinite; }
-.portal-user-top { margin-left: 3px; color: #fff; background: #0f5c4d; }
 
 .portal-content {
   width: min(1480px, 100%);
@@ -2259,20 +2257,31 @@
 }
 .portal-toast svg { color: #e0c170; }
 
+/* The overlay itself scrolls, so a form taller than the window is reachable
+   rather than clipped. `overscroll-behavior: contain` stops a flick past the
+   end of it from being handed to the page underneath. */
 .portal-modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 120;
-  display: grid;
-  place-items: center;
+  display: flex;
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(4,31,25,.7);
   backdrop-filter: blur(10px);
   animation: portal-fade-in .2s ease;
 }
 
 .portal-modal {
+  /* `margin: auto` rather than centring the overlay: auto margins centre while
+     there is free space and collapse to 0 when there is not, so a tall modal
+     starts at the top and scrolls. Centring would push its top edge above the
+     scroll origin, where nothing can reach it. */
+  margin: auto;
   width: min(650px, 100%);
+  max-width: 100%;
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 22px;
   background: #f7f4ed;
@@ -2521,7 +2530,6 @@
   .portal-live { display: none; }
   .portal-topbar-actions { gap: 6px; }
   .portal-topbar-actions > button { width: 35px; height: 35px; }
-  .portal-user-top { width: 34px; height: 34px; }
   .portal-content { min-height: calc(100vh - 64px); padding: 25px 14px 50px; }
   .portal-page-heading { display: block; margin-bottom: 23px; }
   .portal-page-heading h1 { font-size: 36px; }

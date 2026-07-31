@@ -392,7 +392,7 @@
   .trip-booking-gesture-help { display: none; }
 }
 
-.portal-modal.trip-booking-detail { width: min(720px, 100%); max-height: min(780px, calc(100vh - 40px)); overflow: auto; }
+.portal-modal.trip-booking-detail { width: min(720px, 100%); max-height: min(780px, calc(100vh - 40px)); overflow: auto; overscroll-behavior: contain; }
 .trip-booking-detail > header { align-items: flex-start; }
 .trip-booking-detail > header small { color: #d5b866; font-size: 8px; font-weight: 800; letter-spacing: 1px; }
 .trip-booking-detail > header h2 { margin: 4px 0 0; }
@@ -1257,4 +1257,57 @@
   .trip-live-facts { grid-template-columns: 1fr; }
   .trip-hero h1 { font-size: 28px; }
   .trip-card-facts { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------- Trip live preview: agency-only fields + seats ---------- */
+
+/* The right-hand column now stacks two blocks, so they are wrapped rather than
+   added as a third grid child (which would have dropped under the preview). */
+.trip-review-side { display: flex; flex-direction: column; gap: 15px; align-self: start; }
+
+/* The classification fields left the preview card when the app stopped showing
+   them to pilgrims. They still feed keyword search there, so they are still
+   collected — just no longer dressed up as something a client sees. */
+.trip-internal-fields { padding: 18px; border: 1px solid var(--portal-border); border-radius: 16px; background: #fbfcfa; }
+.trip-internal-fields header { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 14px; }
+.trip-internal-fields header > svg { flex: 0 0 auto; margin-top: 1px; color: #0f5c4d; }
+.trip-internal-fields header b { display: block; font-size: 11px; }
+.trip-internal-fields header small { display: block; margin-top: 4px; color: #829089; font-size: 9.5px; line-height: 1.5; }
+.trip-internal-fields label { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; border-top: 1px solid var(--portal-border); }
+.trip-internal-fields label > span { color: #56685f; font-size: 10.5px; font-weight: 700; }
+/* Same stepper the days fact in the preview uses — seats is no longer editable
+   from inside the preview, so the control here has to be as obvious. */
+.trip-internal-stepper { display: inline-flex; align-items: center; gap: 6px; }
+.trip-internal-stepper > button {
+  width: 30px; height: 28px; flex: none; display: grid; place-items: center;
+  border: 1px solid var(--portal-border); border-radius: 8px; background: #fff;
+  color: var(--green); cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.trip-internal-stepper > button:hover:not(:disabled) { background: var(--green); color: #fff; border-color: var(--green); }
+.trip-internal-stepper > button:disabled { opacity: .4; cursor: default; }
+.trip-internal-stepper input {
+  width: 62px; min-height: 28px; padding: 0 8px; text-align: center;
+  border: 1px solid var(--portal-border); border-radius: 9px; background: #fff;
+  font: inherit; font-size: 11px; font-weight: 700; color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+.trip-internal-stepper input::-webkit-outer-spin-button,
+.trip-internal-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.trip-internal-note { margin: 10px 0 0; color: #8d6a28; font-size: 9.5px; line-height: 1.5; }
+
+/* Seats sit under the price in the sticky bar, as they now do in the app:
+   muted while there is room, gold once few are left, and absent when sold out
+   because the button already says so. */
+.trip-live-footer > div { min-width: 0; }
+.trip-live-seats { display: block; margin-top: 4px; color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.trip-live-seats.few { color: #9c6d1f; font-weight: 800; }
+
+/* Mirrors the app hero, where the agency name became the trip's only link to
+   the agency page. Flips with the writing direction. */
+.trip-live-agency-chevron { flex: 0 0 auto; opacity: .75; }
+[dir="rtl"] .trip-live-agency-chevron { transform: scaleX(-1); }
+
+@media (max-width: 1080px) {
+  .trip-review-side { gap: 12px; }
 }

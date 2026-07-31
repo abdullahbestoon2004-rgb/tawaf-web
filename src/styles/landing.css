@@ -174,7 +174,7 @@ footer.site-footer { background: var(--green-black); color: #cfc7b2; padding: 50
 .lang-chip.active { background: var(--green); color: #fff; }
 
 .pkg-modal-scrim { position: fixed; inset: 0; background: rgba(7,44,37,.55); display: grid; place-items: center; padding: 20px; z-index: 60; }
-.pkg-modal { position: relative; background: var(--cream-card); border: 1px solid var(--border); border-radius: 24px; padding: 38px; width: 640px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: 0 40px 90px rgba(4,18,14,.35); }
+.pkg-modal { position: relative; background: var(--cream-card); border: 1px solid var(--border); border-radius: 24px; padding: 38px; width: 640px; max-width: 100%; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 40px 90px rgba(4,18,14,.35); }
 .pkg-modal h3 { font-size: 34px; margin: 10px 0 4px; }
 .pkg-modal-close { position: absolute; top: 18px; inset-inline-end: 18px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
 .pkg-modal-agency { font-size: 13px; font-weight: 700; color: var(--gold); margin: 0 0 14px; }

@@ -137,8 +137,8 @@ const HOME_SECTIONS: Array<{
   },
   {
     key: "active_booking",
-    ku: "حیجزی چالاک", ar: "الحجز النشط", en: "Active booking",
-    noteKu: "تەنها بۆ ئەو بەکارهێنەرانەی حیجزێکی چالاکیان هەیە.",
+    ku: "حجزی چالاک", ar: "الحجز النشط", en: "Active booking",
+    noteKu: "تەنها بۆ ئەو بەکارهێنەرانەی حجزێکی چالاکیان هەیە.",
     noteAr: "يظهر فقط لمن لديه حجز نشط.",
     noteEn: "Only shown to clients with a live booking.",
     capped: false,
