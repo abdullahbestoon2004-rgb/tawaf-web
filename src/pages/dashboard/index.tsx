@@ -81,7 +81,7 @@ import type {
   FinanceAuditRow,
   CommercialSetting,
 } from "./finance.tsx";
-import { dashboardTranslations } from "./translations.ts";
+import { dashboardTranslations, localizeEnum } from "./translations.ts";
 
 type Role = "admin" | "agency";
 type RunAction = (id: string, action: () => any, success: string) => Promise<any>;
@@ -645,55 +645,63 @@ function nightsBetween(from: string | null | undefined, to: string | null | unde
   return nights > 0 ? nights : null;
 }
 
-function relativeTime(value: string | null | undefined) {
-  if (!value) return "Recently";
+function relativeTime(value: string | null | undefined, locale: "ku" | "ar" | "en" = "ku") {
+  if (!value) return locale === "ku" ? "بەم زووانە" : locale === "ar" ? "مؤخراً" : "Recently";
   const diff = Date.now() - new Date(value).getTime();
   const hours = Math.max(0, Math.floor(diff / 3_600_000));
-  if (hours < 1) return "Just now";
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 1) return locale === "ku" ? "ئێستا" : locale === "ar" ? "الآن" : "Just now";
+  if (hours < 24) return locale === "ku" ? `${hours} کاتژمێر پێشتر` : locale === "ar" ? `منذ ${hours} ساعة` : `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  return days === 1 ? "Yesterday" : `${days}d ago`;
+  return days === 1 
+    ? (locale === "ku" ? "دوێنێ" : locale === "ar" ? "أمس" : "Yesterday")
+    : (locale === "ku" ? `${days} ڕۆژ پێشتر` : locale === "ar" ? `منذ ${days} يوم` : `${days}d ago`);
 }
 
-const tripChangeLabels: Record<string, string> = {
-  title: "Trip title",
-  title_ar: "Arabic title",
-  title_en: "English title",
-  overview: "Description",
-  overview_ar: "Arabic description",
-  overview_en: "English description",
-  price_iqd: "Package price",
-  days: "Duration",
-  nights: "Hotel nights",
-  transport: "Transport",
-  carrier: "Carrier",
-  acc_stars: "Hotel rating",
-  image_url: "Cover image",
-  capacity: "Capacity",
-  departure_date: "Departure date",
-  return_date: "Return date",
-  package_tier: "Package tier",
-  group_type: "Group type",
-  season_tag: "Season",
-  departure_airport: "Departure airport",
-  airline_name: "Airline",
-  flight_type: "Flight type",
-  bus_between_cities: "Intercity bus",
-  airport_transfers: "Airport transfers",
-  transport_notes: "Transport notes",
-  meals_per_day: "Meals per day",
-  video_url: "Video",
-  cancellation_policy: "Cancellation policy",
-  deposit_iqd: "Cancellation deposit per pilgrim",
-  non_refundable_deposit: "Cancellation deposit refundability",
-  deposit_terms: "Cancellation deposit terms",
-  itinerary: "Daily itinerary",
-  pricing: "Pricing",
-  hotels: "Hotels",
-  inclusions: "Included services",
-  lifecycle_status: "Trip status",
-  trip_removal: "Trip removal",
+const tripChangeLabels: Record<string, [string, string, string]> = {
+  title: ["ناونیشانی گەشت", "عنوان الرحلة", "Trip title"],
+  title_ar: ["ناونیشانی عەرەبی", "العنوان بالعربية", "Arabic title"],
+  title_en: ["ناونیشانی ئینگلیزی", "العنوان بالإنجليزية", "English title"],
+  overview: ["پێناسە", "الوصف", "Description"],
+  overview_ar: ["پێناسەی عەرەبی", "الوصف بالعربية", "Arabic description"],
+  overview_en: ["پێناسەی ئینگلیزی", "الوصف بالإنجليزية", "English description"],
+  price_iqd: ["نرخی پاکێج", "سعر الباقة", "Package price"],
+  days: ["ماوە", "المدة", "Duration"],
+  nights: ["شەوەکانی هۆتێل", "ليالي الفندق", "Hotel nights"],
+  transport: ["گواستنەوە", "النقل", "Transport"],
+  carrier: ["کۆمپانیای گواستنەوە", "شركة النقل", "Carrier"],
+  acc_stars: ["پلەی ئەستێرەی هۆتێل", "تصنيف الفندق", "Hotel rating"],
+  image_url: ["وێنەی بەرگ", "صورة الغلاف", "Cover image"],
+  capacity: ["توانا", "السعة", "Capacity"],
+  departure_date: ["بەرواری بەڕێکەوتن", "تاريخ المغادرة", "Departure date"],
+  return_date: ["بەرواری گەڕانەوە", "تاريخ العودة", "Return date"],
+  package_tier: ["ئاستی پاکێج", "فئة الباقة", "Package tier"],
+  group_type: ["جۆری گرووپ", "نوع المجموعة", "Group type"],
+  season_tag: ["وەرز", "الموسم", "Season"],
+  departure_airport: ["فڕۆکەخانەی بەڕێکەوتن", "مطار المغادرة", "Departure airport"],
+  airline_name: ["هێڵی ئاسمانی", "شركة الطيران", "Airline"],
+  flight_type: ["جۆری فڕین", "نوع الرحلة", "Flight type"],
+  bus_between_cities: ["پاس لە نێوان شارەکان", "حافلة بين المدن", "Intercity bus"],
+  airport_transfers: ["گواستنەوەی فڕۆکەخانە", "نقل المطار", "Airport transfers"],
+  transport_notes: ["تێبینییەکانی گواستنەوە", "ملاحظات النقل", "Transport notes"],
+  meals_per_day: ["ژەمەکانی ڕۆژانە", "الوجبات اليومية", "Meals per day"],
+  video_url: ["ڤیدیۆ", "الفيديو", "Video"],
+  cancellation_policy: ["سیاسەتی هەڵوەشاندنەوە", "سياسة الإلغاء", "Cancellation policy"],
+  deposit_iqd: ["پێشەکی هەڵوەشاندنەوە", "عربون الإلغاء", "Cancellation deposit per pilgrim"],
+  non_refundable_deposit: ["پێشەکی ناگەڕێندرێتەوە", "قابيلية استرداد العربون", "Cancellation deposit refundability"],
+  deposit_terms: ["مەرجەکانی پێشەکی", "شروط العربون", "Cancellation deposit terms"],
+  itinerary: ["بەرنامەی ڕۆژانە", "البرنامج اليومي", "Daily itinerary"],
+  pricing: ["نرخ دانان", "التسعير", "Pricing"],
+  hotels: ["هۆتێلەکان", "الفنادق", "Hotels"],
+  inclusions: ["خزمەتگوزارییە لەخۆگیراوەکان", "الخدمات المشمولة", "Included services"],
+  lifecycle_status: ["دۆخی گەشت", "حالة الرحلة", "Trip status"],
+  trip_removal: ["سڕینەوەی گەشت", "حذف الرحلة", "Trip removal"],
 };
+
+function formatTripChangeLabel(field: string, locale: "ku" | "ar" | "en" = "ku") {
+  const item = tripChangeLabels[field];
+  if (!item) return field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return locale === "ku" ? item[0] : locale === "ar" ? item[1] : item[2];
+}
 
 function tripChangeValue(field: string, value: any) {
   if (value === null || value === undefined || value === "") return "Not set";
@@ -921,7 +929,7 @@ export default function DashboardPage() {
             supabase.from("trip_change_requests").select("*").order("created_at", { ascending: false }).limit(100),
             supabase.from("bookings").select("*").order("created_at", { ascending: false }),
             supabase.from("booking_travellers").select("*").is("removed_at", null).order("created_at", { ascending: true }),
-            supabase.from("traveller_documents").select("*").order("created_at", { ascending: false }),
+            supabase.from("traveller_documents").select("*").is("superseded_at", null).order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").order("created_at", { ascending: false }),
             // payments_finance rather than payments: it carries collected_by and
             // the reconciliation columns, and is gated to finance staff and
@@ -1107,7 +1115,7 @@ export default function DashboardPage() {
             supabase.from("bookings").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             // booking_travellers has no company_id; RLS scopes this to the company's bookings.
             supabase.from("booking_travellers").select("*").is("removed_at", null).order("created_at", { ascending: true }),
-            supabase.from("traveller_documents").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
+            supabase.from("traveller_documents").select("*").eq("company_id", companyRow.id).is("superseded_at", null).order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payments_finance").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("inquiries").select("*, inquiry_messages(*)").eq("agency_id", companyRow.id).order("updated_at", { ascending: false }),
@@ -3042,7 +3050,7 @@ function CompanyDetailDrawer({
                               {tripBookingCount} {tr("حیجز", "حجز", tripBookingCount === 1 ? "booking" : "bookings")}
                             </small>
                           </span>
-                          <span className={`portal-status ${statusTone(trip.lifecycle_status)}`}><i />{titleCase(trip.lifecycle_status)}</span>
+                          <span className={`portal-status ${statusTone(trip.lifecycle_status)}`}><i />{localizeEnum("lifecycle_status", trip.lifecycle_status, locale)}</span>
                           <ArrowRight size={15} />
                         </button>
                       </li>
@@ -3308,7 +3316,7 @@ function TripDetailModal({ trip, companyName, data, locale, role, busy, runActio
                           <small>#{booking.id.slice(0, 8).toUpperCase()} · {booking.travellers} {tr("کەس", "أشخاص", booking.travellers === 1 ? "traveller" : "travellers")}</small>
                         </span>
                         <span className="portal-trip-booking-money" dir="ltr">{formatIqd(booking.total_iqd, true)}</span>
-                        <span className={`portal-status ${statusTone(booking.operational_stage)}`}><i />{titleCase(booking.operational_stage)}</span>
+                        <span className={`portal-status ${statusTone(booking.operational_stage)}`}><i />{localizeEnum("operational_stage", booking.operational_stage, locale)}</span>
                         <ArrowRight size={15} />
                       </button>
                     </li>
@@ -3601,13 +3609,13 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                 <article className="trip-change-review-card" key={request.id}>
                   <header>
                     <div>
-                      <span className={`trip-change-kind ${request.request_type}`}>{titleCase(request.request_type)} request</span>
-                      <h3>{trip?.title ?? beforeFields.title ?? "Trip request"}</h3>
-                      <p>{companyMap.get(request.company_id) ?? "Tawaf company"} · {relativeTime(request.created_at)}</p>
+                      <span className={`trip-change-kind ${request.request_type}`}>{localizeEnum("request_type", request.request_type, locale)} {tr("داواکاری", "طلب", "request")}</span>
+                      <h3>{trip?.title ?? beforeFields.title ?? tr("داواکاری گەشت", "طلب رحلة", "Trip request")}</h3>
+                      <p>{companyMap.get(request.company_id) ?? tr("کۆمپانیای تەواف", "شركة طواف", "Tawaf company")} · {relativeTime(request.created_at, locale)}</p>
                     </div>
                     <StatusPill status={request.status} />
                   </header>
-                  {request.request_reason && <p className="trip-change-reason"><b>Company reason:</b> {request.request_reason}</p>}
+                  {request.request_reason && <p className="trip-change-reason"><b>{tr("هۆکاری کۆمپانیا:", "سبب الشركة:", "Company reason:")}</b> {request.request_reason}</p>}
                   <div className="trip-change-diff">
                     {request.changed_fields.map((field) => {
                       const isBundle = ["itinerary", "pricing", "hotels", "inclusions"].includes(field);
@@ -3615,18 +3623,18 @@ function TripsPage({ role, data, busy, runAction, askReason, onCreateTrip, local
                       const after = isBundle ? request.proposed_snapshot?.[field] : proposedFields[field];
                       return (
                         <div key={field}>
-                          <b>{tripChangeLabels[field] ?? titleCase(field)}</b>
-                          <span><small>Before</small>{tripChangeValue(field, before)}</span>
+                          <b>{formatTripChangeLabel(field, locale)}</b>
+                          <span><small>{tr("پێشتر", "قبل", "Before")}</small>{tripChangeValue(field, before)}</span>
                           <i><ArrowRight size={14} /></i>
-                          <span><small>Requested</small>{tripChangeValue(field, after)}</span>
+                          <span><small>{tr("داواکراو", "مطلوب", "Requested")}</small>{tripChangeValue(field, after)}</span>
                         </div>
                       );
                     })}
                   </div>
                   {blocker && <p className="trip-change-blocked"><AlertTriangle size={13} /> {blocker}</p>}
                   <footer>
-                    <button type="button" className="danger" onClick={() => reviewTripChange(request, "rejected")} disabled={busy === `trip-change-${request.id}`}><X size={14} /> Reject</button>
-                    <button type="button" className="approve" onClick={() => reviewTripChange(request, "approved")} disabled={busy === `trip-change-${request.id}` || Boolean(blocker)} title={blocker ?? undefined}>{busy === `trip-change-${request.id}` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} Approve & apply</button>
+                    <button type="button" className="danger" onClick={() => reviewTripChange(request, "rejected")} disabled={busy === `trip-change-${request.id}`}><X size={14} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}</button>
+                    <button type="button" className="approve" onClick={() => reviewTripChange(request, "approved")} disabled={busy === `trip-change-${request.id}` || Boolean(blocker)} title={blocker ?? undefined}>{busy === `trip-change-${request.id}` ? <TawafLoadingSpinner size={14} /> : <Check size={14} />} {tr("پەسەندکردن و جێبەجێکردن", "قبول وتطبيق", "Approve & apply")}</button>
                   </footer>
                 </article>
               );
@@ -3776,13 +3784,14 @@ function ImageLightbox({ images, index, onClose }: { images: LightboxImage[]; in
   );
 }
 
-function visaRejectionCategoryLabel(category: VisaRejectionCategory, locale: "ku" | "ar" | "en") {
-  const labels: Record<VisaRejectionCategory, [string, string, string]> = {
+function visaRejectionCategoryLabel(category: string, locale: "ku" | "ar" | "en") {
+  const labels: Record<string, [string, string, string]> = {
     fixable_document: ["بەڵگەنامەی چاککراوە", "مستند قابل للتصحيح", "Fixable document"],
+    // Display-only compatibility for historical rows.
     traveller_replaced: ["زیارەتکار دەگۆڕدرێت", "سيتم استبدال المسافر", "Traveller will be replaced"],
     final_rejection: ["ڕەتکردنەوەی کۆتایی", "رفض نهائي", "Final rejection"],
   };
-  const [ku, ar, en] = labels[category];
+  const [ku, ar, en] = labels[category] ?? [category, category, category];
   return locale === "ku" ? ku : locale === "ar" ? ar : en;
 }
 
@@ -3904,6 +3913,23 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
       status === "approved"
         ? tr("ڤیزاکە پەسەندکرا.", "تمت الموافقة على التأشيرة.", "Visa approved.")
         : tr("ئەنجامی ڤیزا و هۆکارەکە تۆمارکرا.", "تم تسجيل رفض التأشيرة وسببه.", "Visa rejection and reason recorded."),
+    );
+  }
+  async function removeRejectedTraveller() {
+    if (traveller.visa_rejection_category !== "final_rejection") return;
+    const reason = await askReason(tr(
+      "هۆکاری لابردنی گەشتیار بنووسە. ئەگەر نرخی تاکەکەسی نەبێت، هەموو حیجزەکە هەڵبوەشێنەوە.",
+      "اكتب سبب إزالة المسافر. إذا لم يتوفر سعر إشغال فردي فألغ الحجز بالكامل.",
+      "Explain the traveller removal. If no single-occupancy price exists, cancel and refund the full booking instead.",
+    ));
+    if (!reason) return;
+    await runAction(
+      `traveller-${traveller.id}`,
+      () => getSupabase().rpc("remove_traveller", {
+        p_traveller_id: traveller.id,
+        p_reason: reason,
+      }),
+      tr("گەشتیار لابرا و حیجزەکە نوێ نرخ کرایەوە.", "تمت إزالة المسافر وإعادة تسعير الحجز.", "Traveller removed and booking repriced."),
     );
   }
   async function saveSeat() {
@@ -4033,6 +4059,11 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
             )}
             {traveller.visa_rejection_category && <small className="booking-inline-note">{visaRejectionCategoryLabel(traveller.visa_rejection_category as VisaRejectionCategory, locale)}</small>}
             {traveller.visa_reason && <small className="booking-inline-note">{traveller.visa_reason}</small>}
+            {traveller.visa_rejection_category === "final_rejection" && (
+              <button type="button" className="danger" onClick={removeRejectedTraveller} disabled={rowBusy}>
+                <X size={13} /> {tr("لابردنی گەشتیار", "إزالة المسافر", "Remove traveller")}
+              </button>
+            )}
           </div>
           <div className="booking-ops-block">
             <label>{tr("کورسی گواستنەوە", "مقعد النقل", "Transport seat")}</label>

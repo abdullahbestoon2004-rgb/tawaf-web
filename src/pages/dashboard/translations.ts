@@ -534,3 +534,116 @@ export const dashboardTranslations = {
     activateCompany: "Activate company"
   }
 };
+
+export type Locale = "ku" | "ar" | "en";
+
+export const ENUM_TRANSLATIONS: Record<string, Record<string, [string, string, string]>> = {
+  lifecycle_status: {
+    draft: ["ڕەشنووس", "مسودة", "Draft"],
+    pending_review: ["چاوەڕێی پێداچوونەوە", "بانتظار المراجعة", "Pending review"],
+    needs_changes: ["پێویستی بە گۆڕانکارییە", "يتطلب تغييرات", "Needs changes"],
+    published: ["بڵاوکراوەتەوە", "منشور", "Published"],
+    paused: ["ڕاگیراوە", "متوقف مؤقتاً", "Paused"],
+    sold_out: ["تەواو بوو", "مكتمل العدد", "Sold out"],
+    rejected: ["ڕەتکراوەتەوە", "مرفوض", "Rejected"],
+    archived: ["ئەرشیڤکراو", "مؤرشف", "Archived"],
+  },
+  operational_stage: {
+    requested: ["داواکراوە", "مطلوب", "Requested"],
+    needs_information: ["پێویستی بە زانیارییە", "يحتاج معلومات", "Needs information"],
+    awaiting_payment: ["چاوەڕێی پارەدان", "بانتظار الدفع", "Awaiting payment"],
+    confirmed: ["پشتڕاستکراوە", "مؤكد", "Confirmed"],
+    ready: ["ئامادەیە بۆ گەشت", "جاهز للسفر", "Ready to travel"],
+    in_progress: ["لە گەشتدایە", "في الرحلة", "In progress"],
+    completed: ["تەواوبووە", "مكتمل", "Completed"],
+    cancelled: ["هەڵوەشێنراوەتەوە", "ملغى", "Cancelled"],
+    rejected: ["ڕەتکراوەتەوە", "مرفوض", "Rejected"],
+    expired: ["بەسەرچووە", "منتهي", "Expired"],
+    no_show: ["ئامادەنەبوو", "لم يحضر", "No show"],
+  },
+  verification_status: {
+    pending: ["چاوەڕێی بڕیارە", "بانتظار القرار", "Pending"],
+    verified: ["پشتڕاستکراوە", "مُتحقق منه", "Verified"],
+    approved: ["پەسەندکراوە", "موافق عليه", "Approved"],
+    needs_changes: ["پێویستی بە داواکارییە", "يتطلب تعديل", "Needs changes"],
+    suspended: ["ڕاگیراوە", "معلق", "Suspended"],
+    rejected: ["ڕەتکراوەتەوە", "مرفوض", "Rejected"],
+    draft: ["ڕەشنووس", "مسودة", "Draft"],
+  },
+  pay_method: {
+    cash: ["نەختینە", "نقداً", "Cash"],
+    fib: ["بانکی FIB", "مصرف FIB", "FIB Bank"],
+    card: ["کارتی بانکی", "بطاقة مصرفية", "Bank card"],
+    zain_cash: ["زێن کاش", "زين كاش", "Zain Cash"],
+    fastpay: ["فاست پەي", "فاست باي", "FastPay"],
+  },
+  pay_status: {
+    unpaid: ["نادراوە", "غير مدفوع", "Unpaid"],
+    deposit_paid: ["پێشەکی دراوە", "تم دفع العربون", "Deposit paid"],
+    paid: ["دراوە", "مدفوع بالكامل", "Paid"],
+    refunded: ["گەڕێندراوەتەوە", "مسترد", "Refunded"],
+    partially_refunded: ["بەشێک گەڕێندراوەتەوە", "مسترد جزئياً", "Partially refunded"],
+  },
+  transport: {
+    plane: ["فڕۆکە", "طائرة", "Plane"],
+    bus: ["پاس", "حافلة", "Bus"],
+    air: ["فڕۆکە", "طائرة", "Plane"],
+    coach: ["پاس", "حافلة", "Bus"],
+  },
+  flight_type: {
+    direct: ["ڕاستەوخۆ", "مباشرة", "Direct"],
+    connecting: ["بە وچان", "مع توقف", "Connecting"],
+  },
+  occupancy_type: {
+    single: ["ژووری تاک", "غرفة مفردة", "Single room"],
+    double: ["ژووری دوو کەسی", "غرفة ثنائية", "Double room"],
+    triple: ["ژووری سێ کەسی", "غرفة ثلاثية", "Triple room"],
+    quad: ["ژووری چوار کەسی", "غرفة رباعية", "Quad room"],
+    sharing: ["ژووری هاوبەش", "غرفة مشتركة", "Sharing room"],
+  },
+  gender: {
+    male: ["نێر", "ذكر", "Male"],
+    female: ["مێ", "أنثى", "Female"],
+    mixed: ["تێکەڵاو", "مختلط", "Mixed"],
+    family: ["خێزانی", "عائلي", "Family"],
+  },
+  actor_role: {
+    admin: ["بەڕێوەبەر", "المشرف", "Administrator"],
+    agency: ["کۆمپانیا", "الشركة", "Company"],
+    pilgrim: ["عومرەکار", "المعتمر", "Pilgrim"],
+    client: ["کڕیار", "العميل", "Client"],
+    system: ["سیستەم", "النظام", "System"],
+  },
+  doc_status: {
+    missing: ["نەنێردراوە", "مفقود", "Missing"],
+    under_review: ["لە پێداچوونەوەدایە", "قيد المراجعة", "Under review"],
+    approved: ["پەسەندکراوە", "تمت الموافقة", "Approved"],
+    rejected: ["ڕەتکراوەتەوە", "مرفوض", "Rejected"],
+    not_started: ["دەستی پێنهەکردووە", "لم يبدأ", "Not started"],
+    ready_to_apply: ["ئامادەیە بۆ داواکاری", "جاهز للتقديم", "Ready to apply"],
+    submitted: ["نێردراوە", "تم التقديم", "Submitted"],
+  },
+  request_type: {
+    trip_edit: ["گۆڕانکاری گەشت", "تعديل الرحلة", "Trip edit"],
+    cancellation: ["هەڵوەشاندنەوە", "إلغاء", "Cancellation"],
+    refund: ["گەڕاندنەوەی پارە", "استرداد", "Refund"],
+    date_change: ["گۆڕینی بەروار", "تغيير التاريخ", "Date change"],
+  },
+};
+
+export function localizeEnum(category: string, value: string | null | undefined, locale: Locale): string {
+  if (!value) return "—";
+  const cat = ENUM_TRANSLATIONS[category];
+  if (cat && cat[value]) {
+    const [ku, ar, en] = cat[value];
+    return locale === "ku" ? ku : locale === "ar" ? ar : en;
+  }
+  for (const group of Object.values(ENUM_TRANSLATIONS)) {
+    if (group[value]) {
+      const [ku, ar, en] = group[value];
+      return locale === "ku" ? ku : locale === "ar" ? ar : en;
+    }
+  }
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+

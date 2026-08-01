@@ -33,7 +33,10 @@ export type BookingDisplayState =
 const DEAD_STAGES = new Set(["cancelled", "rejected", "expired", "no_show"]);
 const VISA_IN_FLIGHT = new Set(["ready_to_apply", "submitted", "under_review"]);
 
-export const VISA_REJECTION_CATEGORIES = ["fixable_document", "traveller_replaced", "final_rejection"] as const;
+// Replacement is not offered until the product has an audited traveller-
+// replacement flow. Offering it here used to put a confirmed booking into a
+// state that neither the client nor company could resolve.
+export const VISA_REJECTION_CATEGORIES = ["fixable_document", "final_rejection"] as const;
 export type VisaRejectionCategory = typeof VISA_REJECTION_CATEGORIES[number];
 
 export type BookingStateInput = {

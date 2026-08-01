@@ -6,6 +6,7 @@ export const translations = {
     howItWorks: "چۆن کاردەکات",
     forAgencies: "بۆ کۆمپانیاکان",
     signIn: "چوونەژوورەوە",
+    brandTag: "تەواف · بازاڕی عومرە",
     
     // Hero
     availability: "دروستکراوە بۆ عومرەکاران لە عێراق و کوردستان",
@@ -228,6 +229,7 @@ export const translations = {
     howItWorks: "كيف يعمل",
     forAgencies: "للوكالات",
     signIn: "تسجيل الدخول",
+    brandTag: "طواف · سوق العمرة",
     
     // Hero
     availability: "بُني للمعتمرين في العراق وكردستان",
@@ -450,6 +452,7 @@ export const translations = {
     howItWorks: "How it works",
     forAgencies: "For agencies",
     signIn: "Sign in",
+    brandTag: "TAWAF · UMRAH MARKETPLACE",
     
     // Hero
     availability: "Built for pilgrims in Iraq & Kurdistan",

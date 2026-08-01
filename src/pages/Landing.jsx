@@ -301,7 +301,7 @@ export default function Landing() {
           <img src="/brand/tawaf-logo.png" alt="Tawaf" />
           <span>
             <span className="brand-kurdish">تەواف</span>
-            <span className="brand-tag">TAWAF · UMRAH MARKETPLACE</span>
+            <span className="brand-tag">{t.brandTag}</span>
           </span>
         </a>
         <div className="nav-links">
@@ -586,7 +586,7 @@ export default function Landing() {
             <img src="/brand/tawaf-logo.png" alt="" />
             <span>
               <span className="kurdish">تەواف</span>
-              <span className="tag">UMRAH MARKETPLACE</span>
+              <span className="tag">{t.brandTag}</span>
             </span>
           </a>
           <p className="tagline">{t.footerDesc}</p>
@@ -605,7 +605,7 @@ export default function Landing() {
       {selectedPackage && (
         <div className="pkg-modal-scrim" onClick={() => setSelectedPackage(null)}>
           <article className="pkg-modal" dir={dir} onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="pkg-modal-close" aria-label="Close" onClick={() => setSelectedPackage(null)}>
+            <button type="button" className="pkg-modal-close" aria-label={locale === "ku" ? "داخستن" : locale === "ar" ? "إغلاق" : "Close"} onClick={() => setSelectedPackage(null)}>
               <X size={18} />
             </button>
             <div className="eyebrow">✓ {t.verifiedPackage}</div>

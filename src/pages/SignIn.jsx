@@ -336,7 +336,7 @@ export default function SignIn() {
                   type="button"
                   className="pw-toggle"
                   style={locale === "en" ? { right: 8, left: "auto" } : undefined}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? (locale === "ku" ? "شاردنەوەی وشەی نهێنی" : locale === "ar" ? "إخفاء كلمة المرور" : "Hide password") : (locale === "ku" ? "نیشاندانی وشەی نهێنی" : locale === "ar" ? "إظهار كلمة المرور" : "Show password")}
                   onClick={() => setShowPassword((v) => !v)}
                 >
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
