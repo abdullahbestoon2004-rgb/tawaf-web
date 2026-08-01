@@ -58,6 +58,14 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import {
+  bookingStateLabel,
+  bookingStateTone,
+  onlyActiveTravellers,
+  resolveBookingDisplayState,
+  VISA_REJECTION_CATEGORIES,
+} from "@/lib/booking-display-state";
+import type { VisaRejectionCategory } from "@/lib/booking-display-state";
 import { useScrollLock } from "@/lib/use-scroll-lock";
 import TawafLoadingSpinner from "@/components/TawafLoadingSpinner";
 import CompanyTripsWorkspace from "./company-trips.tsx";
@@ -231,6 +239,7 @@ type Booking = {
   payment_confirmation_code: string | null;
   payment_confirmed_at: string | null;
   accepted_at: string | null;
+  payment_deadline: string | null;
   expires_at: string | null;
   created_at: string;
 };
@@ -257,8 +266,24 @@ type BookingTraveller = {
   document_reason: string | null;
   visa_status: string;
   visa_reference: string | null;
+  visa_rejection_category: string | null;
   visa_reason: string | null;
   transport_seat: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+  created_at: string;
+};
+
+/** One row of booking_status_history — the view over audit_logs that settles
+ *  disputes. Append-only at the database level: audit_logs carries a trigger
+ *  that refuses UPDATE and DELETE outright. */
+type BookingHistoryRow = {
+  id: number;
+  from_value: string | null;
+  to_value: string | null;
+  action: string | null;
+  actor_role: string | null;
+  reason: string | null;
   created_at: string;
 };
 
@@ -659,9 +684,9 @@ const tripChangeLabels: Record<string, string> = {
   meals_per_day: "Meals per day",
   video_url: "Video",
   cancellation_policy: "Cancellation policy",
-  deposit_iqd: "Deposit",
-  non_refundable_deposit: "Deposit refundability",
-  deposit_terms: "Deposit terms",
+  deposit_iqd: "Cancellation deposit per pilgrim",
+  non_refundable_deposit: "Cancellation deposit refundability",
+  deposit_terms: "Cancellation deposit terms",
   itinerary: "Daily itinerary",
   pricing: "Pricing",
   hotels: "Hotels",
@@ -895,10 +920,13 @@ export default function DashboardPage() {
             supabase.from("packages").select("*").order("created_at", { ascending: false }),
             supabase.from("trip_change_requests").select("*").order("created_at", { ascending: false }).limit(100),
             supabase.from("bookings").select("*").order("created_at", { ascending: false }),
-            supabase.from("booking_travellers").select("*").order("created_at", { ascending: true }),
+            supabase.from("booking_travellers").select("*").is("removed_at", null).order("created_at", { ascending: true }),
             supabase.from("traveller_documents").select("*").order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").order("created_at", { ascending: false }),
-            supabase.from("payments").select("*").order("created_at", { ascending: false }),
+            // payments_finance rather than payments: it carries collected_by and
+            // the reconciliation columns, and is gated to finance staff and
+            // admin so those never reach a client.
+            supabase.from("payments_finance").select("*").order("created_at", { ascending: false }),
             supabase.from("support_messages").select("*").order("created_at", { ascending: false }),
             // Marketplace-wide: can_access_company() short-circuits on
             // is_admin(), so admin reads every company's ledger and payouts
@@ -1078,10 +1106,10 @@ export default function DashboardPage() {
             supabase.from("trip_change_requests").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }).limit(100),
             supabase.from("bookings").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             // booking_travellers has no company_id; RLS scopes this to the company's bookings.
-            supabase.from("booking_travellers").select("*").order("created_at", { ascending: true }),
+            supabase.from("booking_travellers").select("*").is("removed_at", null).order("created_at", { ascending: true }),
             supabase.from("traveller_documents").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("commissions").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
-            supabase.from("payments").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
+            supabase.from("payments_finance").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("inquiries").select("*, inquiry_messages(*)").eq("agency_id", companyRow.id).order("updated_at", { ascending: false }),
             supabase.from("agency_ledger").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
             supabase.from("payouts").select("*").eq("company_id", companyRow.id).order("created_at", { ascending: false }),
@@ -1991,6 +2019,33 @@ function MetricCard({
 
 function StatusPill({ status, locale }: { status: string; locale?: "ku" | "ar" | "en" }) {
   return <span className={`portal-status ${statusTone(status)}`}><i />{localizedCompanyStatus(status, locale)}</span>;
+}
+
+function isAwaitingBookingPayment(booking: Booking) {
+  return booking.operational_stage === "awaiting_payment"
+    || (booking.operational_stage === "confirmed" && booking.pay_status !== "paid");
+}
+
+function bookingActionDeadline(booking: Booking) {
+  if (isAwaitingBookingPayment(booking)) return booking.payment_deadline ?? booking.expires_at;
+  if (["requested", "needs_information"].includes(booking.operational_stage)) return booking.expires_at;
+  return null;
+}
+
+function BookingDisplayPill({ booking, travellers, locale }: {
+  booking: Booking;
+  travellers?: BookingTraveller[];
+  locale: "ku" | "ar" | "en";
+}) {
+  const activeTravellers = travellers === undefined ? undefined : onlyActiveTravellers(travellers);
+  const state = resolveBookingDisplayState({
+    operationalStage: booking.operational_stage,
+    paymentStatus: booking.pay_status,
+    payMethod: booking.pay_method,
+    documentStatuses: activeTravellers?.map((traveller) => traveller.document_status),
+    visaStatuses: activeTravellers?.map((traveller) => traveller.visa_status),
+  });
+  return <span className={`portal-status ${bookingStateTone(state)}`}><i />{bookingStateLabel(state, locale)}</span>;
 }
 
 function AdminOverview({ data, goTo, locale }: { data: PortalData; goTo: (page: PageId) => void; locale: "ku" | "ar" | "en" }) {
@@ -3118,7 +3173,7 @@ function TripDetailModal({ trip, companyName, data, locale, role, busy, runActio
   // Lead traveller names the booking; fall back to whichever traveller is on file.
   const clientNameByBooking = useMemo(() => {
     const names = new Map<string, string>();
-    data.bookingTravellers.forEach((row) => {
+    onlyActiveTravellers(data.bookingTravellers).forEach((row) => {
       const name = (row.full_name || row.local_name || "").trim();
       if (!name) return;
       if (row.is_lead || !names.has(row.booking_id)) names.set(row.booking_id, name);
@@ -3171,7 +3226,7 @@ function TripDetailModal({ trip, companyName, data, locale, role, busy, runActio
     { label: tr("بەرواری گەڕانەوە", "تاريخ العودة", "Return"), value: formatDate(trip.return_date, true) },
     { label: tr("ماوە", "المدة", "Duration"), value: `${trip.days ?? "—"} ${tr("ڕۆژ", "أيام", "days")} · ${trip.nights ?? "—"} ${tr("شەو", "ليالٍ", "nights")}` },
     { label: tr("نرخ / بۆ هەر کەسێک", "السعر / للمعتمر", "Price / pilgrim"), value: formatIqd(trip.price_iqd) },
-    { label: tr("پێشەکی", "العربون", "Deposit"), value: trip.deposit_iqd ? formatIqd(trip.deposit_iqd) : tr("دیارینەکراوە", "غير محدد", "Not set") },
+    { label: tr("پێشەکی هەڵوەشاندنەوە / بۆ هەر عومرەکارێک", "عربون الإلغاء / لكل معتمر", "Cancellation deposit per pilgrim"), value: trip.deposit_iqd ? formatIqd(trip.deposit_iqd) : tr("دیارینەکراوە", "غير محدد", "Not set") },
     { label: tr("گونجایش", "السعة", "Capacity"), value: `${trip.seats_reserved ?? 0} / ${trip.capacity ?? "—"} ${tr("شوێن", "مقعد", "seats")}` },
     { label: tr("پلەی هۆتێل", "تصنيف الفندق", "Hotel rating"), value: `${trip.acc_stars ?? "—"} ${tr("ئەستێرە", "نجوم", "star")}` },
     { label: tr("ژەم لە ڕۆژێکدا", "الوجبات في اليوم", "Meals / day"), value: trip.meals_per_day != null ? String(trip.meals_per_day) : (trip.meals || tr("دیارینەکراوە", "غير محدد", "Not set")) },
@@ -3348,7 +3403,7 @@ function TripDetailModal({ trip, companyName, data, locale, role, busy, runActio
           {(trip.cancellation_policy || trip.deposit_terms) && (
             <section className="portal-trip-modal-section">
               <h3><ShieldCheck size={13} /> {tr("مەرجەکان", "السياسات", "Policies")}</h3>
-              {trip.deposit_terms && <p className="portal-trip-modal-text"><b>{tr("مەرجی پێشەکی: ", "شروط العربون: ", "Deposit terms: ")}</b>{trip.deposit_terms}</p>}
+              {trip.deposit_terms && <p className="portal-trip-modal-text"><b>{tr("مەرجەکانی پێشەکی هەڵوەشاندنەوە: ", "شروط عربون الإلغاء: ", "Cancellation deposit terms: ")}</b>{trip.deposit_terms}</p>}
               {trip.cancellation_policy && <p className="portal-trip-modal-text"><b>{tr("مەرجی هەڵوەشاندنەوە: ", "سياسة الإلغاء: ", "Cancellation: ")}</b>{trip.cancellation_policy}</p>}
             </section>
           )}
@@ -3721,7 +3776,15 @@ function ImageLightbox({ images, index, onClose }: { images: LightboxImage[]; in
   );
 }
 
-const VISA_STEPS = ["not_started", "submitted", "under_review", "approved", "rejected"] as const;
+function visaRejectionCategoryLabel(category: VisaRejectionCategory, locale: "ku" | "ar" | "en") {
+  const labels: Record<VisaRejectionCategory, [string, string, string]> = {
+    fixable_document: ["بەڵگەنامەی چاککراوە", "مستند قابل للتصحيح", "Fixable document"],
+    traveller_replaced: ["زیارەتکار دەگۆڕدرێت", "سيتم استبدال المسافر", "Traveller will be replaced"],
+    final_rejection: ["ڕەتکردنەوەی کۆتایی", "رفض نهائي", "Final rejection"],
+  };
+  const [ku, ar, en] = labels[category];
+  return locale === "ku" ? ku : locale === "ar" ? ar : en;
+}
 
 function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, askReason, locale, rooms, assignments, onAssignRoom, onOpenImages }: {
   traveller: BookingTraveller;
@@ -3738,15 +3801,18 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
   onOpenImages: (images: LightboxImage[], index: number) => void;
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
-  // Document and visa decisions belong to the confirmed service workflow.
-  // Before that point the company may inspect uploads, but cannot advance them.
-  const canReview = role === "agency" && booking.operational_stage === "confirmed";
-  const waitingForConfirmation = role === "agency"
-    && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage);
+  // Acceptance unlocks document review immediately, even while payment is
+  // pending. Visa decisions and trip logistics remain locked until the booking
+  // is fully paid and confirmed.
+  const canReviewDocuments = role === "agency" && ["awaiting_payment", "confirmed"].includes(booking.operational_stage);
+  const canManagePaidOperations = role === "agency" && booking.operational_stage === "confirmed" && booking.pay_status === "paid";
+  const waitingForAcceptance = role === "agency" && booking.operational_stage === "requested";
+  const waitingForClientInformation = role === "agency" && booking.operational_stage === "needs_information";
   const rowBusy = busy === `traveller-${traveller.id}`;
   const [signed, setSigned] = useState<Record<string, string>>({});
-  const [visaRef, setVisaRef] = useState(traveller.visa_reference ?? "");
+  const [rejectionCategory, setRejectionCategory] = useState<VisaRejectionCategory | "">("");
   const [seat, setSeat] = useState(traveller.transport_seat ?? "");
+  const canResolveVisa = canManagePaidOperations && ["submitted", "under_review"].includes(traveller.visa_status);
 
   // The app writes an upload to BOTH booking_travellers.passport_image_path /
   // .selfie_image_path AND a traveller_documents row pointing at the very same
@@ -3781,9 +3847,9 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
   const signKey = sources.map((s) => `${s.bucket}:${s.path}`).join("|");
 
   useEffect(() => {
-    setVisaRef(traveller.visa_reference ?? "");
+    setRejectionCategory("");
     setSeat(traveller.transport_seat ?? "");
-  }, [traveller.visa_reference, traveller.transport_seat]);
+  }, [traveller.id, traveller.visa_status, traveller.transport_seat]);
 
   useEffect(() => {
     let active = true;
@@ -3810,20 +3876,35 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
   };
 
   async function approveDocuments() {
+    if (!canReviewDocuments) return;
     await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
   }
   async function rejectDocuments() {
+    if (!canReviewDocuments) return;
     const reason = await askReason(tr("بۆچی بەڵگەنامەکان ڕەتدەکرێنەوە؟ (زیارەتکار ئەمە دەبینێت)", "لماذا ترفض المستندات؟ (يراها المعتمر)", "Why are the documents rejected? (the pilgrim sees this)"));
     if (!reason) return;
     await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە و زیارەتکار ئاگادار کرایەوە.", "تم رفض المستندات وإبلاغ المعتمر.", "Documents rejected — the pilgrim was notified."));
   }
-  async function setVisa(status: string) {
+  async function resolveVisa(status: "approved" | "rejected") {
+    if (!canResolveVisa) return;
     let reason: string | null = null;
     if (status === "rejected") {
+      if (!rejectionCategory) return;
       reason = await askReason(tr("هۆکاری ڕەتکردنەوەی ڤیزا:", "سبب رفض التأشيرة:", "Reason the visa was rejected:"));
       if (!reason) return;
     }
-    await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_visa_status: status, p_visa_reference: visaRef || null, p_visa_reason: reason }), tr("دۆخی ڤیزا نوێکرایەوە.", "تم تحديث حالة التأشيرة.", "Visa status updated."));
+    await runAction(
+      `traveller-${traveller.id}`,
+      () => getSupabase().rpc("resolve_visa", {
+        p_traveller_id: traveller.id,
+        p_status: status,
+        p_category: status === "rejected" ? rejectionCategory : null,
+        p_reason: reason,
+      }),
+      status === "approved"
+        ? tr("ڤیزاکە پەسەندکرا.", "تمت الموافقة على التأشيرة.", "Visa approved.")
+        : tr("ئەنجامی ڤیزا و هۆکارەکە تۆمارکرا.", "تم تسجيل رفض التأشيرة وسببه.", "Visa rejection and reason recorded."),
+    );
   }
   async function saveSeat() {
     await runAction(`traveller-${traveller.id}`, () => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_transport_seat: seat || null }), tr("کورسی گواستنەوە پاشەکەوتکرا.", "تم حفظ مقعد النقل.", "Transport seat saved."));
@@ -3884,18 +3965,29 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
         })}
       </div>
 
-      {waitingForConfirmation && (
+      {waitingForAcceptance && (
         <p className="booking-workflow-lock">
           <Lock size={13} />
           {tr(
-            "سەرەتا حیجزەکە وەربگرە و پارەدان پشتڕاست بکەرەوە؛ پاشان پێداچوونەوەی بەڵگەنامە و ڤیزا چالاک دەبێت.",
-            "اقبل الحجز وأكد الدفع أولاً؛ بعدها تتاح مراجعة المستندات والتأشيرة.",
-            "Accept the booking and confirm payment before document and visa work begins.",
+            "سەرەتا حیجزەکە وەربگرە؛ پاشان پێداچوونەوەی بەڵگەنامە چالاک دەبێت.",
+            "اقبل الحجز أولاً؛ بعدها تتاح مراجعة المستندات.",
+            "Accept the booking before reviewing documents.",
           )}
         </p>
       )}
 
-      {canReview && (
+      {waitingForClientInformation && (
+        <p className="booking-workflow-lock">
+          <Lock size={13} />
+          {tr(
+            "چاوەڕێی کڕیارە زانیارییە داواکراوەکان تەواو بکات؛ پاش گەڕانەوەی حیجزەکە پێداچوونەوە چالاک دەبێت.",
+            "بانتظار أن يكمل العميل المعلومات المطلوبة؛ تتاح المراجعة بعد إعادة الحجز للموافقة.",
+            "Waiting for the client to provide the requested information before document review can begin.",
+          )}
+        </p>
+      )}
+
+      {canReviewDocuments && (
         <div className="booking-review-actions">
           <button type="button" className="approve" onClick={approveDocuments} disabled={rowBusy || traveller.document_status === "approved" || traveller.document_status === "missing"}>
             {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
@@ -3906,18 +3998,40 @@ function TravellerReviewCard({ traveller, docs, booking, role, busy, runAction, 
         </div>
       )}
 
-      {canReview && (
+      {canReviewDocuments && !canManagePaidOperations && (
+        <p className="booking-workflow-lock">
+          <ShieldCheck size={13} />
+          {tr(
+            "پێداچوونەوەی بەڵگەنامە ئێستا چالاکە؛ ڤیزا، کورسی و ژوور دوای پشتڕاستکردنەوەی تەواوی پارەدان چالاک دەبن.",
+            "مراجعة المستندات متاحة الآن؛ تتاح التأشيرة والمقاعد والغرف بعد تأكيد الدفع بالكامل.",
+            "Document review is available now. Visa outcomes, seats and rooms unlock after full payment is confirmed.",
+          )}
+        </p>
+      )}
+
+      {canManagePaidOperations && (
         <div className="booking-ops-grid">
           <div className="booking-ops-block">
-            <label>{tr("قۆناغی ڤیزا", "مرحلة التأشيرة", "Visa stage")}</label>
-            <div className="booking-visa-steps">
-              {VISA_STEPS.filter((s) => s !== "not_started").map((s) => (
-                <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={rowBusy}>{titleCase(s)}</button>
-              ))}
-            </div>
-            <div className="booking-inline-field">
-              <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} />
-            </div>
+            <label>{tr("ئەنجامی ڤیزا", "نتيجة التأشيرة", "Visa outcome")}</label>
+            {traveller.visa_reference && <small className="booking-inline-note">{tr("ژمارەی داواکاری", "رقم الطلب", "Batch reference")}: {traveller.visa_reference}</small>}
+            {canResolveVisa ? (
+              <>
+                <div className="booking-inline-field">
+                  <select value={rejectionCategory} onChange={(event) => setRejectionCategory(event.target.value as VisaRejectionCategory | "")} disabled={rowBusy}>
+                    <option value="">{tr("جۆری ڕەتکردنەوە هەڵبژێرە", "اختر فئة الرفض", "Choose rejection category")}</option>
+                    {VISA_REJECTION_CATEGORIES.map((category) => <option key={category} value={category}>{visaRejectionCategoryLabel(category, locale)}</option>)}
+                  </select>
+                </div>
+                <div className="booking-visa-steps">
+                  <button type="button" className="approve" onClick={() => resolveVisa("approved")} disabled={rowBusy}><Check size={13} /> {tr("پەسەندکردن", "موافقة", "Approve")}</button>
+                  <button type="button" className="danger" onClick={() => resolveVisa("rejected")} disabled={rowBusy || !rejectionCategory}><X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}</button>
+                </div>
+                <small className="booking-inline-note">{tr("جۆر و هۆکار بۆ ڕەتکردنەوە پێویستن.", "فئة الرفض وسببه مطلوبان.", "A category and reason are required to reject.")}</small>
+              </>
+            ) : (
+              <p className="booking-inline-note">{tr("ئەنجام تەنها دوای ناردنی کۆمەڵە ڤیزا تۆمار دەکرێت.", "تسجل النتيجة فقط بعد إرسال دفعة التأشيرات.", "An outcome can be recorded only after the visa batch is submitted.")}</p>
+            )}
+            {traveller.visa_rejection_category && <small className="booking-inline-note">{visaRejectionCategoryLabel(traveller.visa_rejection_category as VisaRejectionCategory, locale)}</small>}
             {traveller.visa_reason && <small className="booking-inline-note">{traveller.visa_reason}</small>}
           </div>
           <div className="booking-ops-block">
@@ -3969,9 +4083,10 @@ function bookingJourneyStage(stage: string, docs: string[], visas: string[]): nu
 
 function BookingJourney({ booking, travellers, locale }: { booking: Booking; travellers: BookingTraveller[]; locale: "ku" | "ar" | "en" }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
-  const docs = travellers.map((t) => t.document_status);
-  const visas = travellers.map((t) => t.visa_status);
-  const current = bookingJourneyStage(booking.operational_stage, docs, visas);
+  const activeTravellers = onlyActiveTravellers(travellers);
+  const docs = activeTravellers.map((t) => t.document_status);
+  const visas = activeTravellers.map((t) => t.visa_status);
+  const current = bookingJourneyStage(isAwaitingBookingPayment(booking) ? "awaiting_payment" : booking.operational_stage, docs, visas);
   // Mirrors the app: once the trip departs the final step stops being a promise
   // ("Ready") and becomes a state ("Travelling"), then "Completed" at the end.
   const travelling = booking.operational_stage === "in_progress";
@@ -4024,7 +4139,7 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const booking = data.bookings.find((b) => b.id === bookingId);
-  const travellers = data.bookingTravellers.filter((t) => t.booking_id === bookingId);
+  const travellers = onlyActiveTravellers(data.bookingTravellers.filter((t) => t.booking_id === bookingId));
   const tripTitle = data.trips.find((t) => t.id === booking?.package_id)?.title ?? tr("گەشتی عومرە", "رحلة عمرة", "Umrah trip");
   const companyName = data.companies.find((c) => c.id === booking?.company_id)?.name;
   const payment = data.payments.find((p) => p.booking_id === bookingId && p.status === "succeeded");
@@ -4032,6 +4147,11 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
   const [assignments, setAssignments] = useState<Array<{ room_id: string; traveller_id: string }>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
   const [cashReceiptOpen, setCashReceiptOpen] = useState(false);
+  const [visaBatchReference, setVisaBatchReference] = useState("");
+  // The dispute trail. Admin-only and loaded on demand rather than with the
+  // rest of the dashboard: it is only ever read when someone is actually
+  // arguing about a booking, and pulling it for every booking would be waste.
+  const [history, setHistory] = useState<BookingHistoryRow[] | null>(null);
 
   useScrollLock();
 
@@ -4040,6 +4160,22 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, lightbox]);
+
+  useEffect(() => {
+    if (role === "agency") return;
+    let cancelled = false;
+    (async () => {
+      // booking_status_history is a view over audit_logs, whose RLS is
+      // admin-only — a company reading it gets nothing rather than an error.
+      const { data: rows } = await getSupabase()
+        .from("booking_status_history")
+        .select("id, from_value, to_value, action, actor_role, reason, created_at")
+        .eq("booking_id", bookingId)
+        .order("created_at", { ascending: false });
+      if (!cancelled) setHistory((rows ?? []) as BookingHistoryRow[]);
+    })();
+    return () => { cancelled = true; };
+  }, [bookingId, role]);
 
   const loadRooms = useCallback(async () => {
     if (!booking) return;
@@ -4084,13 +4220,38 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
     if (result) setCashReceiptOpen(false);
   }
 
+  async function submitVisaBatch() {
+    if (!booking) return;
+    await runAction(
+      `visa-batch-${bookingId}`,
+      () => getSupabase().rpc("submit_visa_batch", {
+        p_booking_id: bookingId,
+        p_reference: visaBatchReference.trim() || null,
+      }),
+      tr("کۆمەڵە ڤیزاکان نێردران.", "تم إرسال دفعة التأشيرات.", "Visa batch submitted."),
+    );
+  }
+
   if (!booking) return null;
   const bookingBusy = busy === `booking-${bookingId}`;
+  const visaBatchBusy = busy === `visa-batch-${bookingId}`;
   const remaining = Math.max(0, Number(booking.total_iqd) - Number(booking.amount_paid_iqd));
   const awaitingReview = travellers.filter((t) => t.document_status === "under_review").length;
   const allVisasApproved = travellers.length > 0 && travellers.every((t) => t.visa_status === "approved");
+  const allDocumentsApproved = travellers.length > 0 && travellers.every((t) => t.document_status === "approved");
+  const hasUnresolvedVisaRejection = travellers.some((t) => t.visa_status === "rejected" && t.visa_rejection_category !== "fixable_document");
+  const hasVisaApplicants = travellers.some((t) => ["not_started", "documents_missing", "ready_to_apply", "rejected"].includes(t.visa_status));
+  const visaBatchInProgress = travellers.some((t) => ["submitted", "under_review"].includes(t.visa_status));
   const canManage = role === "agency";
-  const expirySoon = booking.expires_at && ["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage);
+  const awaitingPayment = isAwaitingBookingPayment(booking);
+  const paymentDeadline = awaitingPayment ? booking.payment_deadline ?? booking.expires_at : null;
+  const requestExpiry = booking.expires_at && ["requested", "needs_information"].includes(booking.operational_stage);
+  const canSubmitVisaBatch = canManage
+    && booking.operational_stage === "confirmed"
+    && booking.pay_status === "paid"
+    && allDocumentsApproved
+    && hasVisaApplicants
+    && !hasUnresolvedVisaRejection;
   // The booking row has no return date, so it is read off the package.
   const bookingReturnDate = data.trips.find((item) => item.id === booking.package_id)?.return_date ?? null;
   const bookingNights = nightsBetween(booking.departure_date, bookingReturnDate);
@@ -4119,7 +4280,7 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
             <small>#{booking.id.slice(0, 8).toUpperCase()} · {tripTitle}{role === "admin" && companyName ? ` · ${companyName}` : ""}</small>
             <h2>{booking.travellers} {tr("زیارەتکار", "معتمر", "pilgrims")} · {formatIqd(booking.total_iqd)}</h2>
             <div className="booking-modal-tags">
-              <StatusPill status={booking.operational_stage} />
+              <BookingDisplayPill booking={booking} travellers={travellers} locale={locale} />
               {awaitingReview > 0 && <span className="booking-tag warning">{awaitingReview} {tr("چاوەڕێی پێداچوونەوە", "بانتظار المراجعة", "awaiting review")}</span>}
             </div>
           </div>
@@ -4137,7 +4298,8 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
             <div><small>{tr("بەرواری ڕۆیشتن", "المغادرة", "Departure")}</small><b>{formatDate(booking.departure_date, true)}</b></div>
             {/* Return comes off the package: bookings have no return column. */}
             <div><small>{tr("بەرواری گەڕانەوە", "العودة", "Return")}</small><b>{formatDate(bookingReturnDate, true)}{bookingNights ? <em className="booking-nights"> · {bookingNights} {tr("شەو", "ليلة", bookingNights === 1 ? "night" : "nights")}</em> : null}</b></div>
-            {expirySoon && <div><small>{tr("کۆتایی داواکاری", "انتهاء الطلب", "Request expires")}</small><b className={booking.expires_at && new Date(booking.expires_at) < new Date() ? "is-past" : undefined}>{relativeTime(booking.expires_at!)}</b></div>}
+            {requestExpiry && <div><small>{tr("کۆتایی داواکاری", "انتهاء الطلب", "Request expires")}</small><b className={new Date(requestExpiry) < new Date() ? "is-past" : undefined}>{formatDateTime(requestExpiry, locale)}</b></div>}
+            {paymentDeadline && <div><small>{tr("کۆتایی پارەدان", "الموعد النهائي للدفع", "Payment deadline")}</small><b className={new Date(paymentDeadline) < new Date() ? "is-past" : undefined}>{formatDateTime(paymentDeadline, locale)}</b></div>}
           </section>
           {(booking.pay_method === "cash" || hasPaymentProof || booking.accepted_at) && (
             <section className="booking-payment-proof">
@@ -4165,6 +4327,27 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
           )}
           {booking.note && <p className="booking-note"><FileText size={12} /> {booking.note}</p>}
 
+          {canManage && booking.operational_stage === "confirmed" && booking.pay_status === "paid" && !allVisasApproved && (
+            <section className="booking-payment-proof">
+              <header>
+                <TicketCheck size={16} />
+                <div><small>{tr("کۆمەڵە ڤیزا", "دفعة التأشيرات", "Visa batch")}</small><b>{visaBatchInProgress ? tr("چاوەڕێی ئەنجام", "بانتظار النتيجة", "Awaiting outcome") : tr("ئامادەی ناردن", "جاهزة للإرسال", "Ready to submit")}</b></div>
+              </header>
+              {!allDocumentsApproved ? (
+                <p className="booking-workflow-lock"><Lock size={13} /> {tr("پێش ناردنی ڤیزا، بەڵگەنامەکانی هەموو گەشتیارە چالاکەکان پەسەند بکە.", "اعتمد مستندات جميع المسافرين النشطين قبل إرسال التأشيرات.", "Approve every active traveller's documents before submitting visas.")}</p>
+              ) : hasUnresolvedVisaRejection ? (
+                <p className="booking-workflow-lock"><AlertTriangle size={13} /> {tr("سەرەتا ڕەتکردنەوەی کۆتایی یان گۆڕینی گەشتیار چارەسەر بکە.", "عالج الرفض النهائي أو استبدال المسافر أولاً.", "Resolve final rejections or traveller replacements before another batch.")}</p>
+              ) : hasVisaApplicants ? (
+                <div className="booking-inline-field">
+                  <input value={visaBatchReference} onChange={(event) => setVisaBatchReference(event.target.value)} placeholder={tr("ژمارەی کۆمەڵە (ئارەزوومەندانە)", "مرجع الدفعة (اختياري)", "Batch reference (optional)")} disabled={visaBatchBusy} />
+                  <button type="button" onClick={submitVisaBatch} disabled={!canSubmitVisaBatch || visaBatchBusy}>{visaBatchBusy ? <TawafLoadingSpinner size={13} /> : <Upload size={13} />} {tr("ناردنی ڤیزاکان", "إرسال التأشيرات", "Submit visas")}</button>
+                </div>
+              ) : (
+                <p className="booking-inline-note">{tr("ڤیزاکان نێردراون؛ ئەنجامی هەر گەشتیارێک لە خوارەوە تۆمار بکە.", "تم إرسال التأشيرات؛ سجل نتيجة كل مسافر أدناه.", "Visas are submitted; record each traveller's outcome below.")}</p>
+              )}
+            </section>
+          )}
+
           <div className="booking-section-title"><UserRound size={14} /> {tr("زیارەتکاران و بەڵگەنامەکان", "المعتمرون والمستندات", "Pilgrims & documents")}{canManage && awaitingReview > 0 && <span className="booking-queue-badge">{awaitingReview}</span>}</div>
           {travellers.length === 0 && <p className="booking-empty">{tr("هیچ زیارەتکارێک تۆمار نەکراوە.", "لا يوجد معتمرون مسجلون.", "No travellers recorded.")}</p>}
           {travellers.map((traveller) => (
@@ -4186,20 +4369,77 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
           ))}
         </div>
 
+        {/* Dispute trail. Admin only — this is what an argument about "who
+            changed what, when, and why" gets settled from, so it shows every
+            recorded transition rather than a summary. */}
+        {role !== "agency" && history !== null && (
+          <section className="portal-panel booking-history-panel">
+            <header className="portal-panel-header">
+              <div>
+                <h2>{tr("مێژووی حیجز", "سجل الحجز", "Booking history")}</h2>
+                <p>{tr(
+                  "هەموو گۆڕانکارییەکان — ناتوانرێت بسڕدرێتەوە یان بگۆڕدرێت",
+                  "كل التغييرات — لا يمكن حذفها أو تعديلها",
+                  "Every recorded change — cannot be edited or deleted",
+                )}</p>
+              </div>
+              <ShieldCheck size={18} />
+            </header>
+            {history.length ? (
+              <div className="portal-table-wrap">
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      <th>{tr("کات", "الوقت", "When")}</th>
+                      <th>{tr("کردار", "الإجراء", "Action")}</th>
+                      <th>{tr("گۆڕان", "التغيير", "Change")}</th>
+                      <th>{tr("لەلایەن", "بواسطة", "By")}</th>
+                      <th>{tr("هۆکار", "السبب", "Reason")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((row) => (
+                      <tr key={row.id}>
+                        <td><span dir="ltr">{formatDateTime(row.created_at, locale)}</span></td>
+                        <td><b>{titleCase(row.action ?? "—")}</b></td>
+                        <td>
+                          {row.from_value || row.to_value ? (
+                            <span dir="ltr" className="portal-cell-sub">
+                              {row.from_value ?? "—"} → {row.to_value ?? "—"}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td>{titleCase(row.actor_role ?? "system")}</td>
+                        <td className="portal-cell-sub">{row.reason || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="portal-card-note">
+                {tr("هێشتا هیچ گۆڕانکارییەک تۆمار نەکراوە.",
+                    "لم تُسجل أي تغييرات بعد.",
+                    "No changes have been recorded yet.")}
+              </p>
+            )}
+          </section>
+        )}
+
         <footer className="booking-modal-actions">
-          {canManage && ["requested", "needs_information"].includes(booking.operational_stage) && (
+          {canManage && booking.operational_stage === "requested" && (
             <button type="button" className="approve" onClick={() => transition("accept")} disabled={bookingBusy}><Check size={14} /> {tr("وەرگرتنی حیجز", "قبول الحجز", "Accept booking")}</button>
           )}
-          {canManage && booking.pay_method === "cash" && booking.operational_stage === "awaiting_payment" && (
+          {canManage && booking.pay_method === "cash" && awaitingPayment && (
             <button type="button" className="approve" onClick={() => setCashReceiptOpen(true)} disabled={bookingBusy}><Banknote size={14} /> {tr("تۆمارکردنی پسوڵە", "تسجيل الإيصال", "Record cash receipt")}</button>
           )}
-          {booking.pay_method === "fib" && booking.operational_stage === "awaiting_payment" && (
+          {booking.pay_method === "fib" && awaitingPayment && (
             <span className="booking-readonly-note"><CreditCard size={14} /> {tr("چاوەڕێی پشتڕاستکردنەوەی خۆکاری پارەدانی FIB", "بانتظار التأكيد التلقائي لدفع FIB", "Waiting for automatic FIB payment confirmation")}</span>
           )}
-          {canManage && ["requested", "needs_information"].includes(booking.operational_stage) && (
+          {canManage && booking.operational_stage === "requested" && (
             <button type="button" onClick={() => transition("request_information")} disabled={bookingBusy}>{tr("داوای زانیاری", "طلب معلومات", "Request info")}</button>
           )}
-          {canManage && booking.operational_stage === "confirmed" && (
+          {canManage && booking.operational_stage === "confirmed" && booking.pay_status === "paid" && (
             <button type="button" className="approve" onClick={() => transition("ready")} disabled={bookingBusy || !allVisasApproved} title={allVisasApproved ? undefined : tr("هەموو ڤیزاکان دەبێت پەسەند بکرێن", "يجب اعتماد كل التأشيرات", "All visas must be approved first")}><ClipboardCheck size={14} /> {tr("ئامادەکردن", "جاهز", "Mark ready")}</button>
           )}
           {canManage && booking.operational_stage === "ready" && (
@@ -4244,8 +4484,10 @@ function BookingDetailModal({ bookingId, data, role, busy, runAction, askReason,
 // verdict) so slow agencies surface without any write access.
 function DocumentSlaPanel({ data, companyMap, locale }: { data: PortalData; companyMap: Map<string, string>; locale: "ku" | "ar" | "en" }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
-  const reviewed = data.travellerDocuments.filter((d) => d.reviewed_at);
-  const pending = data.travellerDocuments.filter((d) => d.status === "under_review");
+  const activeTravellerIds = new Set(onlyActiveTravellers(data.bookingTravellers).map((traveller) => traveller.id));
+  const activeDocuments = data.travellerDocuments.filter((document) => activeTravellerIds.has(document.traveller_id));
+  const reviewed = activeDocuments.filter((d) => d.reviewed_at);
+  const pending = activeDocuments.filter((d) => d.status === "under_review");
   const hours = (a: string, b: string) => (new Date(a).getTime() - new Date(b).getTime()) / 3.6e6;
   const byCompany = new Map<string, { total: number; sum: number; pending: number; oldest: number }>();
   reviewed.forEach((d) => {
@@ -4302,10 +4544,10 @@ const PENDING_STAGES = ["requested", "needs_information", "awaiting_payment"];
 const INERT_STAGES = ["expired", "cancelled", "rejected"];
 const JOURNEY_STAGES = ["in_progress", "completed"];
 
-function bookingTier(stage: string, blockerCount: number): BookingTier {
-  if (INERT_STAGES.includes(stage)) return "inert";
-  if (PENDING_STAGES.includes(stage)) return "urgent";
-  if (JOURNEY_STAGES.includes(stage)) return "journey";
+function bookingTier(booking: Booking, blockerCount: number): BookingTier {
+  if (INERT_STAGES.includes(booking.operational_stage)) return "inert";
+  if (PENDING_STAGES.includes(booking.operational_stage) || isAwaitingBookingPayment(booking)) return "urgent";
+  if (JOURNEY_STAGES.includes(booking.operational_stage)) return "journey";
   if (blockerCount > 0) return "blocked";
   return "settled"; // confirmed (clean) and ready
 }
@@ -4329,8 +4571,10 @@ function compareBookingCards(a: DecoratedBooking, b: DecoratedBooking) {
   // Inside the urgent tier the tightest deadline wins. A request with no expiry
   // set cannot be the most urgent thing on screen, so it sorts last.
   if (a.tier === "urgent") {
-    const at = a.booking.expires_at ? new Date(a.booking.expires_at).getTime() : Infinity;
-    const bt = b.booking.expires_at ? new Date(b.booking.expires_at).getTime() : Infinity;
+    const aDeadline = bookingActionDeadline(a.booking);
+    const bDeadline = bookingActionDeadline(b.booking);
+    const at = aDeadline ? new Date(aDeadline).getTime() : Infinity;
+    const bt = bDeadline ? new Date(bDeadline).getTime() : Infinity;
     if (at !== bt) return at - bt;
   }
   return new Date(b.booking.created_at).getTime() - new Date(a.booking.created_at).getTime();
@@ -4339,13 +4583,14 @@ function compareBookingCards(a: DecoratedBooking, b: DecoratedBooking) {
 // What is stopping this booking from reaching 'ready'. Returned as counts so
 // the card can say "1 of 3 passports rejected" instead of a bare status word.
 function bookingBlockers(travellers: BookingTraveller[]) {
-  const docsRejected = travellers.filter((t) => t.document_status === "rejected").length;
-  const docsMissing = travellers.filter((t) => t.document_status === "missing").length;
-  const docsReview = travellers.filter((t) => t.document_status === "under_review").length;
-  const visaRejected = travellers.filter((t) => t.visa_status === "rejected").length;
-  const visaPending = travellers.filter((t) => !["approved", "rejected"].includes(t.visa_status)).length;
+  const activeTravellers = onlyActiveTravellers(travellers);
+  const docsRejected = activeTravellers.filter((t) => t.document_status === "rejected").length;
+  const docsMissing = activeTravellers.filter((t) => t.document_status === "missing").length;
+  const docsReview = activeTravellers.filter((t) => t.document_status === "under_review").length;
+  const visaRejected = activeTravellers.filter((t) => t.visa_status === "rejected").length;
+  const visaPending = activeTravellers.filter((t) => !["approved", "rejected", "withdrawn"].includes(t.visa_status)).length;
   return {
-    total: travellers.length,
+    total: activeTravellers.length,
     docsRejected,
     docsMissing,
     docsReview,
@@ -4428,30 +4673,31 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
   // the package it was made against — that is where the itinerary lives.
   const tripReturnMap = new Map(data.trips.map((item) => [item.id, item.return_date]));
   const companyMap = new Map(data.companies.map((item) => [item.id, item.name]));
+  const activeTravellers = onlyActiveTravellers(data.bookingTravellers);
   // Client name comes from the booking's lead traveller (falling back to the
   // first traveller on file). booking_travellers is already loaded and RLS-scoped,
   // so no extra query or schema change is needed here.
   const clientNameByBooking = new Map<string, string>();
-  data.bookingTravellers.forEach((tr) => {
+  activeTravellers.forEach((tr) => {
     const name = (tr.full_name || tr.local_name || "").trim();
     if (!name) return;
     if (tr.is_lead || !clientNameByBooking.has(tr.booking_id)) clientNameByBooking.set(tr.booking_id, name);
   });
   const travellersByBooking = new Map<string, BookingTraveller[]>();
-  data.bookingTravellers.forEach((tr) => {
+  activeTravellers.forEach((tr) => {
     const list = travellersByBooking.get(tr.booking_id);
     if (list) list.push(tr); else travellersByBooking.set(tr.booking_id, [tr]);
   });
   const awaitingByBooking = new Map<string, number>();
-  data.bookingTravellers.forEach((tr) => {
+  activeTravellers.forEach((tr) => {
     if (tr.document_status === "under_review") awaitingByBooking.set(tr.booking_id, (awaitingByBooking.get(tr.booking_id) ?? 0) + 1);
   });
-  const docsAwaiting = data.bookingTravellers.filter((item) => item.document_status === "under_review").length;
+  const docsAwaiting = activeTravellers.filter((item) => item.document_status === "under_review").length;
 
   const allCards: DecoratedBooking[] = data.bookings.map((booking) => {
       const travellers = travellersByBooking.get(booking.id) ?? [];
       const blockers = bookingBlockers(travellers);
-      return { booking, blockers, tier: bookingTier(booking.operational_stage, blockers.count) };
+      return { booking, blockers, tier: bookingTier(booking, blockers.count) };
     });
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -4462,6 +4708,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
       if (filter === "all") return true;
       if (filter === "attention") return tier === "urgent" || tier === "blocked";
       if (filter === "docs_review") return (awaitingByBooking.get(booking.id) ?? 0) > 0;
+      if (filter === "awaiting_payment") return isAwaitingBookingPayment(booking);
       return booking.operational_stage === filter;
     })
     .sort((a, b) => {
@@ -4483,7 +4730,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
   // countdown is actually on screen — an agency leaving this tab open on a list
   // of completed trips should not repaint every second.
   const [now, setNow] = useState(() => Date.now());
-  const hasLiveCountdown = cards.some((c) => c.tier === "urgent" && c.booking.expires_at);
+  const hasLiveCountdown = cards.some((c) => c.tier === "urgent" && bookingActionDeadline(c.booking));
   useEffect(() => {
     if (!hasLiveCountdown) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -4504,7 +4751,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
   }
 
   function exportCsv() {
-    const header = ["Booking", "Trip", "Client", "Company", "Travellers", "Total IQD", "Paid IQD", "Stage", "Pay method", "Phone", "Departure", "Return", "Nights", "Created"];
+    const header = ["Booking", "Trip", "Client", "Company", "Travellers", "Total IQD", "Paid IQD", "Payment status", "Payment deadline", "Stage", "Pay method", "Phone", "Departure", "Return", "Nights", "Created"];
     const rows = bookings.map((booking) => [
       booking.id.slice(0, 8).toUpperCase(),
       tripMap.get(booking.package_id) ?? "Umrah trip",
@@ -4513,6 +4760,8 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
       booking.travellers,
       booking.total_iqd,
       booking.amount_paid_iqd,
+      booking.pay_status,
+      booking.payment_deadline ?? "",
       booking.operational_stage,
       booking.pay_method,
       booking.contact_phone ?? "",
@@ -4548,6 +4797,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
     if (id === "all") return data.bookings.length;
     if (id === "attention") return attentionCount;
     if (id === "docs_review") return data.bookings.filter((item) => (awaitingByBooking.get(item.id) ?? 0) > 0).length;
+    if (id === "awaiting_payment") return data.bookings.filter(isAwaitingBookingPayment).length;
     return data.bookings.filter((item) => item.operational_stage === id).length;
   };
 
@@ -4619,7 +4869,8 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
                 tripTitle={tripMap.get(booking.package_id) ?? "Umrah trip"}
                 returnDate={tripReturnMap.get(booking.package_id) ?? null}
                 companyName={companyMap.get(booking.company_id) ?? "Company"}
-                visasReady={visasReadyByBooking(data.bookingTravellers, booking.id)}
+                travellers={travellersByBooking.get(booking.id) ?? []}
+                visasReady={visasReadyByBooking(activeTravellers, booking.id)}
                 onOpen={() => setDetailId(booking.id)}
                 transition={(action) => transition(booking, action)}
                 runAction={runAction}
@@ -4647,7 +4898,7 @@ function BookingsPage({ role, data, busy, runAction, askReason, locale }: { role
 
 function BookingCard({
   booking, blockers, tier, now, role, busy, locale,
-  clientName, tripTitle, returnDate, companyName, visasReady, onOpen, transition, runAction,
+  clientName, tripTitle, returnDate, companyName, travellers, visasReady, onOpen, transition, runAction,
 }: {
   booking: Booking;
   blockers: ReturnType<typeof bookingBlockers>;
@@ -4661,6 +4912,7 @@ function BookingCard({
   /// From the booking's package — see tripReturnMap.
   returnDate: string | null;
   companyName: string;
+  travellers: BookingTraveller[];
   visasReady: boolean;
   onOpen: () => void;
   transition: (action: string) => void;
@@ -4682,10 +4934,12 @@ function BookingCard({
   const payout = Number(booking.payout_iqd ?? 0) || Math.max(0, total - commission);
   const partiallyPaid = paid > 0 && paid < total;
 
-  const msLeft = booking.expires_at ? new Date(booking.expires_at).getTime() - now : null;
+  const deadline = bookingActionDeadline(booking);
+  const msLeft = deadline ? new Date(deadline).getTime() - now : null;
   const level = msLeft == null ? null : countdownLevel(msLeft);
   const showCountdown = tier === "urgent" && msLeft != null;
-  const awaitingClient = booking.operational_stage === "awaiting_payment";
+  const awaitingClient = isAwaitingBookingPayment(booking);
+  const showPaymentBalance = awaitingClient && total > paid;
 
   const days = daysUntil(booking.departure_date);
   const proximity = proximityLabel(days, locale);
@@ -4726,7 +4980,9 @@ function BookingCard({
               Arabic long forms ("19 کاتژمێر 59 خولەک") keep their own word order
               instead of being reversed into nonsense by a forced LTR run. */}
           <b dir="auto">{countdownText(msLeft!, locale)}</b>
-          <small>{msLeft! <= 0 ? tr("ماوەی پارەدان بەسەرچووە", "انتهت مهلة الدفع", "Payment window closed") : tr("ماوە بۆ پارەدان", "متبقٍ للدفع", "left to pay")}</small>
+          <small>{awaitingClient
+            ? (msLeft! <= 0 ? tr("ماوەی پارەدان بەسەرچووە", "انتهت مهلة الدفع", "Payment window closed") : tr("ماوە بۆ پارەدان", "متبقٍ للدفع", "left to pay"))
+            : (msLeft! <= 0 ? tr("ماوەی داواکاری بەسەرچووە", "انتهت مهلة الطلب", "Request window closed") : tr("ماوەی داواکاری", "متبقٍ للطلب", "request hold remaining"))}</small>
         </div>
       )}
 
@@ -4735,7 +4991,7 @@ function BookingCard({
           <b>#{booking.id.slice(0, 8).toUpperCase()}</b>
           <small>{relativeTime(booking.created_at)}</small>
         </div>
-        <StatusPill status={booking.operational_stage} />
+        <BookingDisplayPill booking={booking} travellers={travellers} locale={locale} />
       </header>
 
       {/* Net first: it is the number an agency is actually deciding on. Gross
@@ -4756,7 +5012,7 @@ function BookingCard({
           <small>{booking.travellers} {tr("گەشتیار", "مسافر", booking.travellers === 1 ? "traveller" : "travellers")}</small>
         </div>
         {booking.contact_phone && (
-          phoneShown || (!PENDING_STAGES.includes(booking.operational_stage) && !inert) ? (
+          phoneShown || (!PENDING_STAGES.includes(booking.operational_stage) && !isAwaitingBookingPayment(booking) && !inert) ? (
             <a className="portal-booking-phone" href={`tel:${booking.contact_phone}`} dir="ltr" onClick={(event) => event.stopPropagation()}>{booking.contact_phone}</a>
           ) : (
             <button
@@ -4795,11 +5051,11 @@ function BookingCard({
 
       {/* Only drawn where a part-payment genuinely exists. A 0% bar on an
           expired card was pure noise. */}
-      {partiallyPaid && (
+      {(partiallyPaid || showPaymentBalance) && (
         <div className="portal-booking-pay">
           <span>{tr(`${formatIqd(total - paid)} ماوە`, `متبقي ${formatIqd(total - paid)}`, `${formatIqd(total - paid)} due`)}</span>
-          <small>{Math.round((paid / total) * 100)}%</small>
-          <i><b style={{ width: `${Math.min(100, (paid / total) * 100)}%` }} /></i>
+          <small>{total > 0 ? Math.round((paid / total) * 100) : 0}%</small>
+          <i><b style={{ width: `${total > 0 ? Math.min(100, (paid / total) * 100) : 0}%` }} /></i>
         </div>
       )}
 
@@ -4842,7 +5098,7 @@ function BookingCard({
 // operational_stage becomes 'ready' (see the app's client_booking_progress.dart),
 // so "Mark ready" must stay locked until every traveller's visa is approved.
 function visasReadyByBooking(travellers: BookingTraveller[], bookingId: string) {
-  const rows = travellers.filter((item) => item.booking_id === bookingId);
+  const rows = onlyActiveTravellers(travellers.filter((item) => item.booking_id === bookingId));
   return rows.length > 0 && rows.every((item) => item.visa_status === "approved");
 }
 
@@ -4858,21 +5114,21 @@ function BookingActions({ booking, busy, transition, role, locale, visasReady, o
   const t = dashboardTranslations[locale];
   if (busy) return <TawafLoadingSpinner size={16} />;
   if (role !== "agency") return null;
-  if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage)) {
+  if (["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) || isAwaitingBookingPayment(booking)) {
     return (
       <div className="portal-row-actions">
-        {["requested", "needs_information"].includes(booking.operational_stage) && (
+        {booking.operational_stage === "requested" && (
           <button type="button" className="approve" onClick={() => transition("accept")}><Check size={14} /> {locale === "ku" ? "وەرگرتن" : locale === "ar" ? "قبول" : "Accept"}</button>
         )}
-        {booking.operational_stage === "awaiting_payment" && booking.pay_method === "cash" && (
+        {isAwaitingBookingPayment(booking) && booking.pay_method === "cash" && (
           <button type="button" className="approve" onClick={onRecordReceipt}><Banknote size={14} /> {locale === "ku" ? "تۆمارکردنی پسوڵە" : locale === "ar" ? "تسجيل الإيصال" : "Record receipt"}</button>
         )}
-        {["requested", "needs_information"].includes(booking.operational_stage) && <button type="button" onClick={() => transition("request_information")}>{t.requestInfo}</button>}
-        <button type="button" className="danger" onClick={() => transition("reject")}>{t.reject}</button>
+        {booking.operational_stage === "requested" && <button type="button" onClick={() => transition("request_information")}>{t.requestInfo}</button>}
+        {["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && <button type="button" className="danger" onClick={() => transition("reject")}>{t.reject}</button>}
       </div>
     );
   }
-  if (booking.operational_stage === "confirmed") {
+  if (booking.operational_stage === "confirmed" && booking.pay_status === "paid") {
     return (
       <div className="portal-row-actions">
         <button type="button" className="approve" onClick={() => transition("ready")} disabled={!visasReady} title={visasReady ? undefined : (locale === "ku" ? "هەموو ڤیزاکان دەبێت پەسەند بکرێن پێش ئامادەکردن" : locale === "ar" ? "يجب اعتماد كل التأشيرات قبل التجهيز" : "All traveller visas must be approved first")}><ClipboardCheck size={14} /> {t.markReady}</button>

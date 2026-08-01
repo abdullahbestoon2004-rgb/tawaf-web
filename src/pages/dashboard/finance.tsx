@@ -194,6 +194,14 @@ type FinancePayment = {
   status: string;
   created_at: string;
   confirmed_at?: string | null;
+  provider_reference?: string | null;
+  // Which side of the counter took the money. Decides whether Tawaf owes the
+  // agency its share or the agency owes Tawaf its commission — and only
+  // company-collected cash needs verifying, because it is self-attested.
+  // Present because the dashboard reads payments_finance, not payments.
+  collected_by?: "platform" | "company" | null;
+  reconciled_by?: string | null;
+  reconciled_at?: string | null;
 };
 type FinanceBooking = {
   id: string;
@@ -953,6 +961,37 @@ function useCopy(locale: Locale) {
       tabLedger: pick("دەفتەر", "الدفتر", "Ledger"),
       tabReports: pick("ڕاپۆرت", "التقارير", "Reports"),
       tabTrips: pick("قازانجی گەشتەکان", "ربحية الرحلات", "Trip profit"),
+
+      // Cash reconciliation. Only company-collected money appears here: cash a
+      // company took at its own counter is self-attested, so it stays unverified
+      // until an admin confirms the receipt actually exists.
+      tabReconciliation: pick("پشکنینی نەختینە", "تدقيق النقد", "Cash reconciliation"),
+      reconQueueTitle: pick("چاوەڕێی پشتڕاستکردنەوە", "بانتظار التحقق", "Awaiting verification"),
+      reconQueueSub: pick(
+        "نەختینەی کۆکراوە لەلایەن کۆمپانیاکانەوە — خۆیان ڕایانگەیاندووە",
+        "نقد حصّلته الشركات — إقرار ذاتي",
+        "Cash the companies collected themselves — self-attested until checked",
+      ),
+      reconVerify: pick("پشتڕاستکردنەوە", "تحقق", "Verify"),
+      reconVerified: pick("پشتڕاستکرایەوە", "تم التحقق", "Verified"),
+      reconVerifiedOn: pick("پشتڕاستکراوە لە", "تم التحقق في", "Verified on"),
+      reconNothing: pick(
+        "هیچ پسوڵەیەک چاوەڕێی پشتڕاستکردنەوە نییە.",
+        "لا توجد إيصالات بانتظار التحقق.",
+        "No receipts are awaiting verification.",
+      ),
+      reconNote: pick("تێبینی (ئارەزوومەندانە)", "ملاحظة (اختياري)", "Note (optional)"),
+      reconConfirmTitle: pick("پشتڕاستکردنەوەی پسوڵە", "تأكيد الإيصال", "Verify this receipt"),
+      reconConfirmBody: pick(
+        "پشتڕاست دەکەیتەوە کە ئەم بڕە نەختینەیە بەڕاستی وەرگیراوە. ئەمە ناگۆڕدرێتەوە.",
+        "أنت تؤكد أن هذا المبلغ النقدي قد استُلم فعلاً. لا يمكن التراجع.",
+        "You are confirming this cash was genuinely received. This cannot be undone.",
+      ),
+      reconReceipt: pick("ژمارەی پسوڵە", "رقم الإيصال", "Receipt no."),
+      reconCollectedBy: pick("وەرگیراوە لەلایەن", "حُصّل بواسطة", "Collected by"),
+      reconByCompany: pick("کۆمپانیا", "الشركة", "Company"),
+      reconByPlatform: pick("تەواف", "طواف", "Tawaf"),
+      reconAge: pick("تەمەن", "العمر", "Waiting"),
       tabPayouts: pick("تسویەکان", "التسويات", "Payouts"),
       tabReceivables: pick("قەرزی عومرەکاران", "مستحقات المعتمرين", "Receivables"),
 
@@ -1007,13 +1046,11 @@ function useCopy(locale: Locale) {
         "جاهز للطلب",
         "Ready to request",
       ),
-      heldBalance: pick("گیراوە", "محجوز", "Held"),
       heldDetail: pick(
         "{count} داواکاری لە جێبەجێکردندایە",
         "{count} طلب قيد التنفيذ",
         "{count} request in progress",
       ),
-      dueToPlatform: pick("قەرزی پلاتفۆرم", "المستحق للمنصة", "Due to platform"),
       dueToPlatformDetail: pick(
         "کاشی حجزە نەختینەکان",
         "عمولة الحجوزات النقدية",
@@ -1021,6 +1058,18 @@ function useCopy(locale: Locale) {
       ),
       lifetimeEarnings: pick("کۆی داهات", "إجمالي الأرباح", "Lifetime earnings"),
       lifetimeDetail: pick("لە سەرەتاوە", "منذ البداية", "Since the beginning"),
+
+      // The balance strip. These sit ABOVE the period picker because they are
+      // stock figures — true right now, whatever period is selected — and the
+      // old cards read as though the picker governed them.
+      balancesNow: pick("باڵانسی ئێستا", "الرصيد الآن", "Balances right now"),
+      balancesNowSub: pick(
+        "ماوەی هەڵبژێردراو کاریگەری لەمانە نییە",
+        "لا تتأثر بالفترة المحددة",
+        "Not affected by the selected period",
+      ),
+      heldInline: pick("{amount} گیراوە", "{amount} محجوز", "{amount} held"),
+      rateInline: pick("ڕێژە {rate}", "النسبة {rate}", "Rate {rate}"),
 
       // Ledger
       tabCash: pick("تسویەی نەختینە", "تسوية النقد", "Cash settlement"),
@@ -1142,14 +1191,6 @@ function useCopy(locale: Locale) {
       rightNow: pick("ئێستا · هەموو کاتەکان", "الآن · كل الأوقات", "Right now · all time"),
       totalEarned: pick("داهاتی پاک", "صافي الإيراد", "Net earned"),
       afterCommission: pick("دوای کاش", "بعد العمولة", "After commission"),
-      pendingPayout: pick("چاوەڕێی وەرگرتن", "بانتظار الصرف", "Pending payout"),
-      tawafOwesYou: pick("تەواف قەرزارتانە", "طواف مدين لكم", "Tawaf owes you"),
-      totalReceived: pick("کۆی وەرگیراو", "إجمالي المستلم", "Received"),
-      toDate: pick("تا ئێستا", "حتى تاريخه", "To date"),
-      commissionDue: pick("کاشی ماوە", "العمولة المستحقة", "Commission due"),
-      youOweTawaf: pick("قەرزاری تەوافن", "أنتم مدينون لطواف", "You owe Tawaf"),
-      yourRate: pick("ڕێژەی کاشتان", "نسبة عمولتكم", "Your commission rate"),
-      tier: pick("پلە", "الفئة", "Tier"),
 
       // Charts
       chartMoneyTitle: pick("داهات بەرامبەر خەرجی", "الإيرادات مقابل المصاريف", "Revenue vs expenses"),
@@ -1174,6 +1215,11 @@ function useCopy(locale: Locale) {
       seriesEarned: pick("داهات", "الإيراد", "Earned"),
       showTable: pick("خشتە", "جدول", "Table"),
       showChart: pick("هێڵکاری", "رسم", "Chart"),
+      // Short forms — these label a segmented switch, not a panel header, so
+      // the full chart titles above are too long to reuse here.
+      chartTabTrend: pick("داهات", "الإيراد", "Earnings"),
+      chartTabSplit: pick("پارە لەکوێیە", "أين المبلغ", "Where money sits"),
+      chartTabTrips: pick("بەپێی گەشت", "حسب الرحلة", "By trip"),
       noChartData: pick("هێشتا داتا نییە بۆ ئەم ماوەیە.", "لا توجد بيانات لهذه الفترة.", "No data for this period yet."),
       budgetLabel: pick("بودجە", "الميزانية", "Budget"),
 
@@ -1677,6 +1723,52 @@ function ChartFrame({ title, subtitle, action, table, children, copy, empty }: {
   );
 }
 
+type ChartView = {
+  id: string;
+  tab: string;
+  title: string;
+  subtitle: string;
+  empty: boolean;
+  table: React.ReactNode;
+  chart: React.ReactNode;
+};
+
+// One frame the reader switches between, rather than three full-height panels
+// stacked down the page. The charts answer three versions of the same question,
+// so only one of them needs to be on screen at a time.
+function ChartTabs({ views, copy }: { views: ChartView[]; copy: Copy }) {
+  const [active, setActive] = useState(views[0]?.id ?? "");
+  const view = views.find((item) => item.id === active) ?? views[0];
+  if (!view) return null;
+  return (
+    <ChartFrame
+      title={view.title}
+      subtitle={view.subtitle}
+      copy={copy}
+      empty={view.empty}
+      table={view.table}
+      action={
+        <div className="finance-chart-switch" role="tablist">
+          {views.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={item.id === view.id}
+              className={item.id === view.id ? "active" : ""}
+              onClick={() => setActive(item.id)}
+            >
+              {item.tab}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {view.chart}
+    </ChartFrame>
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * Small presentational pieces
  * ------------------------------------------------------------------ */
@@ -1729,6 +1821,33 @@ function Metric({ icon: Icon, label, value, detail, tone, delta, copy }: {
         </div>
       )}
     </div>
+  );
+}
+
+// Stock figures — what is true right now. They are deliberately NOT metric
+// cards: the cards sit under the period picker and are read as belonging to it,
+// and half of these ignore it. A strip above the picker says so by position.
+function BalanceStrip({ items, title, subtitle }: {
+  items: Array<{ key: string; label: string; value: string; detail: string; tone?: "green" | "gold" | "sand" | "teal" }>;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <section className="finance-balance-strip" aria-label={title}>
+      <header>
+        <b>{title}</b>
+        <span>{subtitle}</span>
+      </header>
+      <div>
+        {items.map((item) => (
+          <div key={item.key} className={item.tone ? `tone-${item.tone}` : undefined}>
+            <small>{item.label}</small>
+            <b dir="ltr">{item.value}</b>
+            <em>{item.detail}</em>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -3457,11 +3576,7 @@ export default function FinanceWorkspace({
   /* ---------------------------- company view --------------------------- */
 
   if (role === "agency") {
-    const balance = balances.reduce((sum, row) => sum + row.balance, 0);
-    const allCompletedPayouts = payouts.filter((payout) => payout.status === "completed");
-    const totalReceived = allCompletedPayouts.reduce((sum, payout) => sum + Number(payout.amount_iqd), 0);
     const myRate = companyId ? rateMap.get(companyId) : null;
-    const myTier = commercialSettings.find((item) => item.agency_id === companyId)?.commission_tier ?? null;
     const companyNet = totals.netEarned - totals.expenses;
     const totalDue = receivables.reduce((sum, row) => sum + row.due, 0);
     const cashEntries = ledger.filter((entry) => bucketOfEntry(entry.entry_type) === "cash");
@@ -3494,24 +3609,59 @@ export default function FinanceWorkspace({
       <div className="finance-workspace">
         <Heading eyebrow={copy.eyebrow} title={copy.companyTitle} description={copy.companyDesc} action={exportActions} />
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+        {/* Stock figures live above the picker; flow figures below it. The old
+            layout interleaved the two in identical cards under one date
+            control, so changing the period moved only half the numbers. */}
+        {tab === "overview" && (
+          <BalanceStrip
+            title={copy.balancesNow}
+            subtitle={copy.balancesNowSub}
+            items={[
+              {
+                key: "available",
+                label: copy.availableBalance,
+                value: formatIqd(availableBalance, true),
+                tone: "green",
+                detail: inFlightPayouts.length
+                  ? `${copy.heldInline.replace("{amount}", formatIqd(heldBalance, true))} · ${copy.heldDetail.replace("{count}", String(inFlightPayouts.length))}`
+                  : copy.availableDetail,
+              },
+              {
+                key: "owed",
+                label: copy.owedToTawaf,
+                value: formatIqd(bookBalances.cashOwed, true),
+                tone: "sand",
+                detail: bookBalances.cashOwed && oldestUnsettledDays
+                  ? `${copy.dueToPlatformDetail} · ${copy.outstandingSince.replace("{count}", String(oldestUnsettledDays))}`
+                  : copy.dueToPlatformDetail,
+              },
+              {
+                key: "due",
+                label: copy.stillDue,
+                value: formatIqd(totalDue, true),
+                tone: "gold",
+                detail: copy.stillDueDetail.replace("{count}", String(receivables.length)),
+              },
+              {
+                key: "lifetime",
+                label: copy.lifetimeEarnings,
+                value: formatIqd(bookBalances.lifetime, true),
+                tone: "teal",
+                detail: myRate !== null && myRate !== undefined
+                  ? `${copy.lifetimeDetail} · ${copy.rateInline.replace("{rate}", formatPercent(myRate))}`
+                  : copy.lifetimeDetail,
+              },
+            ]}
+          />
+        )}
+
         {periodPicker}
 
         {tab === "overview" && (
           <>
-            {/* Balances first, and all four are stock figures: they say what is
-                true right now, so unlike the P&L row below they ignore the
-                period picker. */}
-            <section className="portal-metric-grid">
-              <Metric icon={WalletCards} label={copy.availableBalance} value={formatIqd(availableBalance, true)}
-                detail={`${copy.availableDetail} · ${copy.rightNow}`} tone="green" copy={copy} />
-              <Metric icon={Clock3} label={copy.heldBalance} value={formatIqd(heldBalance, true)}
-                detail={copy.heldDetail.replace("{count}", String(inFlightPayouts.length))} tone="gold" copy={copy} />
-              <Metric icon={Landmark} label={copy.dueToPlatform} value={formatIqd(bookBalances.cashOwed, true)}
-                detail={copy.dueToPlatformDetail} tone="sand" copy={copy} />
-              <Metric icon={Coins} label={copy.lifetimeEarnings} value={formatIqd(bookBalances.lifetime, true)}
-                detail={copy.lifetimeDetail} tone="teal" copy={copy} />
-            </section>
-
+            {/* Everything here is a flow figure governed by the picker above,
+                and every one of them carries its own period-on-period delta. */}
             <section className="portal-metric-grid">
               <Metric icon={Coins} label={copy.totalEarned} value={formatIqd(totals.netEarned, true)}
                 detail={copy.afterCommission} tone="green" copy={copy}
@@ -3522,80 +3672,75 @@ export default function FinanceWorkspace({
               <Metric icon={TrendingUp} label={copy.netProfit} value={formatIqd(companyNet, true)}
                 detail={copy.companyNetProfit} tone="teal" copy={copy}
                 delta={{ current: companyNet, previous: companyNetPrevious, goodWhenUp: true }} />
-              <Metric icon={Clock3} label={copy.pendingPayout} value={formatIqd(Math.max(0, balance), true)}
-                detail={balance > 0 && oldestUnsettledDays
-                  ? `${copy.tawafOwesYou} · ${copy.outstandingSince.replace("{count}", String(oldestUnsettledDays))}`
-                  : `${copy.tawafOwesYou} · ${copy.rightNow}`}
-                tone="gold" copy={copy} />
-            </section>
-
-            <section className="portal-metric-grid">
               <Metric icon={WalletCards} label={copy.totalCollected} value={formatIqd(totals.collected, true)}
-                detail={copy.fromPilgrims} tone="green" copy={copy}
+                detail={copy.fromPilgrims} tone="gold" copy={copy}
                 delta={{ current: totals.collected, previous: previous.collected, goodWhenUp: true }} />
-              <Metric icon={Banknote} label={copy.totalReceived} value={formatIqd(totalReceived, true)}
-                detail={copy.toDate} tone="teal" copy={copy} />
-              <Metric icon={Landmark} label={copy.commissionDue} value={formatIqd(Math.max(0, -balance), true)}
-                detail={balance < 0 && oldestUnsettledDays
-                  ? `${copy.youOweTawaf} · ${copy.outstandingSince.replace("{count}", String(oldestUnsettledDays))}`
-                  : `${copy.youOweTawaf} · ${copy.rightNow}`}
-                tone="sand" copy={copy} />
-              <Metric icon={Users} label={copy.stillDue} value={formatIqd(totalDue, true)}
-                detail={`${copy.stillDueDetail.replace("{count}", String(receivables.length))} · ${copy.rightNow}`}
-                tone="gold" copy={copy} />
-              <Metric icon={Percent} label={copy.yourRate}
-                value={myRate !== null && myRate !== undefined ? formatPercent(myRate) : "—"}
-                detail={myTier ? `${copy.tier}: ${myTier}` : copy.afterCommission} tone="teal" copy={copy} />
             </section>
 
-            <ChartFrame title={copy.chartEarnTitle} subtitle={copy.chartMoneySub} copy={copy}
-              empty={!trendPoints.some((point) => point.values.some(Boolean))} table={seriesTable(trendSeries)}>
-              <TrendChart buckets={buckets} series={trendSeries} />
-            </ChartFrame>
-
-            <ChartFrame title={copy.chartSplitTitle} subtitle={copy.chartSplitSub} copy={copy}
-              empty={!collectionSplit.some((row) => row.value)}
-              table={
-                <div className="portal-table-wrap">
-                  <table className="portal-table finance-table">
-                    <thead><tr><th>{copy.method}</th><th className="finance-num">{copy.amount}</th></tr></thead>
-                    <tbody>
-                      {collectionSplit.map((row) => (
-                        <tr key={row.key}><td>{row.label}</td><td className="finance-num" dir="ltr">{formatIqd(row.value)}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              }
-            >
-              <BarChart data={collectionSplit} />
-            </ChartFrame>
-
-            <ChartFrame title={copy.chartTripTitle} subtitle={copy.chartTripSub} copy={copy}
-              empty={!tripPnl.length}
-              table={
-                <div className="portal-table-wrap">
-                  <table className="portal-table finance-table">
-                    <thead><tr><th>{copy.trip}</th><th className="finance-num">{copy.net}</th></tr></thead>
-                    <tbody>
-                      {tripPnl.map((trip) => (
-                        <tr key={trip.tripId}><td>{trip.title}</td><td className="finance-num" dir="ltr">{formatIqd(trip.net)}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              }
-            >
-              <BarChart
-                signed
-                data={tripPnl.slice(0, 10).map((trip) => ({
-                  key: trip.tripId,
-                  label: trip.title,
-                  value: trip.net,
-                  tone: trip.net < 0 ? SERIES[2] : SERIES[0],
-                }))}
-              />
-            </ChartFrame>
+            <ChartTabs
+              copy={copy}
+              views={[
+                {
+                  id: "trend",
+                  tab: copy.chartTabTrend,
+                  title: copy.chartEarnTitle,
+                  subtitle: copy.chartMoneySub,
+                  empty: !trendPoints.some((point) => point.values.some(Boolean)),
+                  table: seriesTable(trendSeries),
+                  chart: <TrendChart buckets={buckets} series={trendSeries} />,
+                },
+                {
+                  id: "split",
+                  tab: copy.chartTabSplit,
+                  title: copy.chartSplitTitle,
+                  subtitle: copy.chartSplitSub,
+                  empty: !collectionSplit.some((row) => row.value),
+                  table: (
+                    <div className="portal-table-wrap">
+                      <table className="portal-table finance-table">
+                        <thead><tr><th>{copy.method}</th><th className="finance-num">{copy.amount}</th></tr></thead>
+                        <tbody>
+                          {collectionSplit.map((row) => (
+                            <tr key={row.key}><td>{row.label}</td><td className="finance-num" dir="ltr">{formatIqd(row.value)}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ),
+                  chart: <BarChart data={collectionSplit} />,
+                },
+                {
+                  id: "trips",
+                  tab: copy.chartTabTrips,
+                  title: copy.chartTripTitle,
+                  subtitle: copy.chartTripSub,
+                  empty: !tripPnl.length,
+                  table: (
+                    <div className="portal-table-wrap">
+                      <table className="portal-table finance-table">
+                        <thead><tr><th>{copy.trip}</th><th className="finance-num">{copy.net}</th></tr></thead>
+                        <tbody>
+                          {tripPnl.map((trip) => (
+                            <tr key={trip.tripId}><td>{trip.title}</td><td className="finance-num" dir="ltr">{formatIqd(trip.net)}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ),
+                  chart: (
+                    <BarChart
+                      signed
+                      data={tripPnl.slice(0, 10).map((trip) => ({
+                        key: trip.tripId,
+                        label: trip.title,
+                        value: trip.net,
+                        tone: trip.net < 0 ? SERIES[2] : SERIES[0],
+                      }))}
+                    />
+                  ),
+                },
+              ]}
+            />
           </>
         )}
 
@@ -3956,6 +4101,7 @@ export default function FinanceWorkspace({
   const adminTabs = [
     { id: "overview", label: copy.tabOverview, icon: Gauge },
     { id: "balances", label: copy.tabBalances, icon: Layers },
+    { id: "reconciliation", label: copy.tabReconciliation, icon: CheckCircle2 },
     { id: "expenses", label: copy.tabExpenses, icon: ReceiptText },
     { id: "ledger", label: copy.tabLedger, icon: ScrollText },
     { id: "reports", label: copy.tabReports, icon: FileText },
@@ -4149,6 +4295,18 @@ export default function FinanceWorkspace({
         </>
       )}
 
+      {tab === "reconciliation" && (
+        <ReconciliationTab
+          payments={payments}
+          companyMap={companyMap}
+          bookings={bookingMap}
+          tripMap={tripMap}
+          busy={busy}
+          runAction={runAction}
+          copy={copy}
+        />
+      )}
+
       {tab === "expenses" && (
         <ExpensesTab
           role="admin"
@@ -4306,6 +4464,156 @@ export default function FinanceWorkspace({
         />
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Cash reconciliation queue (admin)
+ * ------------------------------------------------------------------ */
+
+// Only company-collected cash lands here. Money Tawaf took is already on
+// Tawaf's own books and has nothing to attest to — surfacing it would bury the
+// rows that actually need a human decision.
+function ReconciliationTab({ payments, companyMap, bookings, tripMap, busy, runAction, copy }: {
+  payments: FinancePayment[];
+  companyMap: Map<string, string>;
+  bookings: Map<string, FinanceBooking>;
+  tripMap: Map<string, string>;
+  busy: string;
+  runAction: RunAction;
+  copy: Copy;
+}) {
+  const [target, setTarget] = useState<FinancePayment | null>(null);
+  const [note, setNote] = useState("");
+  const [showVerified, setShowVerified] = useState(false);
+
+  const queue = useMemo(() => payments
+    .filter((payment) => payment.collected_by === "company" && payment.status === "succeeded")
+    .filter((payment) => (showVerified ? true : !payment.reconciled_at))
+    .sort((a, b) => (a.confirmed_at ?? a.created_at).localeCompare(b.confirmed_at ?? b.created_at)),
+    [payments, showVerified]);
+
+  const outstanding = payments.filter(
+    (payment) => payment.collected_by === "company" && payment.status === "succeeded" && !payment.reconciled_at,
+  );
+  const outstandingTotal = outstanding.reduce((sum, payment) => sum + Number(payment.amount_iqd), 0);
+
+  async function verify(payment: FinancePayment) {
+    await runAction(
+      `reconcile-${payment.id}`,
+      () => getSupabase().rpc("reconcile_payment", {
+        p_payment_id: payment.id,
+        p_note: note.trim() || null,
+      }),
+      copy.reconVerified,
+    );
+    setTarget(null);
+    setNote("");
+  }
+
+  return (
+    <>
+      <section className="portal-metric-grid">
+        <Metric icon={Landmark} label={copy.reconQueueTitle} value={formatIqd(outstandingTotal, true)}
+          detail={copy.acrossPayouts.replace("{count}", String(outstanding.length))}
+          tone={outstanding.length ? "gold" : "green"} copy={copy} />
+      </section>
+
+      <Panel
+        title={copy.reconQueueTitle}
+        subtitle={copy.reconQueueSub}
+        action={
+          <button type="button" className="finance-sort" onClick={() => setShowVerified(!showVerified)}>
+            {showVerified ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}
+            {showVerified ? copy.reconVerified : copy.pending}
+          </button>
+        }
+      >
+        {queue.length ? (
+          <div className="portal-table-wrap">
+            <table className="portal-table finance-table">
+              <thead>
+                <tr>
+                  <th>{copy.date}</th>
+                  <th>{copy.company}</th>
+                  <th>{copy.trip}</th>
+                  <th>{copy.reconReceipt}</th>
+                  <th className="finance-num">{copy.amount}</th>
+                  <th className="finance-num">{copy.reconAge}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {queue.map((payment) => {
+                  const booking = bookings.get(payment.booking_id);
+                  const day = dayKeyOf(payment.confirmed_at ?? payment.created_at);
+                  const waiting = daysBetween(day, todayKey());
+                  return (
+                    <tr key={payment.id}>
+                      <td><span dir="ltr">{formatDate(payment.confirmed_at ?? payment.created_at)}</span></td>
+                      <td><b>{companyMap.get(payment.company_id) ?? shortId(payment.company_id)}</b></td>
+                      <td className="finance-trip">
+                        {booking ? tripMap.get(booking.package_id) ?? "—" : "—"}
+                      </td>
+                      <td><span className="finance-mono" dir="ltr">{payment.provider_reference ?? "—"}</span></td>
+                      <td className="finance-num finance-amount credit" dir="ltr">{formatIqd(payment.amount_iqd)}</td>
+                      <td className="finance-num" dir="ltr">
+                        {payment.reconciled_at ? "—" : copy.days.replace("{count}", String(waiting))}
+                      </td>
+                      <td className="finance-action">
+                        {payment.reconciled_at ? (
+                          <span className="portal-status positive">
+                            <i />{copy.reconVerified}
+                          </span>
+                        ) : (
+                          <button type="button" className="portal-primary-button finance-pay"
+                            disabled={Boolean(busy)} onClick={() => setTarget(payment)}>
+                            <CheckCircle2 size={14} /> {copy.reconVerify}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <Empty icon={CheckCircle2} text={copy.reconNothing} />}
+      </Panel>
+
+      {target && (
+        <div className="portal-modal-backdrop" onClick={() => setTarget(null)}>
+          <div className="portal-modal finance-modal narrow" onClick={(event) => event.stopPropagation()}>
+            <header className="portal-modal-header">
+              <div><h2>{copy.reconConfirmTitle}</h2><p>{copy.reconConfirmBody}</p></div>
+              <button type="button" className="finance-icon-button" onClick={() => setTarget(null)}>
+                <X size={16} />
+              </button>
+            </header>
+            <div className="finance-statement-head">
+              <div><small>{copy.company}</small><b>{companyMap.get(target.company_id) ?? "—"}</b></div>
+              <div><small>{copy.reconReceipt}</small><b dir="ltr">{target.provider_reference ?? "—"}</b></div>
+              <div><small>{copy.amount}</small><b dir="ltr">{formatIqd(target.amount_iqd)}</b></div>
+            </div>
+            <div className="portal-form-grid">
+              <label>
+                <small>{copy.reconNote}</small>
+                <input value={note} onChange={(event) => setNote(event.target.value)} dir="auto" />
+              </label>
+            </div>
+            <footer className="portal-modal-footer">
+              <button type="button" className="portal-secondary-button" onClick={() => setTarget(null)}>
+                {copy.cancel}
+              </button>
+              <button type="button" className="portal-primary-button"
+                disabled={busy === `reconcile-${target.id}`} onClick={() => void verify(target)}>
+                <CheckCircle2 size={15} /> {copy.reconVerify}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

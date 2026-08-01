@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {
+  resolveBookingDisplayState,
+  bookingStateLabel,
+  bookingStateTone,
+  onlyActiveTravellers,
+  VISA_REJECTION_CATEGORIES,
+} from "../../lib/booking-display-state";
+import type { VisaRejectionCategory } from "../../lib/booking-display-state";
+import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
@@ -135,6 +143,7 @@ type Booking = {
   payment_confirmation_code: string | null;
   payment_confirmed_at: string | null;
   accepted_at: string | null;
+  payment_deadline: string | null;
   created_at: string;
 };
 
@@ -194,12 +203,17 @@ type Traveller = {
   date_of_birth?: string | null;
   document_status: string;
   visa_status: string;
+  visa_reference?: string | null;
+  visa_rejection_category?: string | null;
+  visa_reason?: string | null;
   phone: string | null;
   gender?: string | null;
   nationality?: string | null;
   passport_expiry_date?: string | null;
   is_lead?: boolean;
   transport_seat: string | null;
+  removed_at?: string | null;
+  removed_reason?: string | null;
 };
 type TravellerDocument = {
   id: string;
@@ -483,14 +497,14 @@ const wizardT = {
     hotelName: "ناوی هۆتێل *", starRating: "پلەی ئەستێرە", starsWord: "ئەستێرە", nights: "شەو", distanceHaram: "دووری لە حەرەمەوە (مەتر)", distanceNabawi: "دووری لە مزگەوتی نەبەویەوە (مەتر)",
     hotelDescription: "پێناسەی هۆتێل *", hotelDescriptionPh: "شوێن، ژوورەکان، ژەمەکان و زانیاری گواستنەوە…",
     priceTitle: "نرخی پاکێج", priceDesc: "یەک نرخی تەواو بۆ هەر عومرەکارێک دابنێ. مانەوەی هۆتێل پێشتر لە پاکێجەکەدا لەخۆگیراوە.",
-    pricePerPilgrim: "نرخ بۆ هەر عومرەکارێک (IQD) *", depositAmount: "بڕی پێشەکی (IQD)", mealsPerDay: "ژەم لە ڕۆژێکدا", depositTerms: "مەرجەکانی پێشەکی", depositTermsPh: "کەی بڕە ماوەکە دەدرێت…",
+    pricePerPilgrim: "نرخ بۆ هەر عومرەکارێک (IQD) *", depositAmount: "پێشەکی هەڵوەشاندنەوە بۆ هەر عومرەکارێک (IQD)", mealsPerDay: "ژەم لە ڕۆژێکدا", depositTerms: "مەرجەکانی پێشەکی هەڵوەشاندنەوە", depositTermsPh: "ڕوون بکەرەوە کە پێشەکی هەڵوەشاندنەوە کەی دەگیرێت یان دەگەڕێندرێتەوە…",
     servicesTitle: "خزمەتگوزارییە لەخۆگیراوەکان", servicesDesc: "بە ڕوونی پیشانی عومرەکارانی بدە نرخەکەیان چی دەگرێتەوە.",
     customerPrice: "نرخی کڕیار", customerPriceSub: "نرخی تەواوی پاکێج", tawafCommission: "کاشی تەواف", tawafCommissionSub: "خەمڵێنراو بە ٥٪", companyNet: "خەمڵێنراوی داهاتی کۆمپانیا", companyNetSub: "پێش کرێی دەروازەی پارەدان",
     itineraryTitle: "بەرنامەی ڕۆژانە", itineraryDesc: "هەر ڕۆژێک کورت، بەسوود و ئاسان بێت بۆ خوێندنەوەی عومرەکاران.",
     dayWord: "ڕۆژی", dayTitlePh: "گەیشتن و چوونەژوورەوەی هۆتێل", daySummaryPh: "چالاکییە سەرەکییەکان باس بکە…", addDay: "زیادکردنی ڕۆژ", 
     policiesTitle: "سیاسەتەکان", policiesDesc: "سیاسەتی هەڵوەشاندنەوە پێویستە پێش پێداچوونەوە.",
     cancellationPolicy: "سیاسەتی هەڵوەشاندنەوە و گەڕاندنەوەی پارە *", cancellationPolicyPh: "کاتە دیاریکراوەکان، کرێکان، گەڕاندنەوەی پارە و مەرجەکانی ڕەتکردنەوەی ڤیزا ڕوون بکەرەوە…",
-    videoUrl: "بەستەری ڤیدیۆی ناساندن", nonRefundable: "پێشەکییەکە ناگەڕێندرێتەوە", nonRefundableSub: "دڵنیابە ئەمە بە ڕوونی لە سیاسەتەکەدا باسکراوە.",
+    videoUrl: "بەستەری ڤیدیۆی ناساندن", nonRefundable: "پێشەکی هەڵوەشاندنەوە ناگەڕێندرێتەوە", nonRefundableSub: "دڵنیابە ئەمە بە ڕوونی لە سیاسەتەکەدا باسکراوە.",
     startingFrom: "دەستپێدەکات لە", viewPackage: "بینینی پاکێج", daysWord: "ڕۆژ", seatsWord: "شوێن",
     readyTitle: "ئامادەیە بۆ پێداچوونەوەی تەواف؟", readySub: "هەموو بەشە داواکراوەکان تەواو بکە",
     submitNote: "دوای ناردن، بڵاوکردنەوەی ڕاستەوخۆ دادەخرێت. بەڕێوەبەرانی تەواف گەشتەکە پەسەند دەکەن یان داوای گۆڕانکاری دەکەن.",
@@ -544,14 +558,14 @@ const wizardT = {
     hotelName: "اسم الفندق *", starRating: "تصنيف النجوم", starsWord: "نجوم", nights: "ليالٍ", distanceHaram: "المسافة عن الحرم (متر)", distanceNabawi: "المسافة عن المسجد النبوي (متر)",
     hotelDescription: "وصف الفندق *", hotelDescriptionPh: "الموقع والغرف والوجبات ومعلومات النقل…",
     priceTitle: "سعر الباقة", priceDesc: "حدد سعراً كاملاً واحداً لكل معتمر. الإقامة الفندقية مشمولة في الباقة.",
-    pricePerPilgrim: "السعر لكل معتمر (IQD) *", depositAmount: "مبلغ العربون (IQD)", mealsPerDay: "الوجبات في اليوم", depositTerms: "شروط العربون", depositTermsPh: "متى يستحق المبلغ المتبقي…",
+    pricePerPilgrim: "السعر لكل معتمر (IQD) *", depositAmount: "عربون الإلغاء لكل معتمر (IQD)", mealsPerDay: "الوجبات في اليوم", depositTerms: "شروط عربون الإلغاء", depositTermsPh: "اشرح متى يُحتفظ بعربون الإلغاء أو يُسترد…",
     servicesTitle: "الخدمات المشمولة", servicesDesc: "أظهر للمعتمرين بوضوح ما يغطيه السعر.",
     customerPrice: "سعر العميل", customerPriceSub: "سعر الباقة الكامل", tawafCommission: "عمولة طواف", tawafCommissionSub: "تقديرياً ٥٪", companyNet: "صافي الشركة التقديري", companyNetSub: "قبل رسوم بوابة الدفع",
     itineraryTitle: "البرنامج اليومي", itineraryDesc: "اجعل كل يوم قصيراً ومفيداً وسهل القراءة للمعتمرين.",
     dayWord: "اليوم", dayTitlePh: "الوصول وتسجيل الدخول في الفندق", daySummaryPh: "صف الأنشطة الرئيسية…", addDay: "إضافة يوم",
     policiesTitle: "السياسات", policiesDesc: "سياسة الإلغاء مطلوبة قبل المراجعة.",
     cancellationPolicy: "سياسة الإلغاء والاسترداد *", cancellationPolicyPh: "اشرح المواعيد النهائية والرسوم والاسترداد وشروط رفض التأشيرة…",
-    videoUrl: "رابط فيديو تعريفي", nonRefundable: "العربون غير قابل للاسترداد", nonRefundableSub: "تأكد من شرح ذلك بوضوح في السياسة.",
+    videoUrl: "رابط فيديو تعريفي", nonRefundable: "عربون الإلغاء غير قابل للاسترداد", nonRefundableSub: "تأكد من شرح ذلك بوضوح في السياسة.",
     startingFrom: "يبدأ من", viewPackage: "عرض الباقة", daysWord: "أيام", seatsWord: "مقاعد",
     readyTitle: "جاهز لمراجعة طواف؟", readySub: "أكمل كل قسم مطلوب",
     submitNote: "الإرسال يمنع النشر المباشر. سيوافق مشرفو طواف على الرحلة أو يطلبون تغييرات.",
@@ -605,14 +619,14 @@ const wizardT = {
     hotelName: "Hotel name *", starRating: "Star rating", starsWord: "stars", nights: "Nights", distanceHaram: "Distance from Haram (metres)", distanceNabawi: "Distance from the Prophet's Mosque (metres)",
     hotelDescription: "Hotel description *", hotelDescriptionPh: "Location, rooms, meals and shuttle information…",
     priceTitle: "Package price", priceDesc: "Set one complete price per pilgrim. Hotel accommodation is already included in the package.",
-    pricePerPilgrim: "Price per pilgrim (IQD) *", depositAmount: "Deposit amount (IQD)", mealsPerDay: "Meals per day", depositTerms: "Deposit terms", depositTermsPh: "When the remaining balance is due…",
+    pricePerPilgrim: "Price per pilgrim (IQD) *", depositAmount: "Cancellation deposit per pilgrim (IQD)", mealsPerDay: "Meals per day", depositTerms: "Cancellation deposit terms", depositTermsPh: "Explain when the cancellation deposit is retained or refunded…",
     servicesTitle: "Included services", servicesDesc: "Clearly show pilgrims what their price covers.",
     customerPrice: "Customer price", customerPriceSub: "Complete package price", tawafCommission: "Tawaf commission", tawafCommissionSub: "Estimated at 5%", companyNet: "Estimated company net", companyNetSub: "Before gateway fees",
     itineraryTitle: "Daily itinerary", itineraryDesc: "Keep each day short, useful and easy for pilgrims to scan.",
     dayWord: "Day", dayTitlePh: "Arrival and hotel check-in", daySummaryPh: "Describe the main activities…", addDay: "Add itinerary day",
     policiesTitle: "Policies", policiesDesc: "A cancellation policy is required before review.",
     cancellationPolicy: "Cancellation and refund policy *", cancellationPolicyPh: "Explain deadlines, fees, refunds and visa rejection terms…",
-    videoUrl: "Introduction video URL", nonRefundable: "Deposit is non-refundable", nonRefundableSub: "Make sure this is explained clearly in the policy.",
+    videoUrl: "Introduction video URL", nonRefundable: "Cancellation deposit is non-refundable", nonRefundableSub: "Make sure this is explained clearly in the policy.",
     startingFrom: "Starting from", viewPackage: "View package", daysWord: "days", seatsWord: "seats",
     readyTitle: "Ready for Tawaf review?", readySub: "Complete every required section",
     submitNote: "Submitting locks direct publishing. Tawaf administrators will approve the trip or request changes.",
@@ -656,9 +670,14 @@ function formatIqd(value: number | string | null | undefined) {
 
 function isCashPending(booking: Booking) {
   return booking.pay_method === "cash"
-    && booking.operational_stage === "awaiting_payment"
+    && isAwaitingBookingPayment(booking)
     && Number(booking.amount_paid_iqd) < Number(booking.total_iqd)
     && booking.pay_status !== "paid";
+}
+
+function isAwaitingBookingPayment(booking: Booking) {
+  return booking.operational_stage === "awaiting_payment"
+    || (booking.operational_stage === "confirmed" && booking.pay_status !== "paid");
 }
 
 function formatDate(value: string | null | undefined) {
@@ -792,6 +811,34 @@ function CashReceiptDialog({
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * Booking status as one label, derived from all four axes.
+ *
+ * `travellers` is deliberately optional: pass it where the rows are loaded, omit
+ * it where they are not. Passing `[]` for "not loaded" would make every
+ * confirmed booking read "Action needed" — see the note in
+ * booking-display-state.ts.
+ */
+function BookingStatePill({ booking, travellers, locale }: {
+  booking: { operational_stage: string; pay_status?: string | null; pay_method?: string | null };
+  travellers?: Traveller[];
+  locale: "ku" | "ar" | "en";
+}) {
+  const activeTravellers = travellers === undefined ? undefined : onlyActiveTravellers(travellers);
+  const state = resolveBookingDisplayState({
+    operationalStage: booking.operational_stage,
+    paymentStatus: booking.pay_status,
+    payMethod: booking.pay_method,
+    documentStatuses: activeTravellers?.map((traveller) => traveller.document_status),
+    visaStatuses: activeTravellers?.map((traveller) => traveller.visa_status),
+  });
+  return (
+    <span className={`portal-status ${bookingStateTone(state)}`}>
+      <i />{bookingStateLabel(state, locale)}
+    </span>
   );
 }
 
@@ -1174,7 +1221,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
       supabase.from("offer_pricing").select("*").eq("offer_id", tripId).order("price_iqd"),
       supabase.from("offer_hotels").select("*, hotels(*)").eq("offer_id", tripId),
       supabase.from("offer_inclusions").select("*").eq("offer_id", tripId).order("sort_order"),
-      bookingIds.length ? supabase.from("booking_travellers").select("*").in("booking_id", bookingIds).order("created_at") : Promise.resolve({ data: [], error: null }),
+      bookingIds.length ? supabase.from("booking_travellers").select("*").in("booking_id", bookingIds).is("removed_at", null).order("created_at") : Promise.resolve({ data: [], error: null }),
       bookingIds.length ? supabase.from("traveller_documents").select("*").in("booking_id", bookingIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
     ]);
     const firstError = [itineraryResult, pricingResult, hotelsResult, inclusionsResult, travellersResult, documentsResult].find((result) => result.error)?.error;
@@ -1600,7 +1647,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
           subtitle={locale === "ku" ? "هەموو حیجزە نەکراوەکان لە گشت گەشتەکان" : locale === "ar" ? "كل الحجوزات غير المفتوحة عبر الرحلات" : "Every unopened booking across all trips"}
           bookings={bookings}
           trips={trips}
-          travellers={bookingTravellers}
+          travellers={onlyActiveTravellers(bookingTravellers)}
           viewedBookingIds={viewedBookingIds}
           onSetViewed={setBookingViewed}
           busy={busy}
@@ -1659,7 +1706,7 @@ export default function CompanyTripsWorkspace({ company, trips, changeRequests, 
             details={details}
             bookings={tripBookings}
             allTrips={trips}
-            bookingTravellers={bookingTravellers.filter((traveller) => selectedBookingIds.has(traveller.booking_id))}
+            bookingTravellers={onlyActiveTravellers(bookingTravellers).filter((traveller) => selectedBookingIds.has(traveller.booking_id))}
             viewedBookingIds={viewedBookingIds}
             onSetViewed={setBookingViewed}
             commissions={commissions.filter((item) => selectedBookingIds.has(item.booking_id))}
@@ -1881,11 +1928,12 @@ function BookingInbox({
   const [cashReceiptBooking, setCashReceiptBooking] = useState<Booking | null>(null);
   const gestureRef = useRef<{ booking: Booking; x: number; timer: number | null; longPressed: boolean } | null>(null);
   const suppressOpenRef = useRef(false);
+  const activeTravellers = useMemo(() => onlyActiveTravellers(travellers), [travellers]);
 
   const selectedBooking = bookings.find((booking) => booking.id === selectedBookingId) ?? null;
 
   function bookingTravellers(bookingId: string) {
-    return travellers.filter((traveller) => traveller.booking_id === bookingId);
+    return activeTravellers.filter((traveller) => traveller.booking_id === bookingId);
   }
 
   function clientName(booking: Booking) {
@@ -1903,7 +1951,7 @@ function BookingInbox({
     const needle = search.trim().toLocaleLowerCase();
     return bookings
       .filter((booking) => {
-        const leadName = travellers
+        const leadName = activeTravellers
           .filter((traveller) => traveller.booking_id === booking.id)
           .map((traveller) => `${traveller.full_name} ${traveller.phone ?? ""}`)
           .join(" ");
@@ -1919,7 +1967,7 @@ function BookingInbox({
         if (cancelledDifference) return cancelledDifference;
         return b.created_at.localeCompare(a.created_at);
       });
-  }, [bookings, travellers, viewedBookingIds, search, filter]);
+  }, [bookings, activeTravellers, viewedBookingIds, search, filter]);
 
   async function openBooking(booking: Booking) {
     if (suppressOpenRef.current) {
@@ -1997,7 +2045,7 @@ function BookingInbox({
       "Payment method",
       "Payment status",
     ];
-    const rows = travellers
+    const rows = activeTravellers
       .filter((traveller) => activeBookingIds.has(traveller.booking_id))
       .map((traveller) => {
         const booking = bookings.find((item) => item.id === traveller.booking_id);
@@ -2035,7 +2083,7 @@ function BookingInbox({
     <section className="portal-panel trip-booking-inbox">
       <div className="portal-panel-header trip-booking-inbox-head">
         <div><h2>{title}</h2><p>{subtitle}</p></div>
-        <button type="button" className="portal-secondary-button" onClick={exportPassengerList} disabled={!travellers.length}>
+        <button type="button" className="portal-secondary-button" onClick={exportPassengerList} disabled={!activeTravellers.length}>
           <Download size={15} /> {locale === "ku" ? "هەناردەکردنی لیستی گەشتیاران" : locale === "ar" ? "تصدير قائمة المسافرين" : "Export passenger list"}
         </button>
       </div>
@@ -2092,6 +2140,9 @@ function BookingInbox({
                     {cashPending ? (locale === "ku" ? "نەختینە چاوەڕێیە" : locale === "ar" ? "نقد معلق" : "Cash pending") : titleCase(booking.pay_status || booking.pay_method)}
                   </span>
                   <b>{formatIqd(booking.total_iqd)}</b>
+                  {isAwaitingBookingPayment(booking) && (
+                    <small>{formatIqd(Math.max(0, Number(booking.total_iqd) - Number(booking.amount_paid_iqd)))} {locale === "ku" ? "ماوە" : locale === "ar" ? "متبقي" : "due"}{booking.payment_deadline ? ` · ${formatDateTime(booking.payment_deadline, locale)}` : ""}</small>
+                  )}
                 </div>
                 <time dateTime={booking.created_at}>
                   {new Intl.DateTimeFormat(locale === "ar" ? "ar-IQ" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(booking.created_at))}
@@ -2173,6 +2224,8 @@ function BookingInboxDetail({
   const [docs, setDocs] = useState<TravellerDocument[]>([]);
   const [docsRevision, setDocsRevision] = useState(0);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
+  const [visaBatchReference, setVisaBatchReference] = useState("");
+  const activeTravellers = onlyActiveTravellers(travellers);
 
   useScrollLock();
   useEffect(() => {
@@ -2212,10 +2265,33 @@ function BookingInboxDetail({
     );
   }
 
-  const lead = travellers.find((traveller) => traveller.is_lead) ?? travellers[0];
-  const visasReady = travellers.length > 0 && travellers.every((traveller) => traveller.visa_status === "approved");
+  async function submitVisaBatch() {
+    if (!canSubmitVisaBatch) return;
+    await runAction(
+      `visa-batch-${booking.id}`,
+      () => getSupabase().rpc("submit_visa_batch", {
+        p_booking_id: booking.id,
+        p_reference: visaBatchReference.trim() || null,
+      }),
+      locale === "ku" ? "کۆمەڵە ڤیزاکان نێردران." : locale === "ar" ? "تم إرسال دفعة التأشيرات." : "Visa batch submitted.",
+    );
+  }
+
+  const lead = activeTravellers.find((traveller) => traveller.is_lead) ?? activeTravellers[0];
+  const visasReady = activeTravellers.length > 0 && activeTravellers.every((traveller) => traveller.visa_status === "approved");
+  const documentsReady = activeTravellers.length > 0 && activeTravellers.every((traveller) => traveller.document_status === "approved");
+  const hasVisaApplicants = activeTravellers.some((traveller) => ["not_started", "documents_missing", "ready_to_apply", "rejected"].includes(traveller.visa_status));
+  const hasUnresolvedVisaRejection = activeTravellers.some((traveller) => traveller.visa_status === "rejected" && traveller.visa_rejection_category !== "fixable_document");
+  const visaBatchInProgress = activeTravellers.some((traveller) => ["submitted", "under_review"].includes(traveller.visa_status));
   const working = busy === `booking-${booking.id}`;
-  const operationsEnabled = booking.operational_stage === "confirmed";
+  const visaBatchBusy = busy === `visa-batch-${booking.id}`;
+  // Company acceptance unlocks document review immediately. Visa submission
+  // and outcomes stay behind the fully-paid confirmed-booking guard.
+  const documentReviewEnabled = ["awaiting_payment", "confirmed"].includes(booking.operational_stage);
+  const documentReviewWaitingForAcceptance = booking.operational_stage === "requested";
+  const documentReviewWaitingForClient = booking.operational_stage === "needs_information";
+  const paidOperationsEnabled = booking.operational_stage === "confirmed" && booking.pay_status === "paid";
+  const canSubmitVisaBatch = paidOperationsEnabled && documentsReady && hasVisaApplicants && !hasUnresolvedVisaRejection;
   const cashLocationType = booking.cash_payment_location_type === "company_office"
     ? (locale === "ku" ? "نووسینگەی کۆمپانیای گەشت" : locale === "ar" ? "مكتب شركة السفر" : "Travel company office")
     : booking.cash_payment_location_type
@@ -2250,6 +2326,8 @@ function BookingInboxDetail({
             <div><small>{locale === "ku" ? "کۆی گشتی" : locale === "ar" ? "الإجمالي" : "Total"}</small><b>{formatIqd(booking.total_iqd)}</b></div>
             <div><small>{locale === "ku" ? "دراوە" : locale === "ar" ? "المدفوع" : "Paid"}</small><b>{formatIqd(booking.amount_paid_iqd)}</b></div>
             <div><small>{locale === "ku" ? "پارەدان" : locale === "ar" ? "الدفع" : "Payment"}</small><b>{titleCase(booking.pay_method)}</b></div>
+            {isAwaitingBookingPayment(booking) && <div><small>{locale === "ku" ? "ماوە" : locale === "ar" ? "المتبقي" : "Balance due"}</small><b>{formatIqd(Math.max(0, Number(booking.total_iqd) - Number(booking.amount_paid_iqd)))}</b></div>}
+            {isAwaitingBookingPayment(booking) && booking.payment_deadline && <div><small>{locale === "ku" ? "کۆتایی پارەدان" : locale === "ar" ? "الموعد النهائي للدفع" : "Payment deadline"}</small><b>{formatDateTime(booking.payment_deadline, locale)}</b></div>}
           </div>
           {(booking.pay_method === "cash" || hasPaymentProof || booking.accepted_at) && (
             <section className="booking-payment-proof trip-booking-payment-proof">
@@ -2269,6 +2347,7 @@ function BookingInboxDetail({
               )}
               <dl>
                 {booking.accepted_at && <div><dt>{locale === "ku" ? "وەرگیراوە لە" : locale === "ar" ? "تم القبول في" : "Accepted at"}</dt><dd>{formatDateTime(booking.accepted_at, locale)}</dd></div>}
+                {isAwaitingBookingPayment(booking) && booking.payment_deadline && <div><dt>{locale === "ku" ? "کۆتایی پارەدان" : locale === "ar" ? "الموعد النهائي للدفع" : "Payment deadline"}</dt><dd>{formatDateTime(booking.payment_deadline, locale)}</dd></div>}
                 {booking.payment_receipt_number && <div><dt>{locale === "ku" ? "ژمارەی پسوڵە" : locale === "ar" ? "رقم الإيصال" : "Receipt number"}</dt><dd dir="ltr">{booking.payment_receipt_number}</dd></div>}
                 {booking.payment_confirmation_code && <div><dt>{locale === "ku" ? "کۆدی پشتڕاستکردنەوە" : locale === "ar" ? "رمز التأكيد" : "Confirmation code"}</dt><dd dir="ltr">{booking.payment_confirmation_code}</dd></div>}
                 {booking.payment_confirmed_at && <div><dt>{locale === "ku" ? "پارەدان پشتڕاستکرا لە" : locale === "ar" ? "تم تأكيد الدفع في" : "Payment confirmed at"}</dt><dd>{formatDateTime(booking.payment_confirmed_at, locale)}</dd></div>}
@@ -2277,14 +2356,33 @@ function BookingInboxDetail({
           )}
           <div className="trip-booking-detail-contact">
             <div><Phone size={16} /><span><small>{locale === "ku" ? "مۆبایل" : locale === "ar" ? "الهاتف" : "Phone"}</small><b>{booking.contact_phone || "—"}</b></span></div>
-            <Status value={booking.operational_stage} />
+            {/* Reads all four axes, not just the stage. The old pill could not
+                say "Action needed" for a paid booking whose document was sent
+                back, because a rejected document is not a stage. Shares its
+                logic with the Flutter app via booking-display-state.ts. */}
+            <BookingStatePill booking={booking} travellers={activeTravellers} locale={locale} />
           </div>
+          {paidOperationsEnabled && !visasReady && (
+            <section className="booking-payment-proof trip-booking-payment-proof">
+              <header><FileCheck2 size={16} /><div><small>{locale === "ku" ? "کۆمەڵە ڤیزا" : locale === "ar" ? "دفعة التأشيرات" : "Visa batch"}</small><b>{visaBatchInProgress ? (locale === "ku" ? "چاوەڕێی ئەنجام" : locale === "ar" ? "بانتظار النتيجة" : "Awaiting outcome") : (locale === "ku" ? "ئامادەی ناردن" : locale === "ar" ? "جاهزة للإرسال" : "Ready to submit")}</b></div></header>
+              {!documentsReady ? (
+                <p className="booking-workflow-lock"><ShieldCheck size={13} /> {locale === "ku" ? "بەڵگەنامەکانی هەموو گەشتیارە چالاکەکان پەسەند بکە." : locale === "ar" ? "اعتمد مستندات جميع المسافرين النشطين أولاً." : "Approve every active traveller's documents first."}</p>
+              ) : hasUnresolvedVisaRejection ? (
+                <p className="booking-workflow-lock"><X size={13} /> {locale === "ku" ? "سەرەتا گۆڕینی گەشتیار یان ڕەتکردنەوەی کۆتایی چارەسەر بکە." : locale === "ar" ? "عالج استبدال المسافر أو الرفض النهائي أولاً." : "Resolve traveller replacements or final rejections first."}</p>
+              ) : hasVisaApplicants ? (
+                <div className="booking-inline-field">
+                  <input value={visaBatchReference} onChange={(event) => setVisaBatchReference(event.target.value)} placeholder={locale === "ku" ? "ژمارەی کۆمەڵە (ئارەزوومەندانە)" : locale === "ar" ? "مرجع الدفعة (اختياري)" : "Batch reference (optional)"} disabled={visaBatchBusy} />
+                  <button type="button" onClick={() => void submitVisaBatch()} disabled={!canSubmitVisaBatch || visaBatchBusy}>{visaBatchBusy ? <TawafLoadingSpinner size={13} /> : <Upload size={13} />} {locale === "ku" ? "ناردنی ڤیزاکان" : locale === "ar" ? "إرسال التأشيرات" : "Submit visas"}</button>
+                </div>
+              ) : <p className="booking-inline-note">{locale === "ku" ? "ڤیزاکان نێردراون؛ ئەنجامی هەر گەشتیارێک تۆمار بکە." : locale === "ar" ? "تم إرسال التأشيرات؛ سجل نتيجة كل مسافر." : "Visas are submitted; record each traveller's outcome."}</p>}
+            </section>
+          )}
           <div className="trip-booking-detail-travellers">
             <h3>
               {locale === "ku" ? "لیستی گەشتیاران" : locale === "ar" ? "قائمة المسافرين" : "Passenger list"}
-              {travellers.length > 1 && <i>{travellers.length}</i>}
+              {activeTravellers.length > 1 && <i>{activeTravellers.length}</i>}
             </h3>
-            {travellers.length ? travellers.map((traveller) => (
+            {activeTravellers.length ? activeTravellers.map((traveller) => (
               <BookingTravellerPanel
                 key={traveller.id}
                 traveller={traveller}
@@ -2293,7 +2391,10 @@ function BookingInboxDetail({
                 runAction={runAction}
                 askReason={askReason}
                 locale={locale}
-                operationsEnabled={operationsEnabled}
+                documentReviewEnabled={documentReviewEnabled}
+                documentReviewWaitingForAcceptance={documentReviewWaitingForAcceptance}
+                documentReviewWaitingForClient={documentReviewWaitingForClient}
+                paidOperationsEnabled={paidOperationsEnabled}
                 onDocsChanged={() => setDocsRevision((revision) => revision + 1)}
                 onOpenImage={(images, index) => setLightbox({ images, index })}
               />
@@ -2308,11 +2409,11 @@ function BookingInboxDetail({
             {unseen ? <UserCheck size={15} /> : <Inbox size={15} />} {unseen ? (locale === "ar" ? "تحديد كمقروء" : "Mark seen") : (locale === "ar" ? "تحديد كغير مقروء" : "Mark unread")}
           </button>
           <button type="button" className="portal-secondary-button" disabled={!booking.contact_phone} onClick={() => onCall(booking)}><Phone size={15} /> {locale === "ku" ? "پەیوەندی" : locale === "ar" ? "اتصال" : "Call"}</button>
-          {["requested", "needs_information"].includes(booking.operational_stage) && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("accept")}><Check size={15} /> {locale === "ku" ? "وەرگرتنی حیجز" : locale === "ar" ? "قبول الحجز" : "Accept booking"}</button>}
+          {booking.operational_stage === "requested" && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("accept")}><Check size={15} /> {locale === "ku" ? "وەرگرتنی حیجز" : locale === "ar" ? "قبول الحجز" : "Accept booking"}</button>}
           {isCashPending(booking) && <button type="button" className="portal-primary-button" disabled={working} onClick={onRecordCash}><Banknote size={15} /> {locale === "ku" ? "تۆمارکردنی پسوڵە" : locale === "ar" ? "تسجيل الإيصال" : "Record receipt"}</button>}
-          {["requested", "needs_information"].includes(booking.operational_stage) && askReason && <button type="button" className="portal-secondary-button" disabled={working} onClick={() => void transition("request_information")}>{locale === "ku" ? "داوای زانیاری" : locale === "ar" ? "طلب معلومات" : "Request info"}</button>}
+          {booking.operational_stage === "requested" && askReason && <button type="button" className="portal-secondary-button" disabled={working} onClick={() => void transition("request_information")}>{locale === "ku" ? "داوای زانیاری" : locale === "ar" ? "طلب معلومات" : "Request info"}</button>}
           {["requested", "needs_information", "awaiting_payment"].includes(booking.operational_stage) && askReason && <button type="button" className="portal-danger-button" disabled={working} onClick={() => void transition("reject")}>{locale === "ku" ? "ڕەتکردنەوە" : locale === "ar" ? "رفض" : "Reject"}</button>}
-          {booking.operational_stage === "confirmed" && <button type="button" className="portal-primary-button" disabled={working || !visasReady} title={visasReady ? undefined : "All visas must be approved first"} onClick={() => void transition("ready")}><Check size={15} /> {locale === "ku" ? "ئامادەیە" : locale === "ar" ? "جاهز" : "Mark ready"}</button>}
+          {booking.operational_stage === "confirmed" && booking.pay_status === "paid" && <button type="button" className="portal-primary-button" disabled={working || !visasReady} title={visasReady ? undefined : "All active traveller visas must be approved first"} onClick={() => void transition("ready")}><Check size={15} /> {locale === "ku" ? "ئامادەیە" : locale === "ar" ? "جاهز" : "Mark ready"}</button>}
           {booking.operational_stage === "ready" && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("start")}><Plane size={15} /> {locale === "ku" ? "دەستپێکردن" : locale === "ar" ? "بدء" : "Start trip"}</button>}
           {booking.operational_stage === "in_progress" && <button type="button" className="portal-primary-button" disabled={working} onClick={() => void transition("complete")}><Check size={15} /> {locale === "ku" ? "تەواوکردن" : locale === "ar" ? "إكمال" : "Complete"}</button>}
         </footer>
@@ -2382,7 +2483,7 @@ function TripManagementTab({
       subtitle={locale === "ku" ? "تەنها حیجزەکانی ئەم گەشتە" : locale === "ar" ? "الحجوزات المرتبطة بهذه الرحلة فقط" : "Only bookings attached to this departure"}
       bookings={bookings}
       trips={allTrips}
-      travellers={bookingTravellers}
+      travellers={onlyActiveTravellers(bookingTravellers)}
       viewedBookingIds={viewedBookingIds}
       onSetViewed={onSetViewed}
       busy={busy}
@@ -2518,58 +2619,81 @@ function TravellerLightbox({ images, index, onClose }: { images: LightboxImage[]
   );
 }
 
-const TRAVELLER_VISA_STEPS = ["submitted", "under_review", "approved", "rejected"] as const;
+function visaRejectionCategoryLabel(category: VisaRejectionCategory, locale: "ku" | "ar" | "en") {
+  const labels: Record<VisaRejectionCategory, [string, string, string]> = {
+    fixable_document: ["بەڵگەنامەی چاککراوە", "مستند قابل للتصحيح", "Fixable document"],
+    traveller_replaced: ["زیارەتکار دەگۆڕدرێت", "سيتم استبدال المسافر", "Traveller will be replaced"],
+    final_rejection: ["ڕەتکردنەوەی کۆتایی", "رفض نهائي", "Final rejection"],
+  };
+  const [ku, ar, en] = labels[category];
+  return locale === "ku" ? ku : locale === "ar" ? ar : en;
+}
 
 // One traveller's documents and visa controls, rendered inline inside the
 // booking modal so a multi-passenger booking shows every pilgrim's paperwork
 // under their own name without drilling into a second screen.
-function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, locale, operationsEnabled, onDocsChanged, onOpenImage }: {
+function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, locale, documentReviewEnabled, documentReviewWaitingForAcceptance, documentReviewWaitingForClient, paidOperationsEnabled, onDocsChanged, onOpenImage }: {
   traveller: Traveller;
   docs: TravellerDocument[];
   busy: string;
   runAction: Props["runAction"];
   askReason?: Props["askReason"];
   locale: "ku" | "ar" | "en";
-  operationsEnabled: boolean;
+  documentReviewEnabled: boolean;
+  documentReviewWaitingForAcceptance: boolean;
+  documentReviewWaitingForClient: boolean;
+  paidOperationsEnabled: boolean;
   onDocsChanged: () => void;
   onOpenImage: (images: LightboxImage[], index: number) => void;
 }) {
   const tr = (ku: string, ar: string, en: string) => (locale === "ku" ? ku : locale === "ar" ? ar : en);
   const t = traveller as any;
   const rowBusy = busy === `traveller-${traveller.id}`;
-  const [visaRef, setVisaRef] = useState<string>(t.visa_reference ?? "");
-  useEffect(() => { setVisaRef(t.visa_reference ?? ""); }, [t.visa_reference]);
+  const [rejectionCategory, setRejectionCategory] = useState<VisaRejectionCategory | "">("");
+  useEffect(() => { setRejectionCategory(""); }, [traveller.id, traveller.visa_status]);
 
   const sources = travellerDocSources(traveller, docs, tr);
   const signed = useSignedDocumentUrls(sources);
   const galleryImages: LightboxImage[] = sources.filter((s) => s.image && signed[s.key]).map((s) => ({ url: signed[s.key], label: s.label }));
   const docsApproved = traveller.document_status === "approved";
   const visaApproved = traveller.visa_status === "approved";
+  const canResolveVisa = paidOperationsEnabled && ["submitted", "under_review"].includes(traveller.visa_status);
 
   async function act(rpc: () => any, success: string) {
     const result = await runAction(`traveller-${traveller.id}`, rpc, success);
     if (result) onDocsChanged();
   }
   async function approveDocuments() {
-    if (!operationsEnabled) return;
+    if (!documentReviewEnabled) return;
     await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "approved" }), tr("بەڵگەنامەکان پەسەندکران.", "تمت الموافقة على المستندات.", "Documents approved."));
   }
   async function rejectDocuments() {
-    if (!operationsEnabled) return;
+    if (!documentReviewEnabled) return;
     if (!askReason) return;
     const reason = await askReason(tr("بۆچی بەڵگەنامەکان ڕەتدەکرێنەوە؟ (زیارەتکار ئەمە دەبینێت)", "لماذا ترفض المستندات؟ (يراها المعتمر)", "Why are the documents rejected? (the pilgrim sees this)"));
     if (!reason) return;
     await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_document_status: "rejected", p_document_reason: reason }), tr("بەڵگەنامەکان ڕەتکرانەوە.", "تم رفض المستندات.", "Documents rejected — the pilgrim was notified."));
   }
-  async function setVisa(status: string) {
-    if (!operationsEnabled) return;
+  async function resolveVisa(status: "approved" | "rejected") {
+    if (!canResolveVisa) return;
     let reason: string | null = null;
     if (status === "rejected") {
+      if (!rejectionCategory) return;
       if (!askReason) return;
       reason = await askReason(tr("هۆکاری ڕەتکردنەوەی ڤیزا:", "سبب رفض التأشيرة:", "Reason the visa was rejected:"));
       if (!reason) return;
     }
-    await act(() => getSupabase().rpc("update_traveller_operations", { p_traveller_id: traveller.id, p_visa_status: status, p_visa_reference: visaRef || null, p_visa_reason: reason }), tr("دۆخی ڤیزا نوێکرایەوە.", "تم تحديث حالة التأشيرة.", "Visa status updated."));
+    await act(
+      () => getSupabase().rpc("resolve_visa", {
+        p_traveller_id: traveller.id,
+        p_status: status,
+        p_category: status === "rejected" ? rejectionCategory : null,
+        p_reason: reason,
+      }),
+      status === "approved"
+        ? tr("ڤیزاکە پەسەندکرا.", "تمت الموافقة على التأشيرة.", "Visa approved.")
+        : tr("ڕەتکردنەوەی ڤیزا و هۆکارەکە تۆمارکرا.", "تم تسجيل رفض التأشيرة وسببه.", "Visa rejection and reason recorded."),
+    );
   }
 
   return (
@@ -2615,37 +2739,68 @@ function BookingTravellerPanel({ traveller, docs, busy, runAction, askReason, lo
         })}
       </div>
 
-      {!operationsEnabled && (
+      {documentReviewWaitingForAcceptance && (
         <p className="booking-workflow-lock">
           <ShieldCheck size={13} />
           {tr(
-            "پێداچوونەوەی بەڵگەنامە و ڤیزا دوای وەرگرتن و پشتڕاستکردنەوەی پارەدان چالاک دەبێت.",
-            "تتاح مراجعة المستندات والتأشيرة بعد قبول الحجز وتأكيد الدفع.",
-            "Document and visa controls unlock after the booking is accepted and payment is confirmed.",
+            "سەرەتا حیجزەکە وەربگرە؛ پاشان پێداچوونەوەی بەڵگەنامە چالاک دەبێت.",
+            "اقبل الحجز أولاً؛ بعدها تتاح مراجعة المستندات.",
+            "Accept the booking before reviewing documents.",
+          )}
+        </p>
+      )}
+
+      {documentReviewWaitingForClient && (
+        <p className="booking-workflow-lock">
+          <ShieldCheck size={13} />
+          {tr(
+            "چاوەڕێی کڕیارە زانیارییە داواکراوەکان تەواو بکات؛ پاش گەڕانەوەی حیجزەکە پێداچوونەوە چالاک دەبێت.",
+            "بانتظار أن يكمل العميل المعلومات المطلوبة؛ تتاح المراجعة بعد إعادة الحجز للموافقة.",
+            "Waiting for the client to provide the requested information before document review can begin.",
+          )}
+        </p>
+      )}
+
+      {documentReviewEnabled && !paidOperationsEnabled && (
+        <p className="booking-workflow-lock">
+          <ShieldCheck size={13} />
+          {tr(
+            "پێداچوونەوەی بەڵگەنامە ئێستا چالاکە؛ ئەنجامی ڤیزا دوای پشتڕاستکردنەوەی تەواوی پارەدان چالاک دەبێت.",
+            "مراجعة المستندات متاحة الآن؛ تتاح نتائج التأشيرة بعد تأكيد الدفع بالكامل.",
+            "Document review is available now. Visa outcomes unlock after full payment is confirmed.",
           )}
         </p>
       )}
 
       <div className="booking-review-actions">
-        <button type="button" className="approve" onClick={approveDocuments} disabled={!operationsEnabled || rowBusy || docsApproved || traveller.document_status === "missing"}>
+        <button type="button" className="approve" onClick={approveDocuments} disabled={!documentReviewEnabled || rowBusy || docsApproved || traveller.document_status === "missing"}>
           {rowBusy ? <TawafLoadingSpinner size={13} /> : <Check size={13} />} {tr("پەسەندکردنی بەڵگەنامە", "قبول المستندات", "Approve documents")}
         </button>
-        <button type="button" className="danger" onClick={rejectDocuments} disabled={!operationsEnabled || rowBusy || traveller.document_status === "missing"}>
+        <button type="button" className="danger" onClick={rejectDocuments} disabled={!documentReviewEnabled || rowBusy || traveller.document_status === "missing"}>
           <X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}
         </button>
       </div>
 
-      <label className="booking-traveller-visa-label">{tr("قۆناغی ڤیزا", "مرحلة التأشيرة", "Visa stage")}</label>
-      {!docsApproved && <p className="booking-inline-note">{tr("سەرەتا بەڵگەنامەکان پەسەند بکە، پاشان ڤیزا پشتڕاست بکە.", "اعتمد المستندات أولاً ثم أكد التأشيرة.", "Approve the documents first, then confirm the visa.")}</p>}
-      <div className="booking-visa-steps">
-        {TRAVELLER_VISA_STEPS.map((s) => (
-          <button type="button" key={s} className={traveller.visa_status === s ? "is-active" : ""} onClick={() => setVisa(s)} disabled={!operationsEnabled || rowBusy}>{titleCase(s)}</button>
-        ))}
-      </div>
-      <div className="booking-inline-field">
-        <input value={visaRef} onChange={(event) => setVisaRef(event.target.value)} placeholder={tr("ژمارەی ڤیزا", "رقم التأشيرة", "Visa reference")} disabled={!operationsEnabled || rowBusy} />
-      </div>
-      {t.visa_reason && <small className="booking-inline-note">{t.visa_reason}</small>}
+      <label className="booking-traveller-visa-label">{tr("ئەنجامی ڤیزا", "نتيجة التأشيرة", "Visa outcome")}</label>
+      {traveller.visa_reference && <small className="booking-inline-note">{tr("ژمارەی کۆمەڵە", "مرجع الدفعة", "Batch reference")}: {traveller.visa_reference}</small>}
+      {!docsApproved && <p className="booking-inline-note">{tr("سەرەتا بەڵگەنامەکان پەسەند بکە.", "اعتمد المستندات أولاً.", "Approve the documents first.")}</p>}
+      {canResolveVisa ? (
+        <>
+          <div className="booking-inline-field">
+            <select value={rejectionCategory} onChange={(event) => setRejectionCategory(event.target.value as VisaRejectionCategory | "")} disabled={rowBusy}>
+              <option value="">{tr("جۆری ڕەتکردنەوە هەڵبژێرە", "اختر فئة الرفض", "Choose rejection category")}</option>
+              {VISA_REJECTION_CATEGORIES.map((category) => <option key={category} value={category}>{visaRejectionCategoryLabel(category, locale)}</option>)}
+            </select>
+          </div>
+          <div className="booking-visa-steps">
+            <button type="button" className="approve" onClick={() => resolveVisa("approved")} disabled={rowBusy}><Check size={13} /> {tr("پەسەندکردن", "موافقة", "Approve")}</button>
+            <button type="button" className="danger" onClick={() => resolveVisa("rejected")} disabled={rowBusy || !rejectionCategory}><X size={13} /> {tr("ڕەتکردنەوە", "رفض", "Reject")}</button>
+          </div>
+          <small className="booking-inline-note">{tr("جۆر و هۆکار بۆ ڕەتکردنەوە پێویستن.", "فئة الرفض وسببه مطلوبان.", "A category and reason are required to reject.")}</small>
+        </>
+      ) : <p className="booking-inline-note">{tr("ئەنجام تەنها دوای ناردنی کۆمەڵە ڤیزا تۆمار دەکرێت.", "تسجل النتيجة فقط بعد إرسال دفعة التأشيرات.", "An outcome can be recorded only after the visa batch is submitted.")}</p>}
+      {traveller.visa_rejection_category && <small className="booking-inline-note">{visaRejectionCategoryLabel(traveller.visa_rejection_category as VisaRejectionCategory, locale)}</small>}
+      {traveller.visa_reason && <small className="booking-inline-note">{traveller.visa_reason}</small>}
       {visaApproved && <p className="booking-inline-note" style={{ color: "#176a50" }}><Check size={12} /> {tr("ڤیزا ئامادەیە.", "التأشيرة جاهزة.", "Visa ready.")}</p>}
     </article>
   );

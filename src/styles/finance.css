@@ -53,6 +53,70 @@
 .finance-tabs button:focus-visible { outline: 2px solid #0f5c4d; outline-offset: 2px; }
 
 /* ---------------------------------------------------------------- *
+ * Balance strip
+ *
+ * Sits ABOVE the period picker. Everything in it is a stock figure — true
+ * right now, whatever period is selected — so it is deliberately not a row
+ * of metric cards: cards below the picker read as though the picker governed
+ * them, and these are the ones it does not.
+ * ---------------------------------------------------------------- */
+
+.finance-balance-strip {
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.finance-balance-strip > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  background: #fbfcfa;
+}
+
+.finance-balance-strip > header b { color: #14251f; font-size: 12px; font-weight: 800; }
+.finance-balance-strip > header span { color: #8b968f; font-size: 11px; font-weight: 600; }
+
+.finance-balance-strip > div {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.finance-balance-strip > div > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 16px;
+  border-inline-start: 3px solid transparent;
+}
+
+/* Separators between columns, never a trailing one. border-inline-end rather
+   than a physical edge: under RTL the cell order reverses, and a physical rule
+   would land one cell off and draw on the strip's outer edge. */
+.finance-balance-strip > div > div:not(:last-child) {
+  border-inline-end: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+}
+
+.finance-balance-strip small { color: #8b968f; font-size: 11px; font-weight: 700; }
+.finance-balance-strip b {
+  color: #14251f;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.finance-balance-strip em { color: #9aaba4; font-size: 10.5px; font-style: normal; font-weight: 600; }
+
+.finance-balance-strip .tone-green { border-inline-start-color: #0d8666; }
+.finance-balance-strip .tone-gold { border-inline-start-color: #b8862b; }
+.finance-balance-strip .tone-sand { border-inline-start-color: #a8443a; }
+.finance-balance-strip .tone-teal { border-inline-start-color: #0f5c4d; }
+
+/* ---------------------------------------------------------------- *
  * Period picker
  * ---------------------------------------------------------------- */
 
@@ -354,6 +418,38 @@
 .finance-chart-panel .portal-panel-header { align-items: flex-start; }
 .finance-chart-actions { display: flex; gap: 8px; align-items: center; }
 
+/* Segmented switch inside a chart header — three charts share one frame
+   rather than stacking three full-height panels down the page. */
+.finance-chart-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  border-radius: 10px;
+  background: #fbfcfa;
+}
+
+.finance-chart-switch button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #4e6259;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.finance-chart-switch button:hover { color: #0f5c4d; }
+.finance-chart-switch button.active {
+  color: #0f5c4d;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 92, 77, .12);
+}
+
 .finance-chart-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -640,10 +736,23 @@
 @media (max-width: 1080px) {
   .finance-workspace .portal-metric-grid { grid-template-columns: repeat(2, 1fr); }
   .finance-chart-pair { grid-template-columns: 1fr; }
+  .finance-balance-strip > div { grid-template-columns: repeat(2, 1fr); }
+  /* Two columns: the only vertical boundary is mid-row, so cells 2 and 4 end a
+     row and must not carry one. The first row gets a divider underneath. */
+  .finance-balance-strip > div > div:nth-child(even) { border-inline-end: 0; }
+  .finance-balance-strip > div > div:nth-child(-n+2) {
+    border-bottom: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  }
 }
 
 @media (max-width: 720px) {
   .finance-workspace .portal-metric-grid { grid-template-columns: 1fr; }
+  .finance-balance-strip > div { grid-template-columns: 1fr; }
+  .finance-balance-strip > div > div { border-inline-end: 0; }
+  .finance-balance-strip > div > div:not(:last-child) {
+    border-bottom: 1px solid var(--portal-border, rgba(15, 92, 77, .12));
+  }
+  .finance-chart-switch { width: 100%; overflow-x: auto; }
   .finance-filters > label,
   .finance-search { flex: 1 1 100%; }
   .finance-export { width: 100%; }
